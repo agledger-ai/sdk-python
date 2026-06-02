@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agledger"
+version = "0.8.12"
+description = "AGLedger SDK — Accountability and audit infrastructure for agentic systems."
+readme = "README.md"
+license = "LicenseRef-Proprietary"
+requires-python = ">=3.10"
+authors = [{ name = "AGLedger LLC", email = "support@agledger.ai" }]
+keywords = ["agledger", "records", "accountability", "agents", "audit"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx>=0.27.0,<1",
+    "pydantic>=2.0.0,<3",
+]
+
+[project.optional-dependencies]
+verify = [
+    "cryptography>=42.0",
+    "cbor2>=5.6",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.22",
+    "cryptography>=42.0",
+    "cbor2>=5.6",
+    # Pinned so CI matches the gate the SDK was validated against — ruff stable
+    # adds lint rules and pyright tightens inference across releases; an
+    # unpinned floor would let a tool bump turn CI red without a code change.
+    "ruff==0.15.15",
+    "pyright==1.1.410",
+]
+
+[project.scripts]
+# Turnkey offline verifier CLI. Auto-detects a dump directory vs an
+# /audit-export JSON file. Needs the [verify] extra (cbor2 + cryptography).
+agledger-verify = "agledger.verify.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agledger"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Run against the working tree in src/, never a stale installed wheel. Without
+# this, pytest imports site-packages `agledger` and silently validates the last
+# published version instead of local changes (this masked F-713/F-710/F-706).
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Default rule set (E4/E7/E9 + F). E701 is intentionally disabled: the codebase
+# uses the `if cond: stmt` one-liner style deliberately throughout (matches the
+# `if x is not None: body[...] = x` body-builder pattern), not an oversight.
+ignore = ["E701"]
+
+[tool.pyright]
+# Strict-gate the shipped library only. Tests are exercised by pytest, not the
+# type gate — strict mode on test fixtures (respx mocks, ad-hoc dicts) is noise,
+# not signal. `pyright` with no args (as CI runs it) now checks exactly `src`.
+include = ["src"]
+# Resolve `import agledger` to the source tree (src layout) regardless of whether
+# an editable/wheel copy is also installed — keeps `pyright --verifytypes agledger`
+# (the type-completeness gate) measuring exactly what ships, not a stale install.
+extraPaths = ["src"]
+typeCheckingMode = "strict"

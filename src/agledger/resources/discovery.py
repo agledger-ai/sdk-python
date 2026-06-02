@@ -1,0 +1,44 @@
+"""
+Discovery resource — unauthenticated (or lightly authenticated) public
+metadata endpoints. Useful for agent onboarding and capability probing.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from agledger._http import AsyncHttpClient, HttpClient
+
+
+class DiscoveryResource:
+    def __init__(self, http: HttpClient) -> None:
+        self._http = http
+
+    def get_scope_profiles(self) -> list[dict[str, Any]]:
+        """List all available scope profiles. Public discovery endpoint."""
+        return self._http.get("/v1/scope-profiles")
+
+    def get_conformance(self) -> dict[str, Any]:
+        """Return conformance metadata (version, features, contract types)."""
+        return self._http.get("/v1/conformance")
+
+    def get_lifecycle(self) -> dict[str, Any]:
+        """Return the Record lifecycle definition (states + transitions)."""
+        return self._http.get("/lifecycle")
+
+
+class AsyncDiscoveryResource:
+    def __init__(self, http: AsyncHttpClient) -> None:
+        self._http = http
+
+    async def get_scope_profiles(self) -> list[dict[str, Any]]:
+        """List all available scope profiles."""
+        return await self._http.get("/v1/scope-profiles")
+
+    async def get_conformance(self) -> dict[str, Any]:
+        """Return conformance metadata."""
+        return await self._http.get("/v1/conformance")
+
+    async def get_lifecycle(self) -> dict[str, Any]:
+        """Return the Record lifecycle definition."""
+        return await self._http.get("/lifecycle")
