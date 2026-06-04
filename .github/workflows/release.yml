@@ -1,0 +1,80 @@
+name: Release
+
+# Tag-triggered PyPI release with PEP 740 attestations via OIDC trusted publishing.
+# No token: the publish step uses the GitHub OIDC identity, which PyPI maps to a
+# Trusted Publisher configured for this repo + workflow. Attestations are produced
+# automatically by pypa/gh-action-pypi-publish (>= v1.11.0) under a trusted publisher.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write   # OIDC: PyPI trusted publishing + attestation signing
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Use Python 3.12
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: pyproject.toml
+
+      - name: Install (with dev + verify extras)
+        run: pip install -e '.[dev]'
+
+      # Full gate — identical to CI; a tagged release must not ship anything CI
+      # would have rejected.
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Type-check (pyright strict)
+        run: pyright
+
+      - name: Type completeness (pyright --verifytypes, must be 100%)
+        run: pyright --verifytypes agledger --ignoreexternal
+
+      - name: Test
+        run: pytest
+
+      # Guard: the pushed tag (vX.Y.Z) must match the version in pyproject.toml,
+      # so a stale tag can never publish a mismatched artifact to PyPI.
+      - name: Verify tag matches pyproject version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PYPROJECT_VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "Tag version:       $TAG_VERSION"
+          echo "pyproject version: $PYPROJECT_VERSION"
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pyproject version $PYPROJECT_VERSION"
+            exit 1
+          fi
+
+      - name: Build sdist + wheel
+        run: |
+          pip install build
+          python -m build
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py environment -o sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+
+      # Publishes dist/* to PyPI via OIDC trusted publishing. PEP 740 attestations
+      # are ON by default under a trusted publisher (attestations: true is implicit).
+      # No API token — the Trusted Publisher mapping on PyPI authorizes this exact
+      # repo + workflow. Pinned to v1.13.0 (commit SHA).
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0

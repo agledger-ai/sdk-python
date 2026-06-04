@@ -19,7 +19,7 @@ from agledger.verify.cli import run_cli
 from agledger.verify.loader import DumpLoadError
 from agledger.verify.verify_export import _hash_pair, merkle_root
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONFORMANCE_DIR = _REPO_ROOT / "testdata" / "conformance"
 _VALID_DUMP = _CONFORMANCE_DIR / "dump" / "valid"
 _EMPTY_DUMP = _CONFORMANCE_DIR / "dump" / "chain-empty"

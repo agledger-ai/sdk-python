@@ -26,8 +26,9 @@ import pytest
 
 from agledger.verify import load_dump, verify_dump, verify_export
 
-# tests/ -> agledger-sdk-python/ -> repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+# tests/ -> repo root (standalone source-of-truth layout; corpus vendored at
+# repo-root testdata/conformance/).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONFORMANCE_DIR = _REPO_ROOT / "testdata" / "conformance"
 _MANIFEST = _CONFORMANCE_DIR / "manifest-export.json"
 _DUMP_MANIFEST = _CONFORMANCE_DIR / "manifest-dump.json"

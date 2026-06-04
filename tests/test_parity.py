@@ -2,8 +2,10 @@
 SDK ↔ API Parity Test (Python)
 
 Mirrors the TypeScript SDK parity test: a focused invariant check against
-the shared route manifest (`agledger-sdk/src/__tests__/routes.json`).
-Skips when the manifest is unavailable (standalone checkout / PyPI install).
+the shared route manifest. The snapshot is vendored into this repo at
+``tests/parity/routes.json`` (regenerated upstream by the weekly
+update-route-manifest workflow and synced here) so the standalone repo is
+self-contained. Skips when the manifest is unavailable (PyPI install).
 """
 
 from __future__ import annotations
@@ -14,13 +16,7 @@ from typing import Any
 
 import pytest
 
-_MANIFEST_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "agledger-sdk"
-    / "src"
-    / "__tests__"
-    / "routes.json"
-)
+_MANIFEST_PATH = Path(__file__).resolve().parent / "parity" / "routes.json"
 
 
 @pytest.fixture(scope="module")
