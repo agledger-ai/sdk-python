@@ -4,6 +4,16 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.14] - 2026-06-04
+
+No functional change to the SDK. Release-pipeline hardening:
+
+### Changed
+
+- **Signed CycloneDX SBOM attestation** via `actions/attest` (the deprecated `actions/attest-sbom` was replaced), in addition to PyPI's PEP 740 publish attestations.
+- **SBOM scoped to the shipped wheel.** The CycloneDX SBOM now describes only the published wheel's runtime dependencies (generated from a throwaway venv containing just the built wheel), not the release runner's full dev/test toolchain.
+- **Concurrency guard** on the release workflow so two tags pushed in quick succession can't race into a double-publish.
+
 ## [0.8.13] - 2026-06-04
 
 No functional change. First release published from CI with **build provenance** via PyPI trusted publishing (OIDC) — PEP 740 attestations are produced automatically by `gh-action-pypi-publish`. A CycloneDX SBOM is attached to the release. This package now lives in its own source-of-truth repo `agledger-ai/sdk-python` (parity snapshots + conformance corpus vendored in-repo).
