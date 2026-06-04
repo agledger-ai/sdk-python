@@ -65,7 +65,7 @@ jobs:
 
       - name: Build sdist + wheel
         run: |
-          pip install build
+          pip install build==1.5.0
           python -m build
 
       # SBOM scoped to the SHIPPED wheel's runtime deps — install the built wheel
@@ -73,7 +73,7 @@ jobs:
       # release runner's venv (which carries build/ruff/pyright/pytest).
       - name: Generate CycloneDX SBOM (scoped to the shipped wheel)
         run: |
-          pip install cyclonedx-bom
+          pip install cyclonedx-bom==7.3.0
           python -m venv /tmp/sbomenv
           /tmp/sbomenv/bin/pip install --quiet dist/*.whl
           cyclonedx-py environment /tmp/sbomenv/bin/python -o sbom.cdx.json
