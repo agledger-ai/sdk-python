@@ -4,6 +4,15 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.15] - 2026-06-04
+
+No functional change to the SDK. CI + release-pipeline hardening:
+
+### Changed
+
+- **CI now tests the full advertised Python range (3.10–3.13).** The CI job is a `fail-fast: false` matrix across Python 3.10, 3.11, 3.12, and 3.13, running every gate (ruff, pyright `--verifytypes` at 100%, pytest) on each — the package advertises `requires-python = ">=3.10"` and 3.10–3.13 classifiers, so the matrix now matches what is promised.
+- **Pinned release-job build/SBOM tooling** (`build==1.5.0`, `cyclonedx-bom==7.3.0`) so a breaking upstream release can't red-fail a tag push or alter the SBOM shape.
+
 ## [0.8.14] - 2026-06-04
 
 No functional change to the SDK. Release-pipeline hardening:
