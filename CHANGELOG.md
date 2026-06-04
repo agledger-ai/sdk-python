@@ -4,6 +4,10 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.13] - 2026-06-04
+
+No functional change. First release published from CI with **build provenance** via PyPI trusted publishing (OIDC) — PEP 740 attestations are produced automatically by `gh-action-pypi-publish`. A CycloneDX SBOM is attached to the release. This package now lives in its own source-of-truth repo `agledger-ai/sdk-python` (parity snapshots + conformance corpus vendored in-repo).
+
 ## [0.8.12] - 2026-06-02
 
 ### Added — turnkey offline dump verifier + `agledger-verify` CLI (closes [agledger-agents#81](https://github.com/agledger-ai/agledger-agents/issues/81), F-708 follow-up)
