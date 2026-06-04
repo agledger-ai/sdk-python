@@ -81,10 +81,14 @@ def _vector_id(vector: dict[str, Any]) -> str:
 _VECTORS = _export_vectors()
 
 
-@pytest.mark.skipif(not _MANIFEST.exists(), reason=f"conformance manifest not found at {_MANIFEST}")
 def test_manifest_present_and_nonempty() -> None:
-    """Guard: the corpus must exist and carry export vectors. A silently empty
-    corpus would let real drift slip through parametrize."""
+    """Guard: the corpus must exist and carry export vectors. A missing corpus
+    must FAIL loudly here, not skip — a silently absent corpus would green the
+    whole anti-drift gate while running zero vectors."""
+    assert _MANIFEST.exists(), (
+        f"conformance corpus manifest missing at {_MANIFEST} — the anti-drift gate "
+        f"cannot run; vendor the corpus (or pull the api#665 artifact) before testing"
+    )
     manifest = _load_manifest()
     assert manifest.get("formatVersion") == "2.0"
     assert len(_VECTORS) > 0, "manifest-export.json has no export-kind vectors"
@@ -158,12 +162,15 @@ def _dump_vector_id(vector: dict[str, Any]) -> str:
 _DUMP_VECTORS = _dump_vectors()
 
 
-@pytest.mark.skipif(
-    not _DUMP_MANIFEST.exists(), reason=f"dump conformance manifest not found at {_DUMP_MANIFEST}"
-)
 def test_dump_manifest_present_and_nonempty() -> None:
-    """Guard: the dump corpus must exist and carry the full required code set, so
-    a silently empty corpus can't let drift slip through parametrize."""
+    """Guard: the dump corpus must exist and carry the full required code set.
+    A missing corpus must FAIL loudly here, not skip — otherwise the gate greens
+    while running zero dump vectors."""
+    assert _DUMP_MANIFEST.exists(), (
+        f"dump conformance corpus manifest missing at {_DUMP_MANIFEST} — the "
+        f"anti-drift gate cannot run; vendor the corpus (or pull the api#665 "
+        f"artifact) before testing"
+    )
     manifest = json.loads(_DUMP_MANIFEST.read_text())
     assert manifest.get("formatVersion") == "2.0"
     assert len(_DUMP_VECTORS) > 0, "manifest-dump.json has no dump-kind vectors"
