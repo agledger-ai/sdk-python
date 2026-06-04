@@ -26,6 +26,11 @@ dependencies = [
     "pydantic>=2.0.0,<3",
 ]
 
+[project.urls]
+Homepage = "https://www.agledger.ai"
+Repository = "https://github.com/agledger-ai/sdk-python"
+Changelog = "https://github.com/agledger-ai/sdk-python/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 verify = [
     "cryptography>=42.0",
