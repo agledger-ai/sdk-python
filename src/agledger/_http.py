@@ -35,10 +35,14 @@ MAX_BACKOFF = 30.0
 # Single source of truth for the SDK version: the installed package metadata
 # (pyproject `version`). Used in the User-Agent header and re-exported as
 # `agledger.__version__`, so neither can drift from the published distribution.
-try:
-    SDK_VERSION = _pkg_version("agledger")
-except PackageNotFoundError:  # pragma: no cover - source tree without install
-    SDK_VERSION = "0.0.0+unknown"
+def _resolve_sdk_version() -> str:
+    try:
+        return _pkg_version("agledger")
+    except PackageNotFoundError:  # pragma: no cover - source tree without install
+        return "0.0.0+unknown"
+
+
+SDK_VERSION = _resolve_sdk_version()
 
 # Aligned with TS SDK (http.ts:#DEFAULT_RETRY_STATUSES). 408 is excluded
 # because the API never emits it. 409 IDEMPOTENCY_CONFLICT is excluded
