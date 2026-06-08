@@ -1,7 +1,7 @@
 """AGLedger SDK — Accountability and audit infrastructure for agentic systems."""
 
 from agledger._client import AgledgerClient, AsyncAgledgerClient
-from agledger._http import RateLimitInfo
+from agledger._http import RateLimitInfo, SDK_VERSION
 from agledger._errors import (
     AgledgerError,
     APIConnectionError,
@@ -84,7 +84,10 @@ from agledger.types import (
     WebhookTestResult,
 )
 
-__version__ = "0.8.12"
+# Single source of truth lives in `_http.SDK_VERSION` (derived from installed
+# package metadata), re-exported here so `agledger.__version__`, the User-Agent
+# header, and the published distribution can never drift apart.
+__version__ = SDK_VERSION
 __all__ = [
     "AgledgerClient",
     "AsyncAgledgerClient",

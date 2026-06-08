@@ -4,6 +4,18 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] - 2026-06-08
+
+General-availability release, tracking AGLedger API **v1.0.0 GA**. No breaking changes from the 0.8.x line. Route surface and field-level parity snapshots verified identical to API v1.0.0 (194/194 routes, zero drift across tracked models); parity snapshots bumped to `apiVersion 1.0.0`.
+
+### Added
+
+- `WebhookEventType`: `record.proposal_counter_proposed`, `record.ai_impact_assessment_filed`, `record.compliance_attestation_filed`.
+
+### Fixed
+
+- The SDK version (`agledger.__version__` **and** the `User-Agent` header) is now derived from installed package metadata via `importlib.metadata`, single-sourced in `_http.SDK_VERSION`. Both had drifted to a hardcoded `0.8.12` while the package shipped 0.8.13–0.8.15, so released versions were under-reporting their version to API telemetry. They can no longer fall out of sync with the published distribution.
+
 ## [0.8.15] - 2026-06-04
 
 No functional change to the SDK. CI + release-pipeline hardening:
