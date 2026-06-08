@@ -524,10 +524,14 @@ WebhookEventType = (
         "record.proposed",
         "record.proposal_accepted",
         "record.proposal_rejected",
+        "record.proposal_counter_proposed",
         "record.delegated",
         "record.revision_requested",
         # Cascading gate
         "cascading.gate.complete",
+        # EU AI Act compliance filings
+        "record.ai_impact_assessment_filed",
+        "record.compliance_attestation_filed",
         # Settlement & disputes
         "signal.emitted",
         "signal.received",

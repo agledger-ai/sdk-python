@@ -10,6 +10,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from typing import Any, AsyncIterator, Iterator, cast
 
 import httpx
@@ -31,7 +32,13 @@ DEFAULT_BASE_URL = "https://agledger.example.com"
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_RETRIES = 3
 MAX_BACKOFF = 30.0
-SDK_VERSION = "0.8.12"
+# Single source of truth for the SDK version: the installed package metadata
+# (pyproject `version`). Used in the User-Agent header and re-exported as
+# `agledger.__version__`, so neither can drift from the published distribution.
+try:
+    SDK_VERSION = _pkg_version("agledger")
+except PackageNotFoundError:  # pragma: no cover - source tree without install
+    SDK_VERSION = "0.0.0+unknown"
 
 # Aligned with TS SDK (http.ts:#DEFAULT_RETRY_STATUSES). 408 is excluded
 # because the API never emits it. 409 IDEMPOTENCY_CONFLICT is excluded
