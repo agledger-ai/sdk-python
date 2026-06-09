@@ -8,7 +8,6 @@ The official Python SDK for [AGLedger](https://agledger.ai) — accountability i
 - [How it works](https://agledger.ai/how-it-works) — the four-endpoint lifecycle: Record, Completion, Verdict, fulfill
 - [Glossary](https://agledger.ai/glossary) — canonical definitions of Record, Completion, SCITT Receipt, Verdict, Settlement Signal
 - [Documentation](https://agledger.ai/docs) — installation, integration guides, API reference
-- [Protocol (AOAP)](https://agledger.ai/protocol) — the coordination language behind AGLedger
 
 ## Install
 
