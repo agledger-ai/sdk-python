@@ -65,7 +65,11 @@ CRITICAL_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/events"),
     ("GET", "/v1/references"),
     ("GET", "/v1/verification-keys"),
-    ("POST", "/v1/admin/orgs"),
+    # NB: POST /v1/admin/orgs (create-org) is intentionally NOT here — it was
+    # dropped from the canonical OpenAPI spec in API v1.0.1 (dev/test-only, never
+    # registered in production). admin.create_org() still reaches it for local
+    # bootstrap; GET (list) remains canonical.
+    ("GET", "/v1/admin/orgs"),
     ("POST", "/v1/admin/orgs/{id}/deactivate"),
     ("POST", "/v1/admin/agents/{id}/deactivate"),
     ("POST", "/v1/admin/api-keys"),

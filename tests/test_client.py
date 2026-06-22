@@ -63,6 +63,52 @@ def test_records_get():
 
 
 @respx.mock
+def test_records_get_integrity():
+    route = respx.get("https://agledger.example.com/v1/records/rec-123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                **RECORD_JSON,
+                "integrity": {
+                    "verified": True,
+                    "integrityLevel": "hash_chain_and_signatures",
+                    "reason": None,
+                    "entries": 3,
+                    "projectionChecked": True,
+                    "driftFields": [],
+                },
+            },
+        )
+    )
+    client = AgledgerClient(api_key="test-key")
+    record = client.records.get("rec-123", integrity=True)
+    assert "integrity=true" in str(route.calls.last.request.url)
+    assert record.integrity is not None
+    assert record.integrity.verified is True
+    assert record.integrity.integrity_level == "hash_chain_and_signatures"
+
+
+@respx.mock
+def test_records_list_actionable():
+    route = respx.get("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})
+    )
+    client = AgledgerClient(api_key="test-key")
+    client.records.list(actionable=True)
+    assert "actionable=true" in str(route.calls.last.request.url)
+
+
+@respx.mock
+def test_auth_rotate_key_grace_period():
+    route = respx.post("https://agledger.example.com/v1/auth/keys/rotate").mock(
+        return_value=httpx.Response(200, json={"apiKey": "agl_adm_new", "keyId": "key-1"})
+    )
+    client = AgledgerClient(api_key="test-key")
+    client.auth.rotate_key(grace_period_seconds=300)
+    assert json.loads(route.calls.last.request.content) == {"gracePeriodSeconds": 300}
+
+
+@respx.mock
 def test_records_list_with_status_filter():
     respx.get("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})

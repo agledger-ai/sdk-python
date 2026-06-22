@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.0.3",
   "schemaCount": 11,
   "schemas": {
     "Completion": [
@@ -220,6 +220,7 @@
       "humanOversight",
       "id",
       "imported",
+      "integrity",
       "lastTransitionBy",
       "lastTransitionReason",
       "lastVerdictAt",

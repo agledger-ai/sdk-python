@@ -62,6 +62,7 @@ from agledger.types import (
     Completion,
     Page,
     RecordAuditExport,
+    RecordIntegrity,
     RecordReadCompletion,
     RecordRow,
     RecordStatus,
@@ -120,6 +121,7 @@ __all__ = [
     "is_terminal_status",
     # Types — Records
     "RecordRow",
+    "RecordIntegrity",
     "RecordStatus",
     "RecordTransitionAction",
     "RecordType",

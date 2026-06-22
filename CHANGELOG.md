@@ -4,6 +4,25 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-06-22
+
+Tracks AGLedger API **v1.0.3** (was pinned to v1.0.0). A full route + field-level drift sweep against the live v1.0.3 OpenAPI surfaced three additive method gaps and one spec removal; parity snapshots regenerated to `apiVersion 1.0.3` (193 routes). All additions are backward-compatible.
+
+### Added
+
+- **`records.get(record_id, integrity=True)`** (sync + async) — re-verify the Record's audit chain and cross-check the served row against it (API #732). The result is exposed on the new `RecordRow.integrity` field (typed `RecordIntegrity`: `verified`, `integrity_level`, `reason`, `entries`, `projection_checked`, `drift_fields`).
+- **`records.list(actionable=True)` / `list_all(actionable=True)`** (sync + async) — the agent-recovery query: every Record whose next action awaits the caller's structural side (API #731). Agent keys only.
+- **`auth.rotate_key(grace_period_seconds=...)`** (sync + async) — keep the old key valid for an overlap window instead of an immediate hard cutover (API #793).
+- New exported type: `RecordIntegrity`.
+
+### Changed
+
+- `admin.create_org()` is documented as **dev/test-only** — `POST /v1/admin/orgs` was dropped from the canonical API spec in v1.0.1 (never registered in production; provision prod orgs via operator `provisioning/` YAML). The route-parity test no longer asserts it as a canonical route.
+
+### Notes
+
+- `compliance.export(**params)` and the schema methods already pass `embed` / `default_gate_mode` through verbatim (untyped passthrough), so the API #771 / defaultGateMode additions need no method change.
+
 ## [1.0.1] - 2026-06-10
 
 ### Changed
