@@ -184,6 +184,30 @@ class SettlementSignalSummary(BaseModel):
     """Peer the signal was received from (inbound only), or None."""
 
 
+class RecordIntegrity(BaseModel):
+    """Tamper-evidence result attached to a Record read with ``integrity=True`` (API #732)."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    verified: bool
+    """True iff the audit chain re-verifies AND the served row matches what the chain asserts.
+
+    False ⇒ this body may not match the signed evidence; read the audit-export as the source of truth.
+    """
+    integrity_level: Literal[
+        "hash_chain_only", "hash_chain_partial_signatures", "hash_chain_and_signatures", "invalid"
+    ] = Field(alias="integrityLevel")
+    """Strength of the chain verification — whether every entry was signed or only hash-linked."""
+    reason: str | None = None
+    """Failure class when ``verified`` is False (e.g. ``record_projection_drift``); None when verified."""
+    entries: int
+    """Number of audit-chain entries verified."""
+    projection_checked: bool = Field(alias="projectionChecked")
+    """True when the row-vs-chain projection cross-check ran."""
+    drift_fields: list[str] = Field(default_factory=list, alias="driftFields")
+    """Record fields that diverged from the chain when ``reason`` is ``record_projection_drift``."""
+
+
 class RecordRow(BaseModel):
     """A Record — a registered commitment between a principal and a performer."""
 
@@ -373,6 +397,8 @@ class RecordRow(BaseModel):
     """Peer Server IDs this Record has been shared to via federation."""
     share: bool | None = None
     """Whether this Record participates in revenue share, or None when not configured."""
+    integrity: "RecordIntegrity | None" = None
+    """Tamper-evidence result, present only when read with ``integrity=True`` (API #732)."""
 
 
 class BulkCreateResultItem(BaseModel):

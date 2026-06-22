@@ -20,8 +20,8 @@ def _build_list_params(
     org_id: str | None, status: str | None, type: str | None,
     performer_agent_id: str | None, role: str | None, from_: str | None,
     to: str | None, has_dispute: bool | None, dispute_status: str | None,
-    imported: bool | None, source: str | None, limit: int | None,
-    cursor: str | None,
+    imported: bool | None, source: str | None, actionable: bool | None,
+    limit: int | None, cursor: str | None,
 ) -> dict[str, Any]:
     """Assemble the query params for GET /v1/records, mapping snake_case to the wire names."""
     params: dict[str, Any] = {}
@@ -37,6 +37,7 @@ def _build_list_params(
         ("disputeStatus", dispute_status),
         ("imported", imported),
         ("source", source),
+        ("actionable", actionable),
         ("limit", limit),
         ("cursor", cursor),
     ):
@@ -112,9 +113,14 @@ class RecordsResource:
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
         return RecordRow.model_validate(self._http.post("/v1/records", json=body))
 
-    def get(self, record_id: str) -> RecordRow:
-        """Get a Record by ID."""
-        return RecordRow.model_validate(self._http.get(f"/v1/records/{record_id}"))
+    def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
+        """Get a Record by ID.
+
+        Pass ``integrity=True`` to re-verify the audit chain and cross-check the
+        served row against it (API #732); the result is on ``RecordRow.integrity``.
+        """
+        params = {"integrity": integrity} if integrity is not None else None
+        return RecordRow.model_validate(self._http.get(f"/v1/records/{record_id}", params=params))
 
     def list(
         self,
@@ -130,13 +136,18 @@ class RecordsResource:
         dispute_status: str | None = None,
         imported: bool | None = None,
         source: str | None = None,
+        actionable: bool | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
-        """List Records with optional filters."""
+        """List Records with optional filters.
+
+        ``actionable=True`` returns the agent-recovery set: every Record whose next
+        action awaits the caller's structural side (API #731). Agent keys only.
+        """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, limit, cursor,
+            has_dispute, dispute_status, imported, source, actionable, limit, cursor,
         )
         raw = self._http.get_page("/v1/records", params=params)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
@@ -156,11 +167,12 @@ class RecordsResource:
         dispute_status: str | None = None,
         imported: bool | None = None,
         source: str | None = None,
+        actionable: bool | None = None,
     ) -> Iterator[RecordRow]:
         """Auto-paginate through all Records."""
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, None, None,
+            has_dispute, dispute_status, imported, source, actionable, None, None,
         )
         for item in self._http.paginate("/v1/records", params=params):
             yield RecordRow.model_validate(item)
@@ -457,8 +469,12 @@ class AsyncRecordsResource:
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
         return RecordRow.model_validate(await self._http.post("/v1/records", json=body))
 
-    async def get(self, record_id: str) -> RecordRow:
-        return RecordRow.model_validate(await self._http.get(f"/v1/records/{record_id}"))
+    async def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
+        """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain (API #732)."""
+        params = {"integrity": integrity} if integrity is not None else None
+        return RecordRow.model_validate(
+            await self._http.get(f"/v1/records/{record_id}", params=params)
+        )
 
     async def list(
         self,
@@ -474,13 +490,18 @@ class AsyncRecordsResource:
         dispute_status: str | None = None,
         imported: bool | None = None,
         source: str | None = None,
+        actionable: bool | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
-        """List Records with optional filters."""
+        """List Records with optional filters.
+
+        ``actionable=True`` returns the agent-recovery set: every Record whose next
+        action awaits the caller's structural side (API #731). Agent keys only.
+        """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, limit, cursor,
+            has_dispute, dispute_status, imported, source, actionable, limit, cursor,
         )
         raw = await self._http.get_page("/v1/records", params=params)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
@@ -500,11 +521,12 @@ class AsyncRecordsResource:
         dispute_status: str | None = None,
         imported: bool | None = None,
         source: str | None = None,
+        actionable: bool | None = None,
     ) -> AsyncIterator[RecordRow]:
         """Auto-paginate through all Records."""
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, None, None,
+            has_dispute, dispute_status, imported, source, actionable, None, None,
         )
         async for item in self._http.paginate("/v1/records", params=params):
             yield RecordRow.model_validate(item)

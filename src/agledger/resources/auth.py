@@ -21,9 +21,15 @@ class AuthResource:
         """Get the authenticated account profile (identity, role, scopes)."""
         return AccountProfile.model_validate(self._http.get("/v1/auth/me"))
 
-    def rotate_key(self) -> dict[str, Any]:
-        """Rotate the current API key. Old key is immediately revoked."""
-        return self._http.post("/v1/auth/keys/rotate")
+    def rotate_key(self, *, grace_period_seconds: int | None = None) -> dict[str, Any]:
+        """Rotate the current API key.
+
+        The old key is revoked immediately unless ``grace_period_seconds`` is given
+        (API #793), which keeps it valid for an overlap window so in-flight callers
+        can swap without a hard cutover.
+        """
+        body = {"gracePeriodSeconds": grace_period_seconds} if grace_period_seconds is not None else None
+        return self._http.post("/v1/auth/keys/rotate", json=body)
 
     def issue_ephemeral_cert(
         self,
@@ -54,9 +60,14 @@ class AsyncAuthResource:
         """Get the authenticated account profile (identity, role, scopes)."""
         return AccountProfile.model_validate(await self._http.get("/v1/auth/me"))
 
-    async def rotate_key(self) -> dict[str, Any]:
-        """Rotate the current API key. Old key is immediately revoked."""
-        return await self._http.post("/v1/auth/keys/rotate")
+    async def rotate_key(self, *, grace_period_seconds: int | None = None) -> dict[str, Any]:
+        """Rotate the current API key.
+
+        The old key is revoked immediately unless ``grace_period_seconds`` is given
+        (API #793), which keeps the old key valid for an overlap window.
+        """
+        body = {"gracePeriodSeconds": grace_period_seconds} if grace_period_seconds is not None else None
+        return await self._http.post("/v1/auth/keys/rotate", json=body)
 
     async def issue_ephemeral_cert(
         self,

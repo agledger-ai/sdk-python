@@ -219,7 +219,12 @@ class AdminResource:
         display_name: str | None = None,
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create a new org."""
+        """Create a new org.
+
+        Dev/test only — ``POST /v1/admin/orgs`` is not registered in production
+        (dropped from the canonical OpenAPI spec in API v1.0.1) and 404s there.
+        Provision production orgs via the operator ``provisioning/`` YAML.
+        """
         body: dict[str, Any] = {}
         if name is not None: body["name"] = name
         if display_name is not None: body["displayName"] = display_name
