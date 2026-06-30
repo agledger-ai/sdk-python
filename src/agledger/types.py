@@ -246,7 +246,7 @@ class RecordRow(BaseModel):
     operating_mode: OperatingMode | str | None = Field(None, alias="operatingMode")
     """Operating mode: cleartext (default) or encrypted."""
     gate_mode: GateMode | str | None = Field(None, alias="gateMode")
-    """Gate mode: auto (rules engine renders the verdict and auto-settles) or principal (engine advisory pass, then the principal renders accept/reject)."""
+    """Gate mode: auto (auto-settles against the principal's pre-configured predicates) or principal (engine advisory pass, then the principal renders accept/reject). Either way the verdict is the principal's; AGLedger holds the signed decision and never renders it."""
     risk_classification: RiskClassification | str | None = Field(None, alias="riskClassification")
     """EU AI Act risk classification."""
     eu_ai_act_domain: str | None = Field(None, alias="euAiActDomain")
@@ -429,6 +429,23 @@ class BulkCreateResult(BaseModel):
     summary: BulkCreateSummary
 
 
+class CompletionSettlementSignal(BaseModel):
+    """The auto-gate's inline settlement decision on a Completion (API #816). A
+    leaner projection than ``SettlementSignalSummary`` (no federation delivery
+    state), carrying just the gate outcome the caller needs at completion time."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    recommendation: Literal["SETTLE", "HOLD", "RELEASE"]
+    """The gate decision in GET /v1/records vocabulary: SETTLE, HOLD, or RELEASE."""
+    outcome: Literal["accept", "reject"]
+    """Engine verdict that drove the recommendation."""
+    reason_code: str | None = Field(None, alias="reasonCode")
+    """Discriminator code (same as the settlement webhook), e.g. ``AUTO_SETTLE``, or
+    ``AUTO_SETTLE_WITHIN_TOLERANCE`` (API #824) when the gate cleared only via a
+    non-zero tolerance band rather than the base criteria threshold. None when not classifiable."""
+
+
 class Completion(BaseModel):
     """A Completion — structured evidence submitted by a performer."""
 
@@ -454,6 +471,14 @@ class Completion(BaseModel):
     """Denormalized gate verdict on the parent Record: ``accept``, ``reject``, or None until the gate evaluates."""
     last_verdict_reason: str | None = Field(None, alias="lastVerdictReason")
     """Reason attached to the most recent verdict, or None."""
+    settlement_signal: "CompletionSettlementSignal | None" = Field(
+        None, alias="settlementSignal"
+    )
+    """The auto-gate's settle/hold/reject decision, surfaced inline so the caller learns the
+    outcome at completion time without a follow-up GET (API #816). ``structural_validation ==
+    'ACCEPTED'`` means only the body parsed; this field carries the gate's decision. None when
+    the gate did not render inline (encrypted Records, principal-mode held at PENDING_VERDICT,
+    or the inline run was skipped); read ``record_status`` and ``records.get(id)`` in that case."""
     validation_errors: list[Any] | None = Field(None, alias="validationErrors")
     """Schema validation errors, if any."""
     idempotency_key: str | None = Field(None, alias="idempotencyKey")

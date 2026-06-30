@@ -4,6 +4,21 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-06-29
+
+Tracks AGLedger API **v1.1.0** (was pinned to v1.0.3). Route surface is identical (193 routes); this is a field- and doc-level sync. All changes are backward-compatible.
+
+### Added
+
+- **`Completion.settlement_signal`** (API #816): the auto-gate's settle/hold/reject decision, surfaced inline on a submitted Completion so the caller learns the outcome without a follow-up `records.get`. Typed `CompletionSettlementSignal` (`recommendation`, `outcome`, `reason_code`); `None` when the gate did not render inline (encrypted Records, principal-mode held at PENDING_VERDICT, or skipped).
+- New exported type: `CompletionSettlementSignal`.
+
+### Changed
+
+- `reason_code` docs note the new `AUTO_SETTLE_WITHIN_TOLERANCE` value (API #824): an auto-settle that cleared only via a non-zero tolerance band rather than the base criteria threshold. The field stays `str | None`.
+- Gate-mode docs no longer say "the rules engine renders the verdict": auto mode auto-settles against the principal's pre-configured predicates; the verdict is always the principal's and AGLedger only holds the signed decision.
+- Parity snapshot regenerated to `apiVersion 1.1.0`. (`schemas.list()` already returns raw dict rows, so the new `defaultGateMode` field on catalog rows is passed through without a type change.)
+
 ## [1.0.2] - 2026-06-22
 
 Tracks AGLedger API **v1.0.3** (was pinned to v1.0.0). A full route + field-level drift sweep against the live v1.0.3 OpenAPI surfaced three additive method gaps and one spec removal; parity snapshots regenerated to `apiVersion 1.0.3` (193 routes). All additions are backward-compatible.
