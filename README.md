@@ -1,13 +1,13 @@
 # AGLedger Python SDK
 
-The official Python SDK for [AGLedger](https://agledger.ai) — accountability infrastructure for AI agents. Self-hosted. The Layer 3 accountability layer of the agent stack.
+The official Python SDK for [AGLedger](https://agledger.ai): accountability infrastructure for AI agents. Self-hosted. The Layer 3 accountability layer of the agent stack.
 
 **Learn more**
 
-- [agledger.ai](https://agledger.ai) — what AGLedger is and why Layer 3 accountability matters
-- [How it works](https://agledger.ai/how-it-works) — the four-endpoint lifecycle: Record, Completion, Verdict, fulfill
-- [Glossary](https://agledger.ai/glossary) — canonical definitions of Record, Completion, SCITT Receipt, Verdict, Settlement Signal
-- [Documentation](https://agledger.ai/docs) — installation, integration guides, API reference
+- [agledger.ai](https://agledger.ai): what AGLedger is and why Layer 3 accountability matters
+- [How it works](https://agledger.ai/how-it-works) walks the four-endpoint lifecycle: Record, Completion, Verdict, fulfill
+- [Glossary](https://agledger.ai/glossary): canonical definitions of Record, Completion, SCITT Receipt, Verdict, Settlement Signal
+- [Documentation](https://agledger.ai/docs): installation, integration guides, API reference
 
 ## Install
 
@@ -81,7 +81,7 @@ async with AsyncAgledgerClient() as client:
 
 Webhooks ship in two signing schemes, selected per subscription via `signing_alg`.
 
-**HMAC** (`signing_alg="hmac"`, the default) — shared-secret HMAC-SHA256:
+**HMAC** (`signing_alg="hmac"`, the default) is shared-secret HMAC-SHA256:
 
 ```python
 from agledger.webhooks import verify_signature
@@ -89,7 +89,7 @@ from agledger.webhooks import verify_signature
 is_valid = verify_signature(raw_body, request.headers["x-agledger-signature"], webhook_secret)
 ```
 
-**Ed25519** (`signing_alg="ed25519"`) — RFC 9421 HTTP Message Signatures signed
+**Ed25519** (`signing_alg="ed25519"`) is RFC 9421 HTTP Message Signatures signed
 with the Server's vault key. The receiver holds no secret and verifies against
 the Server's published public key, giving non-repudiation for the Settlement
 Signal hop. Settlement-event subscriptions default to this when the Server has a
@@ -169,8 +169,8 @@ if not report.ok:
 ### `agledger-verify` CLI (turnkey)
 
 The `[verify]` extra installs an `agledger-verify` console script that
-auto-detects its argument — a **directory** is a full-vault dump; a **file** is a
-single `/audit-export` JSON document — so one command covers both verifiers, with
+auto-detects its argument: a **directory** is a full-vault dump, a **file** is a
+single `/audit-export` JSON document, so one command covers both verifiers, with
 no network calls:
 
 ```bash
