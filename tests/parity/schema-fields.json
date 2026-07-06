@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.1.0",
+  "apiVersion": "1.2.0",
   "schemaCount": 11,
   "schemas": {
     "Completion": [
@@ -309,6 +309,7 @@
       "lastFailureAt",
       "lastSuccessfulAt",
       "nextSteps",
+      "recordTypes",
       "secret",
       "secretGraceActive",
       "secretGraceExpiresAt",

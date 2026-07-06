@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-06-29T00:00:00.000Z",
-  "sourceUrl": "local v1.0.3 openapi.json",
+  "generatedAt": "2026-07-06T00:00:00.000Z",
+  "sourceUrl": "local v1.2.0 openapi.json",
   "count": 193,
   "routes": [
     {
@@ -2698,7 +2698,9 @@
       "tag": "Agent-to-Agent",
       "requiredFields": [],
       "bodyFields": [
-        "message"
+        "message",
+        "notes",
+        "reason"
       ],
       "queryFields": [],
       "pathParams": [
@@ -4139,6 +4141,7 @@
       "bodyFields": [
         "eventTypes",
         "format",
+        "recordTypes",
         "signingAlg",
         "url"
       ],
@@ -4204,6 +4207,7 @@
       "bodyFields": [
         "eventTypes",
         "isPaused",
+        "recordTypes",
         "url"
       ],
       "queryFields": [],

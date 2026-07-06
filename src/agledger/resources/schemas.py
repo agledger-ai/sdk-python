@@ -74,27 +74,27 @@ class SchemasResource:
 
     def import_(
         self,
-        payload: dict[str, Any],
+        manifest: dict[str, Any],
         *,
-        dry_run: bool = False,
         org_id: str | None = None,
+        **options: Any,
     ) -> dict[str, Any]:
-        """Import a schema bundle. Set ``dry_run=True`` to preview without persisting."""
-        params: dict[str, Any] = {}
-        if dry_run:
-            params["dryRun"] = "true"
-        if org_id is not None:
-            params["orgId"] = org_id
-        return self._http.post("/v1/schemas/import", json=payload, params=params)
+        """Import a third-party schema manifest (DESIGN-SCHEMA-CATALOG.md §4).
 
-    def preview_import(
-        self,
-        payload: dict[str, Any],
-        *,
-        org_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Preview a schema import without persisting (dry_run=True)."""
-        return self.import_(payload, dry_run=True, org_id=org_id)
+        ``manifest`` requires ``manifestVersion``, ``publisher``, ``type``,
+        ``version`` and ``recordSchema``. Row-only metadata options
+        (``federatable``, ``defaultShare``, ``defaultGateMode``,
+        ``coSignRequired``, ``flipRecordStatusOnDispute``,
+        ``federateDisputes``) ride alongside the manifest in the body.
+        Idempotent on full-tuple match (publisher, type, version, org,
+        digest): re-posting the same manifest returns the existing row (HTTP
+        200 instead of 201); same identity with different bytes is a 409.
+        Requires the ``schemas:admin`` scope.
+        """
+        body: dict[str, Any] = {"manifest": manifest, **options}
+        if org_id is not None:
+            body["orgId"] = org_id
+        return self._http.post("/v1/schemas/import", json=body)
 
     def register(self, schema_input: dict[str, Any]) -> dict[str, Any]:
         """Register a new custom Type schema."""
@@ -181,25 +181,16 @@ class AsyncSchemasResource:
 
     async def import_(
         self,
-        payload: dict[str, Any],
+        manifest: dict[str, Any],
         *,
-        dry_run: bool = False,
         org_id: str | None = None,
+        **options: Any,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if dry_run:
-            params["dryRun"] = "true"
+        """Import a third-party schema manifest — see the sync ``import_`` docstring."""
+        body: dict[str, Any] = {"manifest": manifest, **options}
         if org_id is not None:
-            params["orgId"] = org_id
-        return await self._http.post("/v1/schemas/import", json=payload, params=params)
-
-    async def preview_import(
-        self,
-        payload: dict[str, Any],
-        *,
-        org_id: str | None = None,
-    ) -> dict[str, Any]:
-        return await self.import_(payload, dry_run=True, org_id=org_id)
+            body["orgId"] = org_id
+        return await self._http.post("/v1/schemas/import", json=body)
 
     async def register(self, schema_input: dict[str, Any]) -> dict[str, Any]:
         return await self._http.post("/v1/schemas", json=schema_input)

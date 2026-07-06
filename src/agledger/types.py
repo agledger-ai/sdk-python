@@ -621,6 +621,10 @@ class Webhook(BaseModel):
     id: str
     url: str
     event_types: list[str] | None = Field(None, alias="eventTypes")
+    record_types: list[str] | None = Field(None, alias="recordTypes")
+    """Record-type filter for record-scoped events (API #825). ``["*"]`` means all
+    record types (wildcard sentinel); any other list means record events are
+    delivered ONLY for the listed types (fail-closed). ``None`` = no filter."""
     is_active: bool = Field(alias="isActive")
     is_paused: bool | None = Field(None, alias="isPaused")
     format: str = "standard"

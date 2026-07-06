@@ -240,12 +240,16 @@ class RecordsResource:
         body = {"reason": reason} if reason else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/cancel", json=body))
 
-    def accept(self, record_id: str) -> RecordRow:
-        """Accept a PROPOSED Record (as performer)."""
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/accept", json={}))
+    def accept(self, record_id: str, message: str | None = None) -> RecordRow:
+        """Accept a PROPOSED Record (as performer). The optional ``message``
+        explains the acceptance (max 2000 chars; the API also accepts
+        ``reason``/``notes`` as wire-level aliases of the same field, #780)."""
+        body = {"message": message} if message else {}
+        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/accept", json=body))
 
     def reject(self, record_id: str, message: str | None = None) -> RecordRow:
-        """Reject a PROPOSED Record (as performer). The API accepts only `message` here."""
+        """Reject a PROPOSED Record (as performer). The optional ``message``
+        explains the rejection (``reason``/``notes`` are wire-level aliases, #780)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/reject", json=body))
 
@@ -593,13 +597,17 @@ class AsyncRecordsResource:
             await self._http.post(f"/v1/records/{record_id}/cancel", json=body)
         )
 
-    async def accept(self, record_id: str) -> RecordRow:
+    async def accept(self, record_id: str, message: str | None = None) -> RecordRow:
+        """Accept a PROPOSED Record (as performer). The optional ``message``
+        explains the acceptance (``reason``/``notes`` are wire-level aliases, #780)."""
+        body = {"message": message} if message else {}
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/accept", json={})
+            await self._http.post(f"/v1/records/{record_id}/accept", json=body)
         )
 
     async def reject(self, record_id: str, message: str | None = None) -> RecordRow:
-        """Reject a PROPOSED Record (as performer). The API accepts only `message` here."""
+        """Reject a PROPOSED Record (as performer). The optional ``message``
+        explains the rejection (``reason``/``notes`` are wire-level aliases, #780)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(
             await self._http.post(f"/v1/records/{record_id}/reject", json=body)

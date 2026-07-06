@@ -4,6 +4,29 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-06
+
+Tracks AGLedger API **v1.2.0** (was v1.1.0). Route surface is identical (193 routes); the API delta is additive, and this release also replaces a schema-import surface that had drifted so far from the shipped API that it could not work. Live-validated against a local API v1.2.0.
+
+### Added
+
+- **Webhook `record_types` filter** (API #825): `webhooks.create()` and `webhooks.update()` accept `record_types`, and the `Webhook` model carries it back (wire name `recordTypes`). `["*"]` means all record types (wildcard sentinel); any other list means record-scoped events are delivered ONLY for the listed types (fail-closed). Omit for no filter.
+- **`records.accept(record_id, message=None)`** (API #855): optional acceptance rationale, symmetric with `reject()`. The API stores one rationale field; `reason`/`notes` are wire-level aliases of `message` on all four handshake endpoints (#780).
+
+### Fixed
+
+- **`schemas.import_()` now works.** It previously sent a schema *export bundle* body with `orgId` (and a nonexistent `dryRun`) in the query string; the shipped API has required a `manifest` body since the Schema Catalog redesign, so every call failed with 400. The method now takes the manifest dict plus row-only options as keyword arguments (`org_id`, `federatable`, `defaultShare`, `defaultGateMode`, `coSignRequired`, `flipRecordStatusOnDispute`, `federateDisputes`) in the body, and returns the created/existing subject row (HTTP 200 on an idempotent re-post, 201 on create).
+
+### Removed
+
+- **`schemas.preview_import()` and the `dry_run` flag.** The API has no dry-run on `/v1/schemas/import`; the flag was silently ignored, so a "preview" would have performed a real import had the body ever validated. Use `schemas.preview()` for pre-registration validation of locally authored schemas.
+
+### Changed
+
+- Parity snapshots regenerated to `apiVersion 1.2.0`.
+
+Semver note: this is a minor, not a major, because the removed/reshaped import surface was inoperable against every shipped v1.x API (each call 400d), so no working integration can regress.
+
 ## [1.0.4] - 2026-06-29
 
 ### Changed
