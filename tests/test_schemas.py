@@ -36,12 +36,18 @@ DIFF_JSON = {
     "overallCompatibility": {"backward": True, "forward": True},
 }
 EXPORT_JSON = {"exportVersion": 1, "type": "notarize-generic-v1", "versions": []}
-IMPORT_JSON = {"imported": {"type": "my-custom-v1", "versionsCreated": [1], "subjectIds": []}}
+MANIFEST = {
+    "manifestVersion": "1.0",
+    "publisher": "acme",
+    "type": "my-custom-v1",
+    "version": "1.0",
+    "recordSchema": {"type": "object"},
+}
+IMPORT_JSON = {"type": "my-custom-v1", "version": 1, "status": "ACTIVE", "publisher": "acme", "trustClass": "imported"}
 PREVIEW_JSON = {"valid": True, "compiled": {}}
 COMPAT_JSON = {"record": {"compatible": True, "changes": []}, "completion": {"compatible": True, "changes": []}}
 RULES_JSON = {"type": "notarize-generic-v1", "syncRuleIds": ["r1"], "asyncRuleIds": []}
 VALIDATE_JSON = {"valid": True}
-DRY_RUN_JSON = {"valid": True, "wouldCreate": {"type": "my-custom-v1", "versions": [1]}}
 
 
 # --- Sync tests ---
@@ -136,20 +142,17 @@ def test_export_schema():
 
 @respx.mock
 def test_import():
-    respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(200, json=IMPORT_JSON))
+    route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(201, json=IMPORT_JSON))
     client = AgledgerClient(api_key="test-key")
-    result = client.schemas.import_({"exportVersion": 1, "type": "my-custom-v1", "versions": [{}]})
-    assert result["imported"]["type"] == "my-custom-v1"
-
-
-@respx.mock
-def test_import_dry_run():
-    route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(200, json=DRY_RUN_JSON))
-    client = AgledgerClient(api_key="test-key")
-    result = client.schemas.import_({"exportVersion": 1, "type": "my-custom-v1", "versions": [{}]}, dry_run=True)
-    assert result["valid"] is True
-    url = str(route.calls[0].request.url)
-    assert "dryRun=true" in url
+    result = client.schemas.import_(MANIFEST, defaultGateMode="principal")
+    assert result["type"] == "my-custom-v1"
+    req = route.calls[0].request
+    # manifest and row-only options ride in the body; nothing in the query string
+    assert req.url.query == b""
+    import json as _json
+    body = _json.loads(req.content)
+    assert body["manifest"] == MANIFEST
+    assert body["defaultGateMode"] == "principal"
 
 
 @respx.mock
@@ -241,12 +244,10 @@ async def test_async_export_schema():
 @respx.mock
 @pytest.mark.asyncio
 async def test_async_import_schema():
-    route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(200, json=DRY_RUN_JSON))
+    route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(201, json=IMPORT_JSON))
     async with AsyncAgledgerClient(api_key="test-key") as client:
-        result = await client.schemas.import_(
-            {"exportVersion": 1, "type": "my-custom-v1", "versions": [{}]},
-            dry_run=True,
-        )
-        assert result["valid"] is True
-        url = str(route.calls[0].request.url)
-        assert "dryRun=true" in url
+        result = await client.schemas.import_(MANIFEST)
+        assert result["type"] == "my-custom-v1"
+        import json as _json
+        body = _json.loads(route.calls[0].request.content)
+        assert body["manifest"] == MANIFEST

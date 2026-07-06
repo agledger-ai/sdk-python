@@ -17,6 +17,7 @@ class WebhooksResource:
         event_types: list[str],
         format: str | None = None,
         signing_alg: str | None = None,
+        record_types: list[str] | None = None,
     ) -> Webhook:
         """Register a new webhook subscription.
 
@@ -24,12 +25,18 @@ class WebhooksResource:
         signed with the Server vault key (verify them with ``verify_rfc9421``
         from ``agledger.webhooks``). Settlement-event subscriptions default to
         ``ed25519`` when the Server has a vault signing key.
+
+        ``record_types`` filters record-scoped events by record type (API
+        #825): ``["*"]`` means all types; any other list is fail-closed (only
+        the listed types are delivered). Omit for no filter.
         """
         body: dict[str, Any] = {"url": url, "eventTypes": event_types}
         if format is not None:
             body["format"] = format
         if signing_alg is not None:
             body["signingAlg"] = signing_alg
+        if record_types is not None:
+            body["recordTypes"] = record_types
         data = self._http.post("/v1/webhooks", json=body)
         return Webhook.model_validate(data)
 
@@ -45,9 +52,11 @@ class WebhooksResource:
         url: str | None = None,
         event_types: list[str] | None = None,
         is_paused: bool | None = None,
+        record_types: list[str] | None = None,
     ) -> Webhook:
-        """Update a webhook subscription. The API accepts only url, eventTypes, isPaused here
-        (signing scheme and payload format are fixed at create time)."""
+        """Update a webhook subscription. The API accepts only url, eventTypes,
+        isPaused and recordTypes here (signing scheme and payload format are
+        fixed at create time)."""
         body: dict[str, Any] = {}
         if url is not None:
             body["url"] = url
@@ -55,6 +64,8 @@ class WebhooksResource:
             body["eventTypes"] = event_types
         if is_paused is not None:
             body["isPaused"] = is_paused
+        if record_types is not None:
+            body["recordTypes"] = record_types
         data = self._http.patch(f"/v1/webhooks/{webhook_id}", json=body)
         return Webhook.model_validate(data)
 
@@ -120,6 +131,7 @@ class AsyncWebhooksResource:
         event_types: list[str],
         format: str | None = None,
         signing_alg: str | None = None,
+        record_types: list[str] | None = None,
     ) -> Webhook:
         """Register a new webhook subscription.
 
@@ -127,12 +139,18 @@ class AsyncWebhooksResource:
         signed with the Server vault key (verify them with ``verify_rfc9421``
         from ``agledger.webhooks``). Settlement-event subscriptions default to
         ``ed25519`` when the Server has a vault signing key.
+
+        ``record_types`` filters record-scoped events by record type (API
+        #825): ``["*"]`` means all types; any other list is fail-closed (only
+        the listed types are delivered). Omit for no filter.
         """
         body: dict[str, Any] = {"url": url, "eventTypes": event_types}
         if format is not None:
             body["format"] = format
         if signing_alg is not None:
             body["signingAlg"] = signing_alg
+        if record_types is not None:
+            body["recordTypes"] = record_types
         data = await self._http.post("/v1/webhooks", json=body)
         return Webhook.model_validate(data)
 
@@ -148,9 +166,11 @@ class AsyncWebhooksResource:
         url: str | None = None,
         event_types: list[str] | None = None,
         is_paused: bool | None = None,
+        record_types: list[str] | None = None,
     ) -> Webhook:
-        """Update a webhook subscription. The API accepts only url, eventTypes, isPaused here
-        (signing scheme and payload format are fixed at create time)."""
+        """Update a webhook subscription. The API accepts only url, eventTypes,
+        isPaused and recordTypes here (signing scheme and payload format are
+        fixed at create time)."""
         body: dict[str, Any] = {}
         if url is not None:
             body["url"] = url
@@ -158,6 +178,8 @@ class AsyncWebhooksResource:
             body["eventTypes"] = event_types
         if is_paused is not None:
             body["isPaused"] = is_paused
+        if record_types is not None:
+            body["recordTypes"] = record_types
         data = await self._http.patch(f"/v1/webhooks/{webhook_id}", json=body)
         return Webhook.model_validate(data)
 
