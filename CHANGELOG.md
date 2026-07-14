@@ -4,6 +4,18 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-13
+
+Tracks AGLedger API **v1.3.2** (was v1.2.0). Route surface is unchanged (193 routes); the API delta is additive response fields, a new event type, and a new audit-export option. Live-validated end-to-end against a local API v1.3.2 (record create, principal-gate verdict, `?evidence=true` export).
+
+### Added
+
+- **`SignedStatement.signed_at`** (API #877): the signed instant of the head Signed Statement (the CWT `iat` claim sealed in the COSE_Sign1 protected header, second precision). The authoritative timestamp for time-anchored contracts (statutory wait windows, notice clocks); the record's millisecond `created_at` only approximates it. Nullable, wire name `signedAt`.
+- **`VerdictResult.record_status`** (API #876): the settled record status (`FULFILLED` on accept, `FAILED` on reject) returned inline on `records.submit_verdict()`, so the outcome is known without a follow-up `records.get()`.
+- **`record.gate_held` webhook event** (API #913): a principal-mode record held at PROCESSING awaiting the verdict emits this event; the payload carries the `completionId` to verdict against plus the engine/rollup advisory. Added to `WebhookEventType`.
+- **`records.get_audit_export(id, evidence=True)`** (API #870): inlines the completion evidence body at each COMPLETION_SUBMITTED entry (`AuditExportEntry.evidence`) — an UNSIGNED projection the chain binds by hash via `payload.evidenceHash`. JSON/NDJSON only.
+- **`chain_integrity_reason`** gains `signature_invalid`, `signing_key_unknown`, `signing_key_drift` (API #888/#893): the vault now fails closed on per-entry signature verification and surfaces the specific failing invariant.
+
 ## [1.1.0] - 2026-07-06
 
 Tracks AGLedger API **v1.2.0** (was v1.1.0). Route surface is identical (193 routes); the API delta is additive, and this release also replaces a schema-import surface that had drifted so far from the shipped API that it could not work. Live-validated against a local API v1.2.0.
