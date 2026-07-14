@@ -120,6 +120,7 @@ def _build_error(response: httpx.Response) -> APIError:
         "doc_url": body.get("docUrl"),
         "recovery_hint": body.get("recoveryHint"),
         "refresh_url": body.get("refreshUrl"),
+        "deadline": body.get("deadline"),
     }
 
     if cls is PermissionDeniedError:
