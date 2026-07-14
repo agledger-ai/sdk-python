@@ -112,6 +112,12 @@ class SignedStatement(BaseModel):
     """leafHash of the prior entry (null only on chainPosition === 1)."""
     signing_key_id: str | None = Field(None, alias="signingKeyId")
     """Vault signing key id — resolves to a public key at GET /v1/verification-keys."""
+    signed_at: str | None = Field(None, alias="signedAt")
+    """Signed instant of the head Signed Statement — the CWT ``iat`` claim (second
+    precision) sealed in the COSE_Sign1 protected header (API #877). THE authoritative
+    timestamp for time-anchored contracts (wait windows, notice clocks); the Record's
+    ``created_at`` is a millisecond DB clock that only approximates it. Null if the
+    envelope fails to decode."""
     signed_checkpoint_ref: str | None = Field(None, alias="signedCheckpointRef")
     """Most recent signed checkpoint covering this position, or null."""
     url: str
@@ -567,6 +573,10 @@ WebhookEventType = (
         "record.completion_submitted",
         "record.completion_invalid",
         "record.gate_complete",
+        # Principal-mode record held at PROCESSING awaiting the principal verdict;
+        # payload carries the completionId to verdict against plus the engine/rollup
+        # advisory result (API #913).
+        "record.gate_held",
         "record.fulfilled",
         "record.failed",
         "record.expired",
@@ -659,6 +669,10 @@ class VerdictResult(BaseModel):
     completion_id: str = Field(alias="completionId")
     verdict: str
     recommendation: str
+    record_status: RecordStatus | str | None = Field(None, alias="recordStatus")
+    """Record status after the verdict settled — FULFILLED (accept) or FAILED (reject),
+    same vocabulary as the Record GET (API #876). Surfaced inline so the caller learns
+    where the Record landed without a follow-up fetch."""
     reporter_type: str = Field(alias="reporterType")
     reported_at: str = Field(alias="reportedAt")
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
@@ -738,6 +752,12 @@ class AuditExportEntry(BaseModel):
     payload: dict[str, Any]
     actor: AuditActor | None = None
     """Optional ``_actor`` envelope surfaced from the canonical payload."""
+    evidence: dict[str, Any] | None = None
+    """Completion evidence body, present only when the export was fetched with
+    ``evidence=True`` AND this is a COMPLETION_SUBMITTED entry (API #870). UNSIGNED
+    projection — the chain binds it by hash only: recompute SHA-256 over the RFC 8785
+    (JCS) canonicalization of this object and compare against ``payload.evidenceHash``.
+    Encrypted-mode records inline the stored ciphertext envelope."""
     integrity: dict[str, Any]
 
 
@@ -804,6 +824,12 @@ class AuditExportMetadata(BaseModel):
             "cert_expired",
             "cert_missing",
             "agent_signature_invalid",
+            # API #888/#893 (v1.3.2): vault fails closed on per-entry signature
+            # verification — signature did not verify / signing key unresolvable /
+            # denormalized signing_key_id column drifted from the signed kid.
+            "signature_invalid",
+            "signing_key_unknown",
+            "signing_key_drift",
         ]
         | None
     ) = Field(None, alias="chainIntegrityReason")

@@ -357,18 +357,28 @@ class RecordsResource:
         )
 
     def get_audit_export(
-        self, record_id: str, *, format: str = "json", receipts: bool | None = None
+        self,
+        record_id: str,
+        *,
+        format: str = "json",
+        receipts: bool | None = None,
+        evidence: bool | None = None,
     ) -> RecordAuditExport:
         """Export the per-Record, hash-chained audit trail.
 
         Vault entries carry an ``_actor`` envelope (key id, role, owner id) folded
         into the canonical payload; the hash chain covers it. Set ``receipts=True``
         to opt the SCITT Receipts (Merkle inclusion proofs) into the export — only
-        emitted when the engine has a ``VAULT_SIGNING_KEY``.
+        emitted when the engine has a ``VAULT_SIGNING_KEY``. Set ``evidence=True`` to
+        inline the completion evidence body at each COMPLETION_SUBMITTED entry (API
+        #870) — an UNSIGNED projection the chain binds by hash via
+        ``payload.evidenceHash``. JSON/NDJSON only.
         """
         params: dict[str, Any] = {"format": format}
         if receipts is not None:
             params["receipts"] = "true" if receipts else "false"
+        if evidence is not None:
+            params["evidence"] = "true" if evidence else "false"
         return RecordAuditExport.model_validate(
             self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
         )
@@ -703,11 +713,18 @@ class AsyncRecordsResource:
         )
 
     async def get_audit_export(
-        self, record_id: str, *, format: str = "json", receipts: bool | None = None
+        self,
+        record_id: str,
+        *,
+        format: str = "json",
+        receipts: bool | None = None,
+        evidence: bool | None = None,
     ) -> RecordAuditExport:
         params: dict[str, Any] = {"format": format}
         if receipts is not None:
             params["receipts"] = "true" if receipts else "false"
+        if evidence is not None:
+            params["evidence"] = "true" if evidence else "false"
         return RecordAuditExport.model_validate(
             await self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
         )
