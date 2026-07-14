@@ -42,6 +42,8 @@ class APIError(AgledgerError):
     suggestion: str | None
     recovery_hint: str | None
     refresh_url: str | None
+    deadline: str | None
+    """ISO deadline that had already passed on a system TIME_OUT 422 (API v1.3.2)."""
     raw_body: bytes | None
     """Raw response body for binary endpoints (``application/cose``,
     ``application/concise-problem-details+cbor``). Set when the API returns
@@ -61,6 +63,7 @@ class APIError(AgledgerError):
         doc_url: str | None = None,
         recovery_hint: str | None = None,
         refresh_url: str | None = None,
+        deadline: str | None = None,
         raw_body: bytes | None = None,
     ) -> None:
         self.status = status
@@ -72,6 +75,7 @@ class APIError(AgledgerError):
         self.suggestion = suggestion
         self.recovery_hint = recovery_hint
         self.refresh_url = refresh_url
+        self.deadline = deadline
         self.raw_body = raw_body
         super().__init__(message or f"API error {status}")
 

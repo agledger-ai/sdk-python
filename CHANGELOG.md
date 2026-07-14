@@ -4,6 +4,18 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-07-13
+
+Patch: robustness and parity follow-ups from a self-review of 1.2.0. No wire changes.
+
+### Added
+
+- **`APIError.deadline`**: the ISO deadline carried on a system TIME_OUT 422 (API v1.3.2) is now surfaced as an attribute, matching the TS SDK's `ApiErrorResponse.deadline`. Previously it was parsed off the top-level error body by nothing and was unreachable.
+
+### Note
+
+- `SignedStatement.signed_at` was already optional (`Field(None, ...)`) in 1.2.0, so no change was needed on the Python side for the signedAt consistency fix that the TS SDK made in 1.3.1.
+
 ## [1.2.0] - 2026-07-13
 
 Tracks AGLedger API **v1.3.2** (was v1.2.0). Route surface is unchanged (193 routes); the API delta is additive response fields, a new event type, and a new audit-export option. Live-validated end-to-end against a local API v1.3.2 (record create, principal-gate verdict, `?evidence=true` export).
