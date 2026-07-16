@@ -1,11 +1,11 @@
 # AGLedger Python SDK
 
-The official Python SDK for [AGLedger](https://agledger.ai): accountability infrastructure for AI agents. Self-hosted. The Layer 3 accountability layer of the agent stack.
+The official Python SDK for [AGLedger](https://agledger.ai): change control for AI agents. A self-hosted notary that records every change an agent makes, signed and hash-chained, and gates the ones that matter.
 
 **Learn more**
 
-- [agledger.ai](https://agledger.ai): what AGLedger is and why Layer 3 accountability matters
-- [How it works](https://agledger.ai/how-it-works) walks the four-endpoint lifecycle: Record, Completion, Verdict, fulfill
+- [agledger.ai](https://agledger.ai): what AGLedger is and who needs it
+- [How it works](https://agledger.ai/how-it-works) walks the lifecycle: Record, Completion, Verdict
 - [Glossary](https://agledger.ai/glossary): canonical definitions of Record, Completion, SCITT Receipt, Verdict, Settlement Signal
 - [Documentation](https://agledger.ai/docs): installation, integration guides, API reference
 
@@ -69,7 +69,7 @@ async with AsyncAgledgerClient() as client:
 
 ## Resources
 
-`records`, `completions` (formerly `receipts`), `gate`, `disputes`,
+`records`, `completions`, `gate`, `disputes`,
 `webhooks`, `reputation`, `events`, `schemas`, `compliance`, `health`, `admin`
 (with `admin.records` + `admin.vault` sub-resources), `a2a`, `agents`, `audit`
 (with `audit.org_reads_checkpoints` and `audit.vault_checkpoints`), `auth`,
@@ -141,9 +141,8 @@ verification):
 pip install 'agledger[verify]'
 ```
 
-Rewritten in 0.8.0 to decode canonical COSE_Sign1 envelopes (RFC 9052), walk the
-hash chain, and verify Ed25519 signatures. Format 2.0 (was 1.0 JCS + detached
-Ed25519). Pass `public_keys={...}` to supply out-of-band keys (these override the
+Decodes canonical COSE_Sign1 envelopes (RFC 9052), walks the hash chain, and
+verifies Ed25519 signatures. Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply out-of-band keys (these override the
 export's embedded keys), `require_key_id="key-id"` to reject exports signed by an
 unexpected key, or `require_out_of_band_keys=True` for a high-assurance audit that
 refuses the export's own embedded keys. `result.key_provenance` reports how many
@@ -242,7 +241,7 @@ checkpoints = client.audit.vault_checkpoints.list(record_id="rec-123")
 
 ## Licensing
 
-AGLedger is **free for single-node deployments** (Docker Compose with bundled database). An Enterprise License is required for external database connections, federation, and multi-node deployments.
+The database is the license line. AGLedger is **free with its bundled PostgreSQL** (Docker Compose or Helm), in production, with every feature and every topology, federation included. Connecting to an external or managed database (Aurora, RDS, Cloud SQL, self-managed) requires a perpetual Enterprise license, priced per external database instance, plus an annual subscription for Enterprise-grade support. The license is perpetual: production never stops due to licensing.
 
 Full details: [agledger.ai/pricing](https://agledger.ai/pricing) | [License Agreement](https://agledger.ai/license)
 

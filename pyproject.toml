@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "agledger"
 version = "1.2.1"
-description = "AGLedger SDK — Accountability and audit infrastructure for agentic systems."
+description = "AGLedger Python SDK: change control for AI agents, self-hosted and signed."
 readme = "README.md"
 license = "LicenseRef-Proprietary"
 requires-python = ">=3.10"
