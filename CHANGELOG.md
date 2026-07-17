@@ -4,6 +4,18 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] - 2026-07-16
+
+Docs only. No wire change.
+
+### Fixed
+
+- Corrected the licensing claim (cross-repo #99): federation and multi-node are free on the bundled database; only an external or managed database requires an Enterprise license. The prior text wrongly listed federation and multi-node as gated.
+
+### Changed
+
+- Corrected the PyPI summary and positioning, and removed dead vocabulary from the README (#99).
+
 ## [1.2.1] - 2026-07-13
 
 Patch: robustness and parity follow-ups from a self-review of 1.2.0. No wire changes.
