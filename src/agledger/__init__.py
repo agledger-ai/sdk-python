@@ -74,6 +74,8 @@ from agledger.types import (
     StatusResponse,
     OrgReadsCheckpoint,
     OrgReadsInclusionProof,
+    VaultCheckpoint,
+    VaultCheckpointChain,
     SettlementSignalSummary,
     SignedStatement,
     Verdict,
@@ -171,6 +173,8 @@ __all__ = [
     "VerificationKeysResponse",
     "OrgReadsCheckpoint",
     "OrgReadsInclusionProof",
+    "VaultCheckpoint",
+    "VaultCheckpointChain",
     # Types — Bulk operations
     "BulkCreateResult",
     "BulkCreateResultItem",

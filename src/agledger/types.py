@@ -71,6 +71,11 @@ RecordTransitionAction = Literal["register", "propose", "activate", "cancel"]
 
 OperatingMode = Literal["cleartext", "encrypted"]
 GateMode = Literal["auto", "principal"]
+VaultCheckpointChain = Literal["record", "schema", "admin"] | str
+"""Which chain a vault checkpoint anchors (API v1.3.4, #995). All three are the
+same signed-checkpoint construction over a different chain; only ``record`` is
+keyed by a real record id. Typed as the open ``Literal | str`` union so a
+server-added chain kind is not a break."""
 Verdict = Literal["accept", "reject"] | str
 """The principal verdict. Known values: ``accept``, ``reject``. Typed as the
 open ``Literal | str`` union for forward compatibility — new API versions
@@ -858,7 +863,16 @@ class VaultCheckpoint(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     id: str
+    #: The uuid this checkpoint is keyed to. Read ``chain`` before treating it
+    #: as a record id: only ``chain == "record"`` rows point at a real record.
+    #: On ``"schema"`` and ``"admin"`` it is a derived key that resolves to no
+    #: record, and fetching it returns 404 by design.
     record_id: str = Field(alias="recordId")
+    #: Which chain this row anchors (API v1.3.4, #995). ``record`` is the
+    #: per-record chain, ``schema`` an org's schema-registration chain
+    #: (record-less), ``admin`` the platform-ops chain. All three are the same
+    #: signed-checkpoint construction. None on a pre-1.3.4 server.
+    chain: VaultCheckpointChain | None = None
     chain_position: int = Field(alias="chainPosition")
     payload_hash: str = Field(alias="payloadHash")
     cose_sign1: str = Field(alias="coseSign1")
@@ -1122,7 +1136,20 @@ class ComplianceExport(BaseModel):
     created_at: str | None = Field(None, alias="createdAt")
     expires_at: str | None = Field(None, alias="expiresAt")
     download_url: str | None = Field(None, alias="downloadUrl")
+    #: Rows in the export. Capped at 10000, newest first. Read ``truncated``
+    #: before treating this as the size of the match set.
     record_count: int | None = Field(None, alias="recordCount")
+    #: True when the filters matched more than the 10000-row export cap, so the
+    #: export holds only the newest 10000 rows (API v1.3.4, #968/#991). Window
+    #: with ``filters.from`` / ``filters.to`` to cover the rest. On a download
+    #: the same answer rides the ``X-AGLedger-Export-Truncated`` response
+    #: header, the only carrier for a ``csv`` download (the body is raw rows,
+    #: and a notice line would corrupt the parse). None on a pre-1.3.4 server.
+    truncated: bool | None = None
+    #: Total rows the filters matched at creation time, before the cap. Equals
+    #: ``record_count`` unless ``truncated``. Header twin on a download:
+    #: ``X-AGLedger-Export-Total-Records``.
+    total_records: int | None = Field(None, alias="totalRecords")
 
 
 class AiImpactAssessment(BaseModel):

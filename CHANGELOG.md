@@ -4,6 +4,22 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-08-01
+
+Tracks API v1.3.4. Additive; no wire or behavior change.
+
+### Added
+
+- `ComplianceExport.truncated` and `.total_records` (API #968/#991). The org-wide export is capped at 10000 rows, newest first. Before this the response carried only `record_count`, so a truncated export was indistinguishable from a complete one and a compliance packet could silently omit most of the trail. Window with `filters.from` / `filters.to` to cover the rest. On a download the same answer rides the `X-AGLedger-Export-Truncated` and `X-AGLedger-Export-Total-Records` response headers, which are the only carriers for a `csv` download, since the body is raw rows and a notice line would corrupt the parse. Both are `None` on a pre-1.3.4 server, which means unknown and is deliberately not the same as `False`.
+- `VaultCheckpoint.chain` plus the `VaultCheckpointChain` alias (`"record" | "schema" | "admin"`, API #995). Three chains are checkpointed by the same signed construction, and **only `chain == "record"` is keyed by a real record id**. On `"schema"` and `"admin"` the `record_id` is a derived key that resolves to no record, so fetching it 404s by design. `None` on a pre-1.3.4 server.
+- `VaultCheckpoint` and `VaultCheckpointChain` are now exported from the package root. `VaultCheckpoint` was reachable only as `agledger.types.VaultCheckpoint`, even though `audit.vault_checkpoints.list()` returns them and its sibling `OrgReadsCheckpoint` was already exported.
+
+### Notes
+
+- Route surface is unchanged: 193 routes, no additions, no removals, no request-field drift against the live v1.3.4 spec. Every delta above is in a response body, which is the surface neither parity snapshot pins, so `tests/test_v1_3_4_contract.py` was added to guard it.
+- The parity snapshots were stale at API 1.2.0 and are refreshed to 1.3.4. They were missing `deadline` on `ErrorResponse` and `RateLimitError`, a field the SDK's own error model has carried since 1.3.2, so the pin had drifted behind the code rather than the code behind the API.
+- Verified against a live API v1.3.4, not only mocks: the export fields were read off a real response (`truncated: false`, `total_records: 6`, all three `X-AGLedger-Export-*` headers present).
+
 ## [1.2.2] - 2026-07-16
 
 Docs only. No wire change.
