@@ -957,7 +957,8 @@ def verify_cose_sign1(
 
 def _parse_instant(value: str) -> datetime | None:
     """Parse an ISO-8601 timestamp to a comparable instant, normalising a
-    trailing ``Z`` to ``+00:00`` for Python 3.10's ``fromisoformat``. Returns
+    trailing ``Z`` to ``+00:00``. ``fromisoformat`` handles ``Z`` natively from
+    3.11 on, so the replace is now belt-and-braces rather than required. Returns
     ``None`` on any parse failure — the caller reads that as "skip" (fail-open),
     matching the TS ``Number.isNaN(Date.parse(...))`` no-op."""
     try:

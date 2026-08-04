@@ -4,6 +4,13 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Minimum Python is now 3.11** (was 3.10). Python 3.10 reaches end-of-life on 2026-10-31 and stops receiving security fixes; this drops it ahead of that date rather than on it. The SDK carried no 3.10-specific compatibility code, so nothing in the library changes behaviour.
+- **If you are on Python 3.10, note how pip handles this.** `requires-python` is enforced at resolve time and pip does not error on an older interpreter: `pip install agledger` on 3.10 will silently resolve to 1.3.0, the last release that permitted it, and stay there. You will not see a warning, you will just stop receiving updates. Upgrade to Python 3.11 or newer to continue tracking releases.
+
 ## [1.3.0] - 2026-08-01
 
 Tracks API v1.3.4. Additive; no wire or behavior change.
