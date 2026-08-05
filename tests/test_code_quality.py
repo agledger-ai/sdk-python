@@ -86,3 +86,28 @@ def test_offline_verifier_imports_no_network() -> None:
             if _NETWORK_IMPORT.match(line):
                 violations.append(f"{_rel(f)}:{i}  {line.strip()}")
     assert not violations, "Network-capable import in offline verifier:\n" + "\n".join(violations)
+
+
+# Truthiness tests on signing-key ids. None is the system-wide unsigned-mode
+# marker for these fields; a truthiness test treats a tampered "" like None and
+# skips the signature check (fail-open). The empty string must instead fall
+# through to key resolution and fail as an unknown key. Six instances of this
+# class shipped in the verifier wave before the sweep; this pins it at zero.
+# Legal spellings: ``is None`` / ``is not None``.
+_TRUTHY_SIGNING_KEY = re.compile(
+    r"if\s+(?:not\s+)?(?:[\w.]+\.)?signing_key_id\s*(?::|\)|and\b|or\b)"
+    r"|if\s+(?:not\s+)?(?:[\w.]+\.)?signingKeyId\s*(?::|\)|and\b|or\b)"
+    r"|(?:[\w.]+\.)?signing_key_id\s+(?:and|or)\s"
+)
+_NULL_OK = re.compile(r"\bis\s+(?:not\s+)?None\b")
+
+
+def test_no_truthiness_on_signing_key_ids() -> None:
+    offenders: list[str] = []
+    for path in _src_files():
+        for i, line in enumerate(path.read_text().splitlines(), 1):
+            if _NULL_OK.search(line):
+                continue
+            if _TRUTHY_SIGNING_KEY.search(line):
+                offenders.append(f"{_rel(path)}:{i}: {line.strip()}")
+    assert offenders == [], "compare signing-key ids with `is None`, not truthiness"
