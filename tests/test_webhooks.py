@@ -86,16 +86,16 @@ def _content_digest(raw: str) -> str:
     return f"sha-256=:{base64.b64encode(hashlib.sha256(raw.encode()).digest()).decode()}:"
 
 
-def _sig_params(created: int, kid: str) -> str:
+def _sig_params(created: int, kid: str, alg: str = "ed25519") -> str:
     inner = " ".join(f'"{c}"' for c in COVERED)
-    return f'({inner});created={created};keyid="{kid}";alg="ed25519"'
+    return f'({inner});created={created};keyid="{kid}";alg="{alg}"'
 
 
-def _sign(private_key, *, raw_body=RFC_BODY, idempotency_key=IDK, key_id=KEY_ID, created=None):
+def _sign(private_key, *, raw_body=RFC_BODY, idempotency_key=IDK, key_id=KEY_ID, created=None, alg="ed25519"):
     """Replicate the API's outbound RFC 9421 signer (webhooks.rfc9421-signer.ts)."""
     created = created if created is not None else int(time.time())
     cd = _content_digest(raw_body)
-    params = _sig_params(created, key_id)
+    params = _sig_params(created, key_id, alg)
     base = "\n".join(
         [f'"content-digest": {cd}', f'"{IDEMPOTENCY}": {idempotency_key}', f'"@signature-params": {params}']
     ).encode()
@@ -298,10 +298,12 @@ def test_rfc9421_es256_tampered_body(es256_keypair):
 
 
 def test_rfc9421_ed25519_alg_contradicting_ed_key(keypair):
-    # The inverse assertion: an Ed25519 key under alg="ecdsa-p256-sha256" fails.
+    # The inverse assertion: an Ed25519 key under alg="ecdsa-p256-sha256"
+    # fails. The contradiction is embedded in the signed params (not mutated
+    # after signing), so the signature itself is VALID over the base and only
+    # the alg guard can reject it: this pins the guard as load-bearing.
     priv, spki, _raw, _keys = keypair
-    headers = _sign(priv)
-    headers["signature-input"] = headers["signature-input"].replace('alg="ed25519"', 'alg="ecdsa-p256-sha256"')
+    headers = _sign(priv, alg="ecdsa-p256-sha256")
     assert verify_rfc9421(headers, RFC_BODY, spki) is False
 
 
