@@ -69,9 +69,11 @@ def _checkpoint_signature_outcome(
     ``"invalid"``. Fail-closed on every other non-ok outcome, including an
     all-zero signature on a checkpoint that CLAIMS a signing key: the engine
     never writes a signing_key_id it did not sign with, so ``unsigned`` there
-    is tampering. Shared by the vault-checkpoint and org-reads STH passes.
+    is tampering. Only None means unsigned; "" must resolve in the registry
+    and fail as a missing key rather than silently skip the signature check.
+    Shared by the vault-checkpoint and org-reads STH passes.
     """
-    if not signing_key_id:
+    if signing_key_id is None:
         return "ok"
     entry = keys.entry(str(signing_key_id))
     if entry is None:

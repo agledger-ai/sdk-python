@@ -675,7 +675,11 @@ def verify_entry(
             return oidc_failure
 
     # Signature (last, so a null-key row still ran every structural check above).
-    if not signing_key_id:
+    # Only a true None is the engine's unsigned-mode marker. Any other value,
+    # including the empty string no engine emits, must resolve in the registry
+    # and fails CHAIN_SIGNATURE_MISSING_KEY below: a truthiness shortcut here
+    # would let a tampered signingKeyId:"" row skip its signature check.
+    if signing_key_id is None:
         # Fail closed under a key policy: a high-assurance run that requires a
         # specific key (or out-of-band keys) must NOT accept an unsigned/null-key
         # entry as valid — otherwise an attacker forges an entry, nulls its

@@ -291,6 +291,19 @@ def test_signature_missing_key_when_signing_key_absent() -> None:
     assert result.broken_at.code == "CHAIN_SIGNATURE_MISSING_KEY"
 
 
+def test_empty_string_signing_key_id_is_not_the_unsigned_marker() -> None:
+    # Only None is the engine's unsigned-mode marker. A tampered row carrying
+    # signingKeyId:"" must not ride the null-key skip branch to a green chain.
+    pub, priv = _make_keypair()
+    exp = _make_export(pub, priv)
+    exp["entries"][1]["integrity"]["signingKeyId"] = ""
+    result = verify_export(exp)
+    assert result.valid is False
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_SIGNATURE_MISSING_KEY"
+    assert result.signature_coverage.skipped == 0
+
+
 def test_unsigned_entry_keeps_chain_integrity() -> None:
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
