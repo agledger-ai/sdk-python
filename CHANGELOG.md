@@ -4,6 +4,12 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-08-05
+
+### Fixed
+
+- **An empty-string signing-key id is no longer treated as the unsigned-mode marker**, in both the export walker and the dump checkpoint/signed-tree-head pass. Only a true `None` is; any other value, including the `""` no engine emits, must resolve in the key registry and fails `CHAIN_SIGNATURE_MISSING_KEY`. Previously a truthiness shortcut let a tampered `signingKeyId: ""` row or checkpoint skip its signature check.
+
 ## [1.5.0] - 2026-08-05
 
 The verifier forward-compatibility floor, mirroring `@agledger/verify-core` 1.1.0. Legitimate Ed25519 exports and dumps verify identically; what changes is fail-closed classification of tampered and non-Ed25519 inputs.
