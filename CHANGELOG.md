@@ -4,6 +4,21 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-08-05
+
+The verifier forward-compatibility floor, mirroring `@agledger/verify-core` 1.1.0. Legitimate Ed25519 exports and dumps verify identically; what changes is fail-closed classification of tampered and non-Ed25519 inputs.
+
+### Changed
+
+- **Algorithm dispatch binds to the trusted verification key, never the protected header.** The header `alg` (label 1) is asserted equal to what the key's SPKI material commits to; a missing, unassigned, or foreign value fails `CHAIN_ALG_MISMATCH` (tamper class). A key whose algorithm this build cannot compute fails closed as `CHAIN_UNSUPPORTED_ALGORITHM` (previously it surfaced as a misleading `CHAIN_SIGNATURE_MISSING_KEY`). Ed25519 accepts COSE alg `-8` and the RFC 9864 fully-specified `-19` interchangeably.
+- **Signed-kid binding (`CHAIN_SIGNING_KEY_DRIFT`).** The signature-covered kid (label 4) is cross-checked against the row's `signingKeyId` column, mirroring the engine's `signing_key_drift` check (#893).
+- **Registry algorithm cross-check.** The dump's `vault_signing_keys.algorithm` is compared against the key material itself; a registry row that lies about its own key fails `CHAIN_ALG_MISMATCH`.
+- **Untagged COSE_Sign1 is rejected** (leading byte must be `0xd2`), matching the engine's decoder.
+- **The all-zero unsigned sentinel is evaluated after algorithm resolution, at the key's expected signature length**, and an all-zero signature on an entry that claims a signing key fails `CHAIN_KEY_POLICY_VIOLATION` under `require_key_id` / `require_out_of_band_keys`.
+- **Checkpoint and signed-tree-head signature checks fail closed on every non-ok outcome**, including the previously-passing all-zero signature on a key-claiming checkpoint.
+- `FailureCode` gains `CHAIN_ALG_MISMATCH`, `CHAIN_UNSUPPORTED_ALGORITHM`, `CHAIN_SIGNING_KEY_DRIFT`; the per-entry `signature` state gains `"unsupported"`.
+- Conformance corpus refreshed from engine 1.3.4, including the new kid-drift and registry-lie vectors.
+
 ## [1.4.0] - 2026-08-03
 
 ### Changed

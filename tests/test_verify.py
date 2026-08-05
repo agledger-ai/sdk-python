@@ -31,9 +31,13 @@ def _make_keypair() -> tuple[str, Any]:
 
 
 def _build_protected_header(position: int, previous_hash: str | None) -> bytes:
-    """CBOR-encode a minimal protected header carrying the chain claim."""
+    """CBOR-encode a minimal protected header: the alg (label 1, EdDSA) plus
+    the chain claim. The alg is load-bearing since the verifier floor: the
+    engine always writes it, and a missing or foreign alg is a tamper-class
+    failure (dispatch binds to the trusted key; the header is asserted equal).
+    """
     chain_map: dict[int, Any] = {1: position, 2: None if previous_hash is None else bytes.fromhex(previous_hash)}
-    header: dict[int, Any] = {-65537: chain_map}
+    header: dict[int, Any] = {1: -8, -65537: chain_map}
     return cbor2.dumps(header, canonical=True)
 
 
