@@ -64,28 +64,38 @@ def _checkpoint_signature_outcome(
     """Resolve a checkpoint/STH signing key and verify its COSE_Sign1 signature.
 
     Returns ``"ok"`` (nothing to verify, or verified), ``"missing-key"`` (the
-    signing_key_id is not in the dumped registry), or ``"invalid"``. The caller
-    maps these onto the scope-appropriate failure code/fields. An ``unsigned``
-    (all-zero) signature is treated as ``"ok"`` — checkpoints are not required to
-    be signed. Shared by the vault-checkpoint and org-reads STH passes.
+    signing_key_id is not in the dumped registry), ``"unsupported"`` (the key's
+    algorithm is beyond this build; an upgrade signal, never a pass), or
+    ``"invalid"``. Fail-closed on every other non-ok outcome, including an
+    all-zero signature on a checkpoint that CLAIMS a signing key: the engine
+    never writes a signing_key_id it did not sign with, so ``unsigned`` there
+    is tampering. Shared by the vault-checkpoint and org-reads STH passes.
     """
     if not signing_key_id:
         return "ok"
-    public_key = keys.get(str(signing_key_id))
-    if public_key is None:
+    entry = keys.entry(str(signing_key_id))
+    if entry is None:
         return "missing-key"
-    outcome = verify_cose_sign1(base64.b64decode(str(cose_sign1_b64)), public_key)
-    return "invalid" if outcome in ("invalid", "decode-fail") else "ok"
+    outcome = verify_cose_sign1(base64.b64decode(str(cose_sign1_b64)), entry)
+    if outcome == "ok":
+        return "ok"
+    if outcome == "unsupported-key-algorithm":
+        return "unsupported"
+    return "invalid"
 
 
 def _build_vault_key_registry(signing_keys: list[DumpRow]) -> KeyCache:
     registry: dict[str, RegisteredKey] = {}
     for k in signing_keys:
+        algorithm = k.get("algorithm")
         registry[str(k.get("key_id"))] = RegisteredKey(
             spki_base64=str(k.get("public_key")),
             source="embedded",
             activated_at=k.get("activated_at"),
             retired_at=k.get("retired_at"),
+            # The registry row's DECLARED algorithm; verify_entry cross-checks
+            # it against the key material (CHAIN_ALG_MISMATCH on a lie).
+            algorithm=str(algorithm) if isinstance(algorithm, str) else None,
         )
     return KeyCache(registry)
 
@@ -212,6 +222,19 @@ def _verify_vault_checkpoints(
                     message=(
                         f"RecordRow {record_id} pos {position}: checkpoint signing_key_id "
                         f'"{signing_key_id}" not in dumped key registry'
+                    ),
+                    scope_id=_as_str(record_id),
+                    position=_as_int(position),
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "unsupported":
+            failures.append(
+                Failure(
+                    code="CHAIN_UNSUPPORTED_ALGORITHM",
+                    message=(
+                        f"RecordRow {record_id} pos {position}: checkpoint signing key "
+                        f"commits to an algorithm this verifier build cannot compute"
                     ),
                     scope_id=_as_str(record_id),
                     position=_as_int(position),
@@ -404,6 +427,19 @@ def _verify_one_org_admin_reads_log(
                     message=(
                         f"Org {org_id}: checkpoint {cp.get('id')} signing_key_id "
                         f'"{signing_key_id}" not in dumped key registry'
+                    ),
+                    scope_id=org_id,
+                    tree_size=tree_size,
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "unsupported":
+            failures.append(
+                Failure(
+                    code="CHAIN_UNSUPPORTED_ALGORITHM",
+                    message=(
+                        f"Org {org_id}: checkpoint {cp.get('id')} signing key commits "
+                        f"to an algorithm this verifier build cannot compute"
                     ),
                     scope_id=org_id,
                     tree_size=tree_size,

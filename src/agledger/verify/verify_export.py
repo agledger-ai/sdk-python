@@ -51,6 +51,9 @@ except ImportError as _err:  # pragma: no cover
 
 try:
     from cryptography.exceptions import InvalidSignature as _InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ec import (
+        EllipticCurvePublicKey as _EllipticCurvePublicKey,
+    )
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PublicKey as _Ed25519PublicKey,
     )
@@ -77,8 +80,10 @@ except ImportError as _err:  # pragma: no cover
 #   unsigned                    — no signature by design
 #   skipped                     — chain intact, entry has no signing key (engine booted keyless)
 #   not-checked                 — a structural check failed first, so the signature was never reached
+# unsupported: the trusted key commits to an algorithm this build cannot
+# compute (CHAIN_UNSUPPORTED_ALGORITHM); a failure state, never a benign skip.
 SignatureOutcome = Literal[
-    "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail"
+    "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail", "unsupported"
 ]
 
 #: Provenance of a verification key — ``out-of-band`` (caller-supplied from a
@@ -89,7 +94,11 @@ KeySource = Literal["out-of-band", "embedded"]
 _SUPPORTED_FORMAT_VERSION = "2.0"
 _SUPPORTED_CANONICALIZATION = "RFC8949-CDE"
 _COSE_SIGN1_TAG = 18
+# CBOR major type 6 (tag), value 18, short form: the required leading byte.
+_COSE_SIGN1_TAG_PREFIX = 0xD2
 _SIG_STRUCTURE_CONTEXT = "Signature1"
+_COSE_HEADER_ALG = 1
+_COSE_HEADER_KID = 4
 _AGLEDGER_LABEL_CHAIN = -65537
 _CHAIN_SUBLABEL_POSITION = 1
 _CHAIN_SUBLABEL_PREVIOUS_HASH = 2
@@ -310,6 +319,74 @@ class RegisteredKey:
     #: where the wire carries no key windows — the temporal check then no-ops.
     activated_at: str | None = None
     retired_at: str | None = None
+    #: Algorithm the key registry DECLARES for this key (the engine's
+    #: ``vault_signing_keys.algorithm`` column), when the input carries it.
+    #: Cross-checked against the algorithm the SPKI key material actually
+    #: commits to; a divergence fails CHAIN_ALG_MISMATCH. The declared string
+    #: never selects the verification code path.
+    algorithm: str | None = None
+
+
+@dataclass(frozen=True)
+class KeyAlgorithm:
+    """What a verification key's SPKI AlgorithmIdentifier says about how its
+    signatures must be checked. Derived from the TRUSTED key material, never
+    from the protected header (attacker-controlled at dispatch time): the
+    header's alg is asserted EQUAL to the key's expectation, it never selects
+    the code path. The table is restricted to asymmetric signature algorithms
+    by construction, so a COSE MAC label can never bind the public key as a
+    MAC key. Mirrors verify-core primitives.ts KEY_ALGORITHMS."""
+
+    name: str
+    cose_algs: tuple[int, ...]
+    signature_length: int
+    verifiable: bool
+
+
+# COSE alg code points per key type. Both the original and the RFC 9864
+# fully-specified registrations are accepted where assigned, so a producer
+# moving from -8 (EdDSA) to -19 (Ed25519) does not read as tampering.
+_ED25519_ALG = KeyAlgorithm("Ed25519", (-8, -19), 64, True)
+_EC_KEY_ALGORITHMS: dict[str, KeyAlgorithm] = {
+    "secp256r1": KeyAlgorithm("ES256", (-7, -9), 64, False),
+    "secp384r1": KeyAlgorithm("ES384", (-35,), 96, False),
+    "secp521r1": KeyAlgorithm("ES512", (-36,), 132, False),
+    "secp256k1": KeyAlgorithm("ES256K", (-47,), 64, False),
+}
+
+_KEY_ALG_CACHE: dict[str, KeyAlgorithm | Literal["unparseable", "unrecognized"]] = {}
+_KEY_ALG_CACHE_MAX = 256
+
+
+def _resolve_key_algorithm(
+    spki_base64: str,
+) -> KeyAlgorithm | Literal["unparseable", "unrecognized"]:
+    """Resolve the algorithm a base64 SPKI DER public key commits to.
+
+    ``"unrecognized"`` is a well-formed key of a type outside the table (RSA,
+    X25519, an unregistered curve): surfaces as CHAIN_UNSUPPORTED_ALGORITHM,
+    never as a forgery. ``"unparseable"`` means the bytes are not a public key.
+    """
+    cached = _KEY_ALG_CACHE.get(spki_base64)
+    if cached is not None:
+        return cached
+    resolved: KeyAlgorithm | Literal["unparseable", "unrecognized"]
+    try:
+        loaded = _load_der_public_key(base64.b64decode(spki_base64))
+    except Exception:
+        loaded = None
+    if loaded is None:
+        resolved = "unparseable"
+    elif isinstance(loaded, _Ed25519PublicKey):
+        resolved = _ED25519_ALG
+    elif isinstance(loaded, _EllipticCurvePublicKey):
+        resolved = _EC_KEY_ALGORITHMS.get(loaded.curve.name, "unrecognized")
+    else:
+        resolved = "unrecognized"
+    if len(_KEY_ALG_CACHE) >= _KEY_ALG_CACHE_MAX:
+        _KEY_ALG_CACHE.clear()
+    _KEY_ALG_CACHE[spki_base64] = resolved
+    return resolved
 
 
 def _normalize_oob_keys(
@@ -417,7 +494,7 @@ def _build_key_registry(
 
 
 class KeyCache:
-    """Lazily decodes SPKI DER base64 Ed25519 keys; caches the resolved object.
+    """Registry of verification keys, with a lazy Ed25519 key-object cache.
 
     Large exports (10k+ entries) would otherwise re-decode the same key on
     every signature check. Carries each key's provenance (embedded vs
@@ -427,6 +504,11 @@ class KeyCache:
     def __init__(self, registry: Mapping[str, RegisteredKey]) -> None:
         self._registry = dict(registry)
         self._cache: dict[str, _Ed25519PublicKey] = {}
+
+    def entry(self, key_id: str) -> RegisteredKey | None:
+        """Registry membership: the raw registered key, or ``None`` if absent
+        (CHAIN_SIGNATURE_MISSING_KEY at the call sites)."""
+        return self._registry.get(key_id)
 
     def source(self, key_id: str) -> KeySource | None:
         entry = self._registry.get(key_id)
@@ -440,13 +522,20 @@ class KeyCache:
             return (None, None)
         return (entry.activated_at, entry.retired_at)
 
-    def get(self, key_id: str) -> _Ed25519PublicKey | None:
+    def ed25519(self, key_id: str) -> _Ed25519PublicKey | None:
+        """The loaded Ed25519 key object, or ``None`` when the registered key
+        is absent, unparseable, or not Ed25519. Callers must have classified
+        the key via :func:`_resolve_key_algorithm` first; this is only the
+        loader/cache for the verifiable case."""
         if key_id in self._cache:
             return self._cache[key_id]
         entry = self._registry.get(key_id)
         if entry is None:
             return None
-        loaded = _load_der_public_key(base64.b64decode(entry.spki_base64))
+        try:
+            loaded = _load_der_public_key(base64.b64decode(entry.spki_base64))
+        except Exception:
+            return None
         if not isinstance(loaded, _Ed25519PublicKey):
             return None
         self._cache[key_id] = loaded
@@ -614,8 +703,8 @@ def verify_entry(
             ),
         )
 
-    public_key = keys.get(signing_key_id)
-    if public_key is None:
+    registered = keys.entry(signing_key_id)
+    if registered is None:
         return EntryVerificationResult(
             position=position,
             valid=False,
@@ -623,7 +712,7 @@ def verify_entry(
             detail=f"No public key available for signingKeyId={signing_key_id}.",
         )
 
-    key_source = keys.source(signing_key_id)
+    key_source = registered.source
     if require_out_of_band_keys and key_source != "out-of-band":
         return EntryVerificationResult(
             position=position,
@@ -632,6 +721,43 @@ def verify_entry(
             detail=(
                 f"Key {signing_key_id} is embedded in the artifact; this run "
                 f"requires out-of-band keys."
+            ),
+        )
+
+    # Registry self-consistency: when the input declares an algorithm for this
+    # key (vault_signing_keys.algorithm), it must agree with what the SPKI key
+    # material commits to. A registry row that lies about its own key is the
+    # signature of a mis-registered key or a rewritten registry.
+    if registered.algorithm is not None:
+        key_alg = _resolve_key_algorithm(registered.spki_base64)
+        if (
+            isinstance(key_alg, KeyAlgorithm)
+            and key_alg.name.lower() != registered.algorithm.lower()
+        ):
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_ALG_MISMATCH",
+                detail=(
+                    f"Key registry declares algorithm={registered.algorithm} for key "
+                    f"{signing_key_id}, but the key material is {key_alg.name}."
+                ),
+            )
+
+    # Signed-kid binding (engine mirror: signing_key_drift, #893). The row's
+    # signingKeyId column selected the key above, but the column is a
+    # denormalized convenience; the kid at protected-header label 4 is
+    # signature-covered. A divergence means the column was rewritten after
+    # signing.
+    signed_kid = _extract_kid(parts[0])
+    if signed_kid is not None and signed_kid != signing_key_id:
+        return EntryVerificationResult(
+            position=position,
+            valid=False,
+            code="CHAIN_SIGNING_KEY_DRIFT",
+            detail=(
+                f"Row signingKeyId={signing_key_id} does not match the "
+                f"signature-covered kid {signed_kid} in the protected header."
             ),
         )
 
@@ -655,12 +781,49 @@ def verify_entry(
                 detail=expired_detail,
             )
 
-    outcome = _verify_cose_signature(parts, public_key)
+    outcome = _verify_cose_signature(parts, registered, keys, signing_key_id)
     if outcome == "unsigned":
+        # An all-zero signature slot on an entry that CLAIMS a signing key.
+        # Under a key policy this must fail: an auditor who demanded signed
+        # entries must never count a zeroed signature as green.
+        if require_key_id or require_out_of_band_keys:
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_KEY_POLICY_VIOLATION",
+                detail=(
+                    f"Entry claims signingKeyId={signing_key_id} but carries an "
+                    f"all-zero signature; this run requires signed entries "
+                    f"(require_key_id / require_out_of_band_keys)."
+                ),
+            )
         return EntryVerificationResult(position=position, valid=True, signature="unsigned")
     if outcome == "ok":
         return EntryVerificationResult(
             position=position, valid=True, signature="ok", key_source=key_source
+        )
+    if outcome == "alg-mismatch":
+        return EntryVerificationResult(
+            position=position,
+            valid=False,
+            code="CHAIN_ALG_MISMATCH",
+            detail=(
+                f"Protected-header alg (label 1) is absent or is not an algorithm "
+                f"key {signing_key_id} can produce. Tamper class: a rewritten alg "
+                f"must read as forgery, never as an upgrade notice."
+            ),
+            signature="invalid",
+        )
+    if outcome == "unsupported-key-algorithm":
+        return EntryVerificationResult(
+            position=position,
+            valid=False,
+            code="CHAIN_UNSUPPORTED_ALGORITHM",
+            detail=(
+                f"Key {signing_key_id} commits to an algorithm this verifier build "
+                f"cannot compute. The chain is NOT verified; upgrade the verifier."
+            ),
+            signature="unsupported",
         )
     return EntryVerificationResult(
         position=position,
@@ -856,7 +1019,13 @@ def _decode_cose_sign1(envelope: bytes) -> tuple[bytes, bytes, bytes] | None:
     """Decode a tagged COSE_Sign1 envelope into (protected_bstr, payload_bstr, signature).
 
     Returns ``None`` on any structural failure.
+
+    Tag 18 is required (short-form ``0xd2``, matching the engine's encoder).
+    The engine rejects untagged envelopes: producer and offline verifier must
+    agree on what a COSE_Sign1 is, so gate on the leading byte the same way.
     """
+    if len(envelope) == 0 or envelope[0] != _COSE_SIGN1_TAG_PREFIX:
+        return None
     try:
         decoded = _cbor2.loads(envelope)
     except Exception:
@@ -910,19 +1079,91 @@ def _extract_chain_claim(protected_bstr: bytes) -> tuple[int, str | None] | None
     return position, bytes(prev).hex()
 
 
+def _extract_header_alg(protected_bstr: bytes) -> int | None:
+    """Decode the protected header's ``alg`` (label 1); ``None`` when absent
+    or not an integer. A bool is rejected (it is an int subclass in Python)."""
+    try:
+        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+    except Exception:
+        return None
+    if not isinstance(header_obj, dict):
+        return None
+    alg = cast("Mapping[Any, Any]", header_obj).get(_COSE_HEADER_ALG)
+    if isinstance(alg, bool) or not isinstance(alg, int):
+        return None
+    return alg
+
+
+def _extract_kid(protected_bstr: bytes) -> str | None:
+    """Extract the signature-covered ``kid`` (protected header label 4) as
+    lowercase hex, matching the engine's ``vault_signing_keys.key_id`` shape.
+    ``None`` when absent or malformed. The caller cross-checks it against the
+    row's ``signingKeyId`` column: the column is a denormalized convenience,
+    the kid is signed (engine mirror: signing_key_drift, #893)."""
+    try:
+        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+    except Exception:
+        return None
+    if not isinstance(header_obj, dict):
+        return None
+    kid = cast("Mapping[Any, Any]", header_obj).get(_COSE_HEADER_KID)
+    if not isinstance(kid, (bytes, bytearray)):
+        return None
+    return bytes(kid).hex()
+
+
+CoseVerifyOutcome = Literal[
+    "ok", "invalid", "unsigned", "decode-fail", "alg-mismatch", "unsupported-key-algorithm"
+]
+
+
 def _verify_cose_signature(
     parts: tuple[bytes, bytes, bytes],
-    public_key: _Ed25519PublicKey,
-) -> Literal["ok", "invalid", "unsigned"]:
-    """Verify the COSE_Sign1 signature over Sig_structure.
+    key: RegisteredKey,
+    loader: KeyCache | None = None,
+    key_id: str | None = None,
+) -> Literal["ok", "invalid", "unsigned", "alg-mismatch", "unsupported-key-algorithm"]:
+    """Verify the COSE_Sign1 signature over Sig_structure, with dispatch bound
+    to the TRUSTED key (mirrors verify-core ``verifyCoseSign1``).
 
-    ``Sig_structure = ["Signature1", protected_bstr, h'' (empty external_aad),
-    payload_bstr]`` per RFC 9052 §4.4, deterministically CBOR-encoded per
-    RFC 8949 §4.2.1.
+    At this point the signature has not been checked, so the header ``alg`` is
+    attacker-controlled input: it is asserted equal to what the key material
+    commits to and never selects the code path. The all-zero unsigned sentinel
+    is checked only AFTER algorithm resolution, at the key's expected signature
+    length. ``Sig_structure = ["Signature1", protected_bstr, h'' (empty
+    external_aad), payload_bstr]`` per RFC 9052 §4.4, deterministically
+    CBOR-encoded per RFC 8949 §4.2.1.
     """
     protected_bstr, payload_bstr, signature = parts
-    if len(signature) == 64 and all(b == 0 for b in signature):
+
+    key_alg = _resolve_key_algorithm(key.spki_base64)
+    # A key that does not parse can verify nothing; report 'invalid' rather
+    # than misreporting garbage bytes as an algorithm gap.
+    if key_alg == "unparseable":
+        return "invalid"
+    if key_alg == "unrecognized":
+        return "unsupported-key-algorithm"
+
+    header_alg = _extract_header_alg(protected_bstr)
+    if header_alg is None or header_alg not in key_alg.cose_algs:
+        return "alg-mismatch"
+    if not key_alg.verifiable:
+        return "unsupported-key-algorithm"
+
+    if len(signature) == key_alg.signature_length and all(b == 0 for b in signature):
         return "unsigned"
+
+    if loader is not None and key_id is not None:
+        public_key = loader.ed25519(key_id)
+    else:
+        try:
+            loaded = _load_der_public_key(base64.b64decode(key.spki_base64))
+        except Exception:
+            loaded = None
+        public_key = loaded if isinstance(loaded, _Ed25519PublicKey) else None
+    if public_key is None:
+        return "invalid"
+
     sig_structure: list[Any] = [
         _SIG_STRUCTURE_CONTEXT,
         protected_bstr,
@@ -937,19 +1178,15 @@ def _verify_cose_signature(
         return "invalid"
 
 
-def verify_cose_sign1(
-    envelope: bytes,
-    public_key: _Ed25519PublicKey,
-) -> Literal["ok", "invalid", "unsigned", "decode-fail"]:
-    """Decode a tagged COSE_Sign1 envelope and verify its Ed25519 signature in
-    one call. Mirrors verify-core ``verifyCoseSign1``: ``decode-fail`` if the
-    envelope is structurally bad, otherwise ``ok`` / ``invalid`` / ``unsigned``.
-    Used by the dump verifier for checkpoint + STH signatures.
-    """
+def verify_cose_sign1(envelope: bytes, key: RegisteredKey) -> CoseVerifyOutcome:
+    """Decode a tagged COSE_Sign1 envelope and verify its signature in one
+    call, dispatch bound to the trusted ``key``. Mirrors verify-core
+    ``verifyCoseSign1``. Used by the dump verifier for checkpoint + STH
+    signatures."""
     parts = _decode_cose_sign1(envelope)
     if parts is None:
         return "decode-fail"
-    return _verify_cose_signature(parts, public_key)
+    return _verify_cose_signature(parts, key)
 
 
 # --- temporal key-validity (mirror verify-core chain.ts temporalKeyFailure) ---
