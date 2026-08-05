@@ -52,11 +52,17 @@ except ImportError as _err:  # pragma: no cover
 try:
     from cryptography.exceptions import InvalidSignature as _InvalidSignature
     from cryptography.hazmat.primitives.asymmetric.ec import (
+        ECDSA as _ECDSA,
+        SECP256R1 as _SECP256R1,
         EllipticCurvePublicKey as _EllipticCurvePublicKey,
     )
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
         Ed25519PublicKey as _Ed25519PublicKey,
     )
+    from cryptography.hazmat.primitives.asymmetric.utils import (
+        encode_dss_signature as _encode_dss_signature,
+    )
+    from cryptography.hazmat.primitives.hashes import SHA256 as _SHA256
     from cryptography.hazmat.primitives.serialization import (
         load_der_public_key as _load_der_public_key,
     )
@@ -348,7 +354,7 @@ class KeyAlgorithm:
 # moving from -8 (EdDSA) to -19 (Ed25519) does not read as tampering.
 _ED25519_ALG = KeyAlgorithm("Ed25519", (-8, -19), 64, True)
 _EC_KEY_ALGORITHMS: dict[str, KeyAlgorithm] = {
-    "secp256r1": KeyAlgorithm("ES256", (-7, -9), 64, False),
+    "secp256r1": KeyAlgorithm("ES256", (-7, -9), 64, True),
     "secp384r1": KeyAlgorithm("ES384", (-35,), 96, False),
     "secp521r1": KeyAlgorithm("ES512", (-36,), 132, False),
     "secp256k1": KeyAlgorithm("ES256K", (-47,), 64, False),
@@ -494,7 +500,7 @@ def _build_key_registry(
 
 
 class KeyCache:
-    """Registry of verification keys, with a lazy Ed25519 key-object cache.
+    """Registry of verification keys, with a lazy key-object cache.
 
     Large exports (10k+ entries) would otherwise re-decode the same key on
     every signature check. Carries each key's provenance (embedded vs
@@ -503,7 +509,7 @@ class KeyCache:
 
     def __init__(self, registry: Mapping[str, RegisteredKey]) -> None:
         self._registry = dict(registry)
-        self._cache: dict[str, _Ed25519PublicKey] = {}
+        self._cache: dict[str, _Ed25519PublicKey | _EllipticCurvePublicKey] = {}
 
     def entry(self, key_id: str) -> RegisteredKey | None:
         """Registry membership: the raw registered key, or ``None`` if absent
@@ -522,11 +528,11 @@ class KeyCache:
             return (None, None)
         return (entry.activated_at, entry.retired_at)
 
-    def ed25519(self, key_id: str) -> _Ed25519PublicKey | None:
-        """The loaded Ed25519 key object, or ``None`` when the registered key
-        is absent, unparseable, or not Ed25519. Callers must have classified
-        the key via :func:`_resolve_key_algorithm` first; this is only the
-        loader/cache for the verifiable case."""
+    def public_key(self, key_id: str) -> _Ed25519PublicKey | _EllipticCurvePublicKey | None:
+        """The loaded key object (Ed25519 or EC), or ``None`` when the
+        registered key is absent, unparseable, or of another type. Callers
+        must have classified the key via :func:`_resolve_key_algorithm` first;
+        this is only the loader/cache for the verifiable case."""
         if key_id in self._cache:
             return self._cache[key_id]
         entry = self._registry.get(key_id)
@@ -536,7 +542,7 @@ class KeyCache:
             loaded = _load_der_public_key(base64.b64decode(entry.spki_base64))
         except Exception:
             return None
-        if not isinstance(loaded, _Ed25519PublicKey):
+        if not isinstance(loaded, (_Ed25519PublicKey, _EllipticCurvePublicKey)):
             return None
         self._cache[key_id] = loaded
         return loaded
@@ -1158,13 +1164,17 @@ def _verify_cose_signature(
         return "unsigned"
 
     if loader is not None and key_id is not None:
-        public_key = loader.ed25519(key_id)
+        public_key = loader.public_key(key_id)
     else:
         try:
             loaded = _load_der_public_key(base64.b64decode(key.spki_base64))
         except Exception:
             loaded = None
-        public_key = loaded if isinstance(loaded, _Ed25519PublicKey) else None
+        public_key = (
+            loaded
+            if isinstance(loaded, (_Ed25519PublicKey, _EllipticCurvePublicKey))
+            else None
+        )
     if public_key is None:
         return "invalid"
 
@@ -1175,10 +1185,48 @@ def _verify_cose_signature(
         payload_bstr,
     ]
     to_be_signed = _cbor2.dumps(sig_structure, canonical=True)
+    return _verify_signature_bytes(public_key, key_alg, to_be_signed, signature)
+
+
+def _verify_signature_bytes(
+    public_key: _Ed25519PublicKey | _EllipticCurvePublicKey,
+    key_alg: KeyAlgorithm,
+    to_be_signed: bytes,
+    signature: bytes,
+) -> Literal["ok", "invalid"]:
+    """Verify raw signature bytes under the algorithm the key commits to.
+
+    ES256 mirrors the engine's ``verifyWithAlgorithm``: the wire carries raw
+    ``r||s`` (COSE / ieee-p1363, 64 bytes), which ``cryptography`` expects
+    DER-encoded, so the two 32-byte halves are re-encoded via
+    ``encode_dss_signature``. The engine emits low-S but, like the engine's
+    verifier, high-S is accepted: ECDSA malleability changes the envelope
+    bytes, which the hash-link layer already pins. Any key/algorithm pairing
+    outside the table reads ``invalid`` (the callers gate ``verifiable``
+    upstream, so this is unreachable except through a refactor bug, and it
+    must fail closed).
+    """
     try:
-        public_key.verify(signature, to_be_signed)
-        return "ok"
+        if isinstance(public_key, _Ed25519PublicKey) and key_alg.name == "Ed25519":
+            public_key.verify(signature, to_be_signed)
+            return "ok"
+        if (
+            isinstance(public_key, _EllipticCurvePublicKey)
+            and key_alg.name == "ES256"
+            and isinstance(public_key.curve, _SECP256R1)
+        ):
+            if len(signature) != 64:
+                return "invalid"
+            r = int.from_bytes(signature[:32], "big")
+            s = int.from_bytes(signature[32:], "big")
+            public_key.verify(
+                _encode_dss_signature(r, s), to_be_signed, _ECDSA(_SHA256())
+            )
+            return "ok"
+        return "invalid"
     except _InvalidSignature:
+        return "invalid"
+    except Exception:
         return "invalid"
 
 

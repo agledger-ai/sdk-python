@@ -4,6 +4,19 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-08-05
+
+Signing-agility wave 2: ES256 verification across the offline and webhook surfaces. Ed25519 paths behave identically to 1.5.1.
+
+### Added
+
+- **`agledger.verify` verifies ES256 chains** (export and dump paths). A verification key whose SPKI commits to P-256 dispatches to ECDSA/SHA-256 over the COSE raw `r||s` signature encoding; both the `-7` (ES256) and RFC 9864 `-9` (ESP256) header code points are accepted. Dispatch still binds to the trusted key material, never the header, and ES384/ES512/ES256K still fail closed as `CHAIN_UNSUPPORTED_ALGORITHM`.
+- **`verify_rfc9421` / `construct_event_rfc9421` accept `ecdsa-p256-sha256` deliveries** (raw `r||s` per RFC 9421), emitted by Servers signing with a P-256 vault key. The declared `alg` parameter is asserted against the resolved key's type, never trusted for dispatch; unsupported key types fail closed.
+
+### Changed
+
+- **Conformance corpus regenerated from engine 1.3.4 @ `ed3369ab`** (full corpus, including the ES256 wave: `valid-es256` export + dump, `es256-signature-invalid`, `es256-header-alg-mismatch`).
+
 ## [1.5.1] - 2026-08-05
 
 ### Fixed

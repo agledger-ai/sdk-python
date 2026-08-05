@@ -16,11 +16,12 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence, Union, cast
 from agledger._errors import SignatureVerificationError
 
 if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 MAX_TOLERANCE_SECONDS = 300
 
-#: Covered components an ed25519 delivery signs, lowercased per RFC 9421.
+#: Covered components a signed delivery signs, lowercased per RFC 9421.
 RFC9421_COVERED_COMPONENTS = ("content-digest", "x-agledger-idempotency-key")
 
 
@@ -113,20 +114,25 @@ def _parse_webhook_event(raw_body: str) -> dict[str, Any]:
     }
 
 
-# RFC 9421 (ed25519) webhook verification.
+# RFC 9421 webhook verification (ed25519 / ecdsa-p256-sha256).
 #
-# The asymmetric, opt-in signing tier (``signing_alg = 'ed25519'``). Deliveries
-# are signed with the Server vault key as RFC 9421 HTTP Message Signatures; the
-# receiver verifies against the published public key at GET /v1/verification-keys
-# (matched by ``keyid``) and holds no secret — non-repudiation for the Settlement
-# Signal hop. Covered components are exactly ``content-digest`` (RFC 9530 body
-# integrity) and ``x-agledger-idempotency-key``; derived components are excluded
-# because proxies rewrite them. Requires the optional ``cryptography`` dependency
-# (``pip install 'agledger[verify]'``).
+# The asymmetric, opt-in signing tier (``signing_alg = 'ed25519'`` or
+# ``'ecdsa-p256-sha256'``; the wire ``alg`` parameter reflects the Server's
+# ACTIVE vault key). Deliveries are signed with the Server vault key as RFC
+# 9421 HTTP Message Signatures; the receiver verifies against the published
+# public key at GET /v1/verification-keys (matched by ``keyid``) and holds no
+# secret: non-repudiation for the Settlement Signal hop. The verification
+# algorithm is dispatched from the resolved key's type, never from the
+# attacker-writable ``alg`` parameter; when ``alg`` is present it is asserted
+# against the key. Covered components are exactly ``content-digest`` (RFC 9530
+# body integrity) and ``x-agledger-idempotency-key``; derived components are
+# excluded because proxies rewrite them. Requires the optional ``cryptography``
+# dependency (``pip install 'agledger[verify]'``).
 
 _SIG_INPUT_RE = re.compile(r"^([^=]+)=(\(.*\);.*)$", re.DOTALL)
 _CREATED_RE = re.compile(r";created=(\d+)(?:;|$)")
 _KEYID_RE = re.compile(r';keyid="([^"]*)"')
+_ALG_RE = re.compile(r';alg="([^"]*)"')
 
 
 def _normalize_headers(headers: Mapping[str, Any]) -> dict[str, str]:
@@ -147,9 +153,12 @@ def _content_digest(raw_body: str) -> str:
     return f"sha-256=:{digest}:"
 
 
-def _load_ed25519_public_key(base64_key: str) -> "Ed25519PublicKey":
-    """Build an Ed25519PublicKey from base64 (raw 32-byte or SPKI DER)."""
+def _load_public_key(base64_key: str) -> "Ed25519PublicKey | EllipticCurvePublicKey":
+    """Build a public key object from base64 (raw 32-byte Ed25519 or SPKI DER,
+    which also carries P-256). Raises ``ValueError`` for any other key type so
+    verification fails closed."""
     try:
+        from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from cryptography.hazmat.primitives.serialization import load_der_public_key
     except ImportError as err:  # pragma: no cover
@@ -161,8 +170,8 @@ def _load_ed25519_public_key(base64_key: str) -> "Ed25519PublicKey":
     if len(raw) == 32:
         return Ed25519PublicKey.from_public_bytes(raw)
     loaded = load_der_public_key(raw)
-    if not isinstance(loaded, Ed25519PublicKey):
-        raise ValueError("public key is not Ed25519")
+    if not isinstance(loaded, (Ed25519PublicKey, EllipticCurvePublicKey)):
+        raise ValueError("public key is not Ed25519 or EC")
     return loaded
 
 
@@ -181,15 +190,17 @@ def _extract_key_fields(item: object) -> tuple[str | None, str | None]:
     )
 
 
-def _resolve_public_key(key: Union[str, Sequence[object]], keyid: str | None) -> "Ed25519PublicKey | None":
+def _resolve_public_key(
+    key: Union[str, Sequence[object]], keyid: str | None
+) -> "Ed25519PublicKey | EllipticCurvePublicKey | None":
     """Resolve a base64 public key from a single string or a verification-keys list."""
     if isinstance(key, str):
-        return _load_ed25519_public_key(key)
+        return _load_public_key(key)
     for item in key:
         item_keyid, material = _extract_key_fields(item)
         if item_keyid != keyid or material is None:
             continue
-        return _load_ed25519_public_key(material)
+        return _load_public_key(material)
     return None
 
 
@@ -199,11 +210,13 @@ def verify_rfc9421(
     key: Union[str, Sequence[Any]],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> bool:
-    """Verify an RFC 9421 (ed25519) webhook delivery — the non-repudiable tier.
+    """Verify an RFC 9421 webhook delivery (ed25519 or ecdsa-p256-sha256), the
+    non-repudiable tier.
 
     Recomputes the Content-Digest over ``raw_body``, reconstructs the RFC 9421
-    signature base, resolves the public key by ``keyid``, verifies the Ed25519
-    signature, and enforces the ``created`` replay window.
+    signature base, resolves the public key by ``keyid``, verifies the
+    signature under the algorithm that key commits to, and enforces the
+    ``created`` replay window.
 
     :param headers: Delivery HTTP headers — must include ``content-digest``,
         ``signature-input``, ``signature``, and ``x-agledger-idempotency-key``.
@@ -271,7 +284,10 @@ def verify_rfc9421(
     keyid_m = _KEYID_RE.search(params)
     keyid = keyid_m.group(1) if keyid_m else None
 
-    public_key = _resolve_public_key(key, keyid)
+    try:
+        public_key = _resolve_public_key(key, keyid)
+    except Exception:
+        return False
     if public_key is None:
         return False
 
@@ -280,10 +296,49 @@ def verify_rfc9421(
     lines.append(f'"@signature-params": {params}')
     base = "\n".join(lines).encode("utf-8")
 
+    alg_m = _ALG_RE.search(params)
+    declared_alg = alg_m.group(1) if alg_m else None
+
+    return _verify_rfc9421_signature(public_key, signature, base, declared_alg, InvalidSignature)
+
+
+def _verify_rfc9421_signature(
+    public_key: "Ed25519PublicKey | EllipticCurvePublicKey",
+    signature: bytes,
+    base: bytes,
+    declared_alg: str | None,
+    invalid_signature: type[Exception],
+) -> bool:
+    """Dispatch RFC 9421 signature verification from the resolved key's type.
+
+    The declared ``alg`` parameter (when present) is asserted against the
+    key's algorithm, mirroring the TS SDK's ``algs`` allowlist: a P-256 key
+    under ``alg="ed25519"`` must fail, never fall into a different code path.
+    ES256 signatures are raw ``r||s`` (64 bytes) per RFC 9421; ``cryptography``
+    expects DER, so the halves are re-encoded. Any other key type fails closed.
+    """
+    from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, SECP256R1
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+    from cryptography.hazmat.primitives.hashes import SHA256
+
     try:
-        public_key.verify(signature, base)
-        return True
-    except InvalidSignature:
+        if isinstance(public_key, Ed25519PublicKey):
+            if declared_alg is not None and declared_alg != "ed25519":
+                return False
+            public_key.verify(signature, base)
+            return True
+        if isinstance(public_key.curve, SECP256R1):
+            if declared_alg is not None and declared_alg != "ecdsa-p256-sha256":
+                return False
+            if len(signature) != 64:
+                return False
+            r = int.from_bytes(signature[:32], "big")
+            s = int.from_bytes(signature[32:], "big")
+            public_key.verify(encode_dss_signature(r, s), base, ECDSA(SHA256()))
+            return True
+        return False
+    except invalid_signature:
         return False
     except Exception:
         return False
@@ -295,7 +350,7 @@ def construct_event_rfc9421(
     key: Union[str, Sequence[Any]],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
-    """Verify an RFC 9421 (ed25519) delivery and parse the payload in one step.
+    """Verify an RFC 9421 delivery and parse the payload in one step.
 
     Raises SignatureVerificationError if verification fails.
     """

@@ -209,3 +209,110 @@ def test_construct_event_rfc9421(keypair):
     headers[IDEMPOTENCY] = "x"
     with pytest.raises(SignatureVerificationError, match="RFC 9421"):
         construct_event_rfc9421(headers, RFC_BODY, keys)
+
+
+# --- RFC 9421 (ecdsa-p256-sha256) verification ---
+#
+# Replicates the API's outbound ES256 path (signing-agility api R2): same
+# signature base, alg="ecdsa-p256-sha256", raw r||s (64-byte) signatures.
+
+ES256_KEY_ID = "f6e5d4c3b2a10897"
+
+
+def _sig_params_alg(created: int, kid: str, alg: str) -> str:
+    inner = " ".join(f'"{c}"' for c in COVERED)
+    return f'({inner});created={created};keyid="{kid}";alg="{alg}"'
+
+
+def _sign_es256(private_key, *, raw_body=RFC_BODY, idempotency_key=IDK, key_id=ES256_KEY_ID, alg="ecdsa-p256-sha256", der=False):
+    from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+    from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+    from cryptography.hazmat.primitives.hashes import SHA256
+
+    created = int(time.time())
+    cd = _content_digest(raw_body)
+    params = _sig_params_alg(created, key_id, alg)
+    base = "\n".join(
+        [f'"content-digest": {cd}', f'"{IDEMPOTENCY}": {idempotency_key}', f'"@signature-params": {params}']
+    ).encode()
+    der_sig = private_key.sign(base, ECDSA(SHA256()))
+    if der:
+        signature = der_sig
+    else:
+        r, s = decode_dss_signature(der_sig)
+        signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    return {
+        "content-digest": cd,
+        "signature-input": f"sig1={params}",
+        "signature": f"sig1=:{base64.b64encode(signature).decode()}:",
+        IDEMPOTENCY: idempotency_key,
+    }
+
+
+@pytest.fixture
+def es256_keypair():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1, generate_private_key
+
+    priv = generate_private_key(SECP256R1())
+    spki = base64.b64encode(
+        priv.public_key().public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+    ).decode()
+    # No publicKeyRaw on EC keys (R1 discovery reshape: SPKI only).
+    keys = [{"keyId": ES256_KEY_ID, "algorithm": "ES256", "coseAlgorithm": -7, "publicKey": spki, "status": "active"}]
+    return priv, spki, keys
+
+
+def test_rfc9421_es256_valid_spki(es256_keypair):
+    priv, spki, _keys = es256_keypair
+    headers = _sign_es256(priv)
+    assert verify_rfc9421(headers, RFC_BODY, spki) is True
+
+
+def test_rfc9421_es256_resolve_by_keyid(es256_keypair):
+    priv, _spki, keys = es256_keypair
+    headers = _sign_es256(priv)
+    assert verify_rfc9421(headers, RFC_BODY, keys) is True
+
+
+def test_rfc9421_es256_alg_contradicting_key_type(es256_keypair):
+    # A P-256 key under alg="ed25519" must fail, never reroute dispatch.
+    priv, spki, _keys = es256_keypair
+    headers = _sign_es256(priv, alg="ed25519")
+    assert verify_rfc9421(headers, RFC_BODY, spki) is False
+
+
+def test_rfc9421_es256_der_signature_rejected(es256_keypair):
+    # The wire is raw r||s; a DER-encoded signature must not verify.
+    priv, spki, _keys = es256_keypair
+    headers = _sign_es256(priv, der=True)
+    assert verify_rfc9421(headers, RFC_BODY, spki) is False
+
+
+def test_rfc9421_es256_tampered_body(es256_keypair):
+    priv, spki, _keys = es256_keypair
+    headers = _sign_es256(priv)
+    assert verify_rfc9421(headers, RFC_BODY + " ", spki) is False
+
+
+def test_rfc9421_ed25519_alg_contradicting_ed_key(keypair):
+    # The inverse assertion: an Ed25519 key under alg="ecdsa-p256-sha256" fails.
+    priv, spki, _raw, _keys = keypair
+    headers = _sign(priv)
+    headers["signature-input"] = headers["signature-input"].replace('alg="ed25519"', 'alg="ecdsa-p256-sha256"')
+    assert verify_rfc9421(headers, RFC_BODY, spki) is False
+
+
+def test_rfc9421_unsupported_key_type_fails_closed(es256_keypair):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as rsa_generate
+
+    priv, _spki, _keys = es256_keypair
+    rsa_pub = rsa_generate(public_exponent=65537, key_size=2048).public_key()
+    rsa_spki = base64.b64encode(
+        rsa_pub.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    ).decode()
+    headers = _sign_es256(priv)
+    assert verify_rfc9421(headers, RFC_BODY, rsa_spki) is False

@@ -89,11 +89,12 @@ from agledger.webhooks import verify_signature
 is_valid = verify_signature(raw_body, request.headers["x-agledger-signature"], webhook_secret)
 ```
 
-**Ed25519** (`signing_alg="ed25519"`) is RFC 9421 HTTP Message Signatures signed
-with the Server's vault key. The receiver holds no secret and verifies against
-the Server's published public key, giving non-repudiation for the Settlement
-Signal hop. Settlement-event subscriptions default to this when the Server has a
-vault signing key.
+**Asymmetric** (`signing_alg="ed25519"` or `"ecdsa-p256-sha256"`) is RFC 9421
+HTTP Message Signatures signed with the Server's vault key. The receiver holds
+no secret and verifies against the Server's published public key, giving
+non-repudiation for the Settlement Signal hop. Settlement-event subscriptions
+default to this when the Server has a vault signing key. The wire `alg`
+reflects the Server's active key; `verify_rfc9421` handles both.
 
 ```python
 from agledger.webhooks import verify_rfc9421
@@ -110,13 +111,14 @@ is_valid = verify_rfc9421(
 ```
 
 `verify_rfc9421` recomputes the RFC 9530 Content-Digest, reconstructs the RFC 9421
-signature base, verifies the Ed25519 signature, and enforces the `created` replay
+signature base, verifies the signature under the algorithm the resolved key
+commits to (Ed25519 or ES256), and enforces the `created` replay
 window (default/max 300s). `construct_event_rfc9421` verifies and parses in one
-step. The ed25519 path needs the `cryptography` extra (`pip install 'agledger[verify]'`).
+step. This path needs the `cryptography` extra (`pip install 'agledger[verify]'`).
 
 ## Offline Audit Export Verification
 
-Verify a Record's hash-chained, Ed25519-signed audit export without calling the API:
+Verify a Record's hash-chained, signed audit export without calling the API:
 
 ```python
 from agledger.verify import verify_export
@@ -134,7 +136,7 @@ if not result.valid:
 verification core, so both languages report identical verdicts over the shared
 conformance corpus.
 
-Requires `cbor2` (for COSE_Sign1 decoding) and `cryptography` (for Ed25519
+Requires `cbor2` (for COSE_Sign1 decoding) and `cryptography` (for signature
 verification):
 
 ```bash
@@ -142,7 +144,8 @@ pip install 'agledger[verify]'
 ```
 
 Decodes canonical COSE_Sign1 envelopes (RFC 9052), walks the hash chain, and
-verifies Ed25519 signatures. Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply out-of-band keys (these override the
+verifies each signature under the algorithm the verification key commits to
+(Ed25519 or ES256). Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply out-of-band keys (these override the
 export's embedded keys), `require_key_id="key-id"` to reject exports signed by an
 unexpected key, or `require_out_of_band_keys=True` for a high-assurance audit that
 refuses the export's own embedded keys. `result.key_provenance` reports how many
