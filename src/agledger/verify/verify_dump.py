@@ -6,7 +6,8 @@ export verifier uses (``verify_export.verify_entry``), fed the dump-only inputs
 the export wire cannot carry: the binding payload, the OIDC-actor columns, the
 per-entry write time, and the signing keys' temporal windows. So binding-
 integrity, the OIDC-actor cross-check, AND temporal key-validity
-(CHAIN_KEY_EXPIRED) all come from the shared walk for free.
+(CHAIN_KEY_NOT_YET_ACTIVE / CHAIN_KEY_EXPIRED) all come from the shared walk
+for free.
 
 What stays LOCAL here is the dump-structural work the per-entry walk does not
 model: the vault-checkpoint cross-check against the live chain, and the

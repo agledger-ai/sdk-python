@@ -780,15 +780,16 @@ def verify_entry(
     created_at = entry.get("createdAt")
     activated_at, retired_at = keys.window(signing_key_id)
     if isinstance(created_at, str) and (activated_at or retired_at):
-        expired_detail = _temporal_key_failure(
+        temporal = _temporal_key_failure(
             created_at, signing_key_id, activated_at, retired_at
         )
-        if expired_detail is not None:
+        if temporal is not None:
+            temporal_code, temporal_detail = temporal
             return EntryVerificationResult(
                 position=position,
                 valid=False,
-                code="CHAIN_KEY_EXPIRED",
-                detail=expired_detail,
+                code=temporal_code,
+                detail=temporal_detail,
             )
 
     outcome = _verify_cose_signature(parts, registered, keys, signing_key_id)
@@ -1261,11 +1262,15 @@ def _temporal_key_failure(
     key_id: str,
     activated_at: str | None,
     retired_at: str | None,
-) -> str | None:
-    """Return a failure detail if ``created_at`` falls outside the key's
+) -> tuple[FailureCode, str] | None:
+    """Return ``(code, detail)`` if ``created_at`` falls outside the key's
     activated..retired window, else ``None``. Bounds are inclusive: an entry
     written exactly at activation or retirement is valid (strict ``<`` / ``>``
     comparisons). Unparseable timestamps are skipped (no failure), mirroring TS.
+
+    The two directions carry different codes (agents#112): reporting "expired"
+    for a key that had not started yet sent consumers to investigate rotation
+    when the real condition is a backdated entry or clock skew.
     """
     written = _parse_instant(created_at)
     if written is None:
@@ -1274,13 +1279,15 @@ def _temporal_key_failure(
         activated = _parse_instant(activated_at)
         if activated is not None and written < activated:
             return (
-                f"Entry written {created_at} predates key {key_id} activation {activated_at}."
+                "CHAIN_KEY_NOT_YET_ACTIVE",
+                f"Entry written {created_at} predates key {key_id} activation {activated_at}.",
             )
     if retired_at:
         retired = _parse_instant(retired_at)
         if retired is not None and written > retired:
             return (
-                f"Entry written {created_at} postdates key {key_id} retirement {retired_at}."
+                "CHAIN_KEY_EXPIRED",
+                f"Entry written {created_at} postdates key {key_id} retirement {retired_at}.",
             )
     return None
 

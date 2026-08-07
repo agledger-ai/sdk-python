@@ -24,6 +24,7 @@ from typing import Literal
 
 #: The full canonical taxonomy. The export path can only emit a subset (the
 #: dump-only ``CHAIN_OIDC_ACTOR_MISMATCH`` / ``CHAIN_KEY_EXPIRED`` /
+#: ``CHAIN_KEY_NOT_YET_ACTIVE`` /
 #: ``CHECKPOINT_*`` / ``TENANT_*`` codes need inputs the export wire lacks), but
 #: both verifiers share this one type so the strings can never drift apart.
 FailureCode = Literal[
@@ -44,6 +45,7 @@ FailureCode = Literal[
     "CHAIN_SIGNATURE_MISSING_KEY",
     "CHAIN_KEY_POLICY_VIOLATION",
     "CHAIN_KEY_EXPIRED",
+    "CHAIN_KEY_NOT_YET_ACTIVE",
     "CHAIN_ALG_MISMATCH",
     "CHAIN_UNSUPPORTED_ALGORITHM",
     "CHAIN_SIGNING_KEY_DRIFT",
@@ -128,8 +130,14 @@ _SUGGESTIONS: dict[str, str] = {
         "out of band rather than the engine-embedded set."
     ),
     "CHAIN_KEY_EXPIRED": (
-        "The entry was signed outside its signing key's activated..retired window. A retired "
-        "or not-yet-active key produced this entry — possible use of a compromised retired key."
+        "The entry was written AFTER its signing key was retired. Possible use of a "
+        "compromised retired key: check the key rotation and retention record for that key id."
+    ),
+    "CHAIN_KEY_NOT_YET_ACTIVE": (
+        "The entry was written BEFORE its signing key was activated. Not a rotation problem: "
+        "the usual causes are a backdated entry or clock skew between the signer and the key "
+        "registry. Compare the entry write time against the key activation time before "
+        "treating this as tamper."
     ),
     "CHAIN_ALG_MISMATCH": (
         "The algorithm in the signed protected header (label 1) is not one the entry's "
