@@ -39,6 +39,7 @@ from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import BaseModel
 
+from agledger._runtime_crypto import runtime_can_compute
 from agledger.verify.failures import FailureCode
 
 try:
@@ -397,74 +398,15 @@ def _resolve_key_algorithm(
 
 # --- runtime algorithm capability (mirror verify-core runtimeCanCompute) ---
 
-# Fixed (key, message, signature) triples, one per verifiable algorithm,
-# shared byte-for-byte with verify-core's ALGORITHM_KATS.
-#
-# They answer a question the algorithm table cannot: ``verifiable`` says what
-# this BUILD implements, which is only half of whether a signature can be
-# checked. The other half is whether the HOST RUNTIME will perform the
-# operation, and a runtime can refuse. An OpenSSL FIPS provider carries no
-# EdDSA, so a perfectly good Ed25519 key either fails to load or raises on
-# verify. Both used to be caught and reported as "invalid", which is
-# indistinguishable from a forgery (agents#113).
-#
-# Deliberately fixed, self-contained bytes rather than a freshly generated
-# keypair or anything read from the export under audit: promoting a signature
-# failure to "not checked" is a security-relevant downgrade, so the signal that
-# triggers it must be one no attacker can influence.
-_KAT_MESSAGE = b"AGLedger verifier runtime known-answer test"
-
-_ALGORITHM_KATS: dict[str, tuple[str, str]] = {
-    "Ed25519": (
-        "MCowBQYDK2VwAyEAjChcTn8MOj5h5PpKz/+MvHfomativmvfmC1zV5Sczfo=",
-        "iinDVfJ5uwoE4aWjLhunX340+yPlu4l2S8RFG+IfXqzWoiIXYL/ND7+ouGVzAnejozCE"
-        "rkL9GneR1sc3vY1sAg==",
-    ),
-    "ES256": (
-        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEyJ40hViXjp41rIWYdbJT9bUHWVjYWps"
-        "OLKdc4F1L+c4reEK7WmCx1fI4sl0okBN/lNvhZT+0HZ44aUw5HKmFA==",
-        "eQ8fKfXT5GuBUz7gueqcq9hTmzrJlSuaoF/ukCPtKJsxqrynVgIREn/XMPKbdSHp7wMy"
-        "FOEAgmbVfoMDnR5x/Q==",
-    ),
-}
-
-_RUNTIME_SUPPORT_CACHE: dict[str, bool] = {}
-
 
 def _runtime_can_compute(key_alg: KeyAlgorithm) -> bool:
-    """Whether the host runtime can actually compute ``key_alg``, proven by
-    running this build's own dispatch against a known-good signature.
+    """Whether the host runtime can actually compute ``key_alg``.
 
-    Covers both ways a restricted runtime refuses: the key failing to load and
-    the verify call raising. Any outcome other than a confirmed "ok" is treated
-    as incapable, because a runtime that cannot confirm a signature known to be
-    valid cannot be trusted to tell a good signature from a forged one. Fail
-    closed: callers surface this as "NOT verified, verify elsewhere", never as
-    a pass and never as tamper evidence.
+    The table's ``verifiable`` says what this BUILD implements, which is only
+    half of whether a signature can be checked; see
+    :mod:`agledger._runtime_crypto` for the other half and why it fails closed.
     """
-    cached = _RUNTIME_SUPPORT_CACHE.get(key_alg.name)
-    if cached is not None:
-        return cached
-    kat = _ALGORITHM_KATS.get(key_alg.name)
-    if kat is None:
-        # A verifiable algorithm with no KAT is a packaging error, not a
-        # runtime gap. Do not silently downgrade real verification.
-        supported = True
-    else:
-        spki_base64, signature_base64 = kat
-        try:
-            loaded = _load_der_public_key(base64.b64decode(spki_base64))
-            supported = (
-                isinstance(loaded, (_Ed25519PublicKey, _EllipticCurvePublicKey))
-                and _verify_signature_bytes(
-                    loaded, key_alg, _KAT_MESSAGE, base64.b64decode(signature_base64)
-                )
-                == "ok"
-            )
-        except Exception:
-            supported = False
-    _RUNTIME_SUPPORT_CACHE[key_alg.name] = supported
-    return supported
+    return runtime_can_compute(key_alg.name)
 
 
 def _describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:

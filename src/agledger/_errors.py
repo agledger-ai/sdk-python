@@ -185,3 +185,25 @@ class SignatureVerificationError(Exception):
     def __init__(self, message: str, payload: bytes | None = None) -> None:
         super().__init__(message)
         self.payload = payload
+
+
+class SignatureAlgorithmUnavailableError(Exception):
+    """The host runtime refuses to compute the algorithm a signing key commits
+    to, so the signature could not be checked at all.
+
+    Distinct from :class:`SignatureVerificationError` on purpose, and raised
+    rather than reported as a verification failure. "I could not check this"
+    and "I checked this and it failed" call for opposite responses: the first
+    is your server's configuration, the second is a rejected delivery.
+    Returning ``False`` for both made a FIPS-locked receiver 401 every
+    legitimate ed25519 delivery as though it were forged, with nothing anywhere
+    saying why (agents#113).
+
+    The usual cause is an active OpenSSL FIPS provider, which carries no EdDSA.
+    Either terminate the ed25519 webhook signature somewhere unrestricted, or
+    configure the sender for ``ecdsa-p256-sha256``, which FIPS does permit.
+    """
+
+    def __init__(self, message: str, algorithm: str | None = None) -> None:
+        super().__init__(message)
+        self.algorithm = algorithm

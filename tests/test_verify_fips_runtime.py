@@ -34,42 +34,52 @@ verify_export_module = importlib.import_module("agledger.verify.verify_export")
 @pytest.fixture(autouse=True)
 def _clear_capability_cache() -> Any:
     """The runtime probe memoizes per process; each test needs a clean answer."""
-    verify_export_module._RUNTIME_SUPPORT_CACHE.clear()
+    importlib.import_module("agledger._runtime_crypto")._CACHE.clear()
     verify_export_module._KEY_ALG_CACHE.clear()
     yield
-    verify_export_module._RUNTIME_SUPPORT_CACHE.clear()
+    importlib.import_module("agledger._runtime_crypto")._CACHE.clear()
     verify_export_module._KEY_ALG_CACHE.clear()
 
 
 def _refuse_ed25519_verify(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A runtime that loads Ed25519 keys but will not compute with them."""
+    """A runtime that loads Ed25519 keys but will not compute with them.
+
+    Patched at the ``cryptography`` layer rather than at either call site, so
+    the capability probe and the real dispatch both meet the same refusal. That
+    is what a FIPS provider actually does, and patching only one of the two
+    would test a situation that cannot occur.
+    """
     from cryptography.exceptions import UnsupportedAlgorithm
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    real = verify_export_module._verify_signature_bytes
+    def refuse(self: Any, signature: bytes, data: bytes) -> None:
+        raise UnsupportedAlgorithm("ed25519 is not supported by this backend")
 
-    def fake(public_key: Any, key_alg: Any, to_be_signed: bytes, signature: bytes) -> Any:
-        if isinstance(public_key, Ed25519PublicKey):
-            raise UnsupportedAlgorithm("ed25519 is not supported by this backend")
-        return real(public_key, key_alg, to_be_signed, signature)
-
-    monkeypatch.setattr(verify_export_module, "_verify_signature_bytes", fake)
+    # The public name is an ABC that concrete keys only register against, so
+    # patching it changes nothing. The Rust-backed class is the real one.
+    concrete = type(Ed25519PrivateKey.generate().public_key())
+    monkeypatch.setattr(concrete, "verify", refuse)
 
 
 def _refuse_ed25519_load(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A runtime that will not even load an Ed25519 key."""
+    """A runtime that will not even load an Ed25519 key.
+
+    ``load_der_public_key`` is bound at import time in the verifier and looked
+    up at call time in the probe, so both bindings are patched.
+    """
+    import cryptography.hazmat.primitives.serialization as serialization
     from cryptography.exceptions import UnsupportedAlgorithm
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-    real = verify_export_module._load_der_public_key
+    real = serialization.load_der_public_key
 
-    def fake(data: bytes) -> Any:
-        loaded = real(data)
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
+    def fake(data: bytes, *args: Any, **kwargs: Any) -> Any:
+        loaded = real(data, *args, **kwargs)
         if isinstance(loaded, Ed25519PublicKey):
             raise UnsupportedAlgorithm("ed25519 is not supported by this backend")
         return loaded
 
+    monkeypatch.setattr(serialization, "load_der_public_key", fake)
     monkeypatch.setattr(verify_export_module, "_load_der_public_key", fake)
 
 

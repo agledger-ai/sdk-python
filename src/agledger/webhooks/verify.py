@@ -13,7 +13,11 @@ import re
 import time
 from typing import TYPE_CHECKING, Any, Mapping, Sequence, Union, cast
 
-from agledger._errors import SignatureVerificationError
+from agledger._errors import (
+    SignatureAlgorithmUnavailableError,
+    SignatureVerificationError,
+)
+from agledger._runtime_crypto import runtime_can_compute
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
@@ -302,6 +306,32 @@ def verify_rfc9421(
     return _verify_rfc9421_signature(public_key, signature, base, declared_alg, InvalidSignature)
 
 
+def _assert_runtime_can_compute(alg_name: str) -> None:
+    """Refuse to proceed when the host cannot compute the key's algorithm.
+
+    A verification failure and an inability to verify are different events with
+    opposite responses, so this raises instead of joining the ``False`` path: a
+    caller doing ``if not ok: return 401`` would otherwise reject every
+    legitimate delivery as forged. An uncaught exception surfacing as a 500 is
+    the correct outcome, because the fault is in the receiver's configuration,
+    not in the sender's signature.
+
+    Capability is proven against a fixed known-answer signature, never inferred
+    from a failed verification of the delivery itself: nothing an attacker
+    sends may decide whether a bad signature gets reported as uncheckable.
+    """
+    if runtime_can_compute(alg_name):
+        return
+    raise SignatureAlgorithmUnavailableError(
+        f"This host cannot compute {alg_name}, so the webhook signature could not "
+        f"be checked. The usual cause is an active OpenSSL FIPS provider, which "
+        f"carries no EdDSA. This is NOT a failed signature: the delivery may be "
+        f"perfectly valid. Terminate the signature on an unrestricted host, or "
+        f"configure the sender for ecdsa-p256-sha256.",
+        algorithm=alg_name,
+    )
+
+
 def _verify_rfc9421_signature(
     public_key: "Ed25519PublicKey | EllipticCurvePublicKey",
     signature: bytes,
@@ -326,9 +356,11 @@ def _verify_rfc9421_signature(
         if isinstance(public_key, Ed25519PublicKey):
             if declared_alg is not None and declared_alg != "ed25519":
                 return False
+            _assert_runtime_can_compute("Ed25519")
             public_key.verify(signature, base)
             return True
         if isinstance(public_key.curve, SECP256R1):
+            _assert_runtime_can_compute("ES256")
             if declared_alg is not None and declared_alg != "ecdsa-p256-sha256":
                 return False
             if len(signature) != 64:
@@ -340,6 +372,10 @@ def _verify_rfc9421_signature(
         return False
     except invalid_signature:
         return False
+    except SignatureAlgorithmUnavailableError:
+        # "Could not check" must not be flattened into "did not verify"; every
+        # other failure in here really is a rejected delivery.
+        raise
     except Exception:
         return False
 
