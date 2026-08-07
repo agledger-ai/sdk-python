@@ -4,6 +4,20 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **A runtime that cannot compute an algorithm no longer reads as tamper.** With the OpenSSL FIPS provider active there is no EdDSA, so `cryptography` refuses a perfectly good Ed25519 key: depending on how it was built, either the key fails to load or `verify()` raises `UnsupportedAlgorithm`. Both were caught and reported as `CHAIN_SIGNATURE_INVALID`, which is indistinguishable from a forgery, so a FIPS-locked auditor verifying an intact chain got `0/N verified` and a tamper report on a chain that is fine (agents#113, found in the TS verifier and mirrored here).
+
+  `verify_export` now proves runtime capability before dispatching, by checking a fixed known-answer signature for the algorithm. When the runtime refuses, the result is `CHAIN_UNSUPPORTED_ALGORITHM` with `signature="unsupported"`, whose detail names the FIPS provider as the cause and says to re-run on an unrestricted host. Still fail-closed: `valid` stays `False`, because an uncheckable chain is not a verified chain. The known-answer vectors are fixed bytes shared with `@agledger/verify-core`, so nothing in the audited export can influence whether a signature failure is reported as "not checked".
+
+  ES256 chains were never affected and still verify on a FIPS host.
+
+### Changed
+
+- **`CHAIN_SIGNATURE_INVALID`'s remediation text no longer hardcodes "Ed25519"**, which has been wrong since ES256 verification landed and which compounded the bug above by naming the one algorithm that had not been computed. **`CHAIN_UNSUPPORTED_ALGORITHM`'s** text now names both of its causes and states that the result is not tamper evidence.
+
 ## [1.7.0] - 2026-08-07
 
 ### Fixed

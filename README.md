@@ -151,6 +151,14 @@ unexpected key, or `require_out_of_band_keys=True` for a high-assurance audit th
 refuses the export's own embedded keys. `result.key_provenance` reports how many
 signatures were checked against out-of-band vs embedded keys.
 
+On a **FIPS-locked host** there is no EdDSA, so an Ed25519 chain cannot be
+verified there (ES256 chains can). That is reported as
+`CHAIN_UNSUPPORTED_ALGORITHM`, never as a signature failure: "I could not check
+this" and "I checked this and it failed" lead to opposite conclusions, and only
+one is grounds for a tamper investigation. The result still fails closed. To
+verify an Ed25519 chain, re-run on a host without the restriction; verification
+is entirely offline, so the export and keys are portable.
+
 ## Offline Full-Vault Dump Verification
 
 For a whole-instance audit (not just one Record), verify a five-file NDJSON dump

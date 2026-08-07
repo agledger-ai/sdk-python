@@ -395,6 +395,104 @@ def _resolve_key_algorithm(
     return resolved
 
 
+# --- runtime algorithm capability (mirror verify-core runtimeCanCompute) ---
+
+# Fixed (key, message, signature) triples, one per verifiable algorithm,
+# shared byte-for-byte with verify-core's ALGORITHM_KATS.
+#
+# They answer a question the algorithm table cannot: ``verifiable`` says what
+# this BUILD implements, which is only half of whether a signature can be
+# checked. The other half is whether the HOST RUNTIME will perform the
+# operation, and a runtime can refuse. An OpenSSL FIPS provider carries no
+# EdDSA, so a perfectly good Ed25519 key either fails to load or raises on
+# verify. Both used to be caught and reported as "invalid", which is
+# indistinguishable from a forgery (agents#113).
+#
+# Deliberately fixed, self-contained bytes rather than a freshly generated
+# keypair or anything read from the export under audit: promoting a signature
+# failure to "not checked" is a security-relevant downgrade, so the signal that
+# triggers it must be one no attacker can influence.
+_KAT_MESSAGE = b"AGLedger verifier runtime known-answer test"
+
+_ALGORITHM_KATS: dict[str, tuple[str, str]] = {
+    "Ed25519": (
+        "MCowBQYDK2VwAyEAjChcTn8MOj5h5PpKz/+MvHfomativmvfmC1zV5Sczfo=",
+        "iinDVfJ5uwoE4aWjLhunX340+yPlu4l2S8RFG+IfXqzWoiIXYL/ND7+ouGVzAnejozCE"
+        "rkL9GneR1sc3vY1sAg==",
+    ),
+    "ES256": (
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEyJ40hViXjp41rIWYdbJT9bUHWVjYWps"
+        "OLKdc4F1L+c4reEK7WmCx1fI4sl0okBN/lNvhZT+0HZ44aUw5HKmFA==",
+        "eQ8fKfXT5GuBUz7gueqcq9hTmzrJlSuaoF/ukCPtKJsxqrynVgIREn/XMPKbdSHp7wMy"
+        "FOEAgmbVfoMDnR5x/Q==",
+    ),
+}
+
+_RUNTIME_SUPPORT_CACHE: dict[str, bool] = {}
+
+
+def _runtime_can_compute(key_alg: KeyAlgorithm) -> bool:
+    """Whether the host runtime can actually compute ``key_alg``, proven by
+    running this build's own dispatch against a known-good signature.
+
+    Covers both ways a restricted runtime refuses: the key failing to load and
+    the verify call raising. Any outcome other than a confirmed "ok" is treated
+    as incapable, because a runtime that cannot confirm a signature known to be
+    valid cannot be trusted to tell a good signature from a forged one. Fail
+    closed: callers surface this as "NOT verified, verify elsewhere", never as
+    a pass and never as tamper evidence.
+    """
+    cached = _RUNTIME_SUPPORT_CACHE.get(key_alg.name)
+    if cached is not None:
+        return cached
+    kat = _ALGORITHM_KATS.get(key_alg.name)
+    if kat is None:
+        # A verifiable algorithm with no KAT is a packaging error, not a
+        # runtime gap. Do not silently downgrade real verification.
+        supported = True
+    else:
+        spki_base64, signature_base64 = kat
+        try:
+            loaded = _load_der_public_key(base64.b64decode(spki_base64))
+            supported = (
+                isinstance(loaded, (_Ed25519PublicKey, _EllipticCurvePublicKey))
+                and _verify_signature_bytes(
+                    loaded, key_alg, _KAT_MESSAGE, base64.b64decode(signature_base64)
+                )
+                == "ok"
+            )
+        except Exception:
+            supported = False
+    _RUNTIME_SUPPORT_CACHE[key_alg.name] = supported
+    return supported
+
+
+def _describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
+    """Detail line for CHAIN_UNSUPPORTED_ALGORITHM. Separates the two causes
+    that share the code, because the remedies differ: upgrade the verifier,
+    versus re-run somewhere the algorithm is permitted. Mirrors verify-core
+    ``describeUnsupportedAlgorithm``.
+    """
+    key_alg = _resolve_key_algorithm(spki_base64)
+    if not isinstance(key_alg, KeyAlgorithm):
+        return (
+            f"Key {key_id} commits to an algorithm this verifier build cannot "
+            f"compute. The chain is NOT verified; upgrade the verifier."
+        )
+    if not key_alg.verifiable:
+        return (
+            f"Key {key_id} commits to {key_alg.name}, which this verifier build "
+            f"cannot compute. The chain is NOT verified; upgrade the verifier."
+        )
+    return (
+        f"Key {key_id} commits to {key_alg.name}, which this verifier build "
+        f"supports but this HOST RUNTIME refused to compute (an active OpenSSL "
+        f"FIPS provider carries no EdDSA). This is NOT tamper evidence: the "
+        f"signature was never checked, so the chain is neither verified nor "
+        f"refuted. Re-run the verification on a host without that restriction."
+    )
+
+
 def _normalize_oob_keys(
     public_keys: Mapping[str, Any] | Sequence[Any] | None,
 ) -> dict[str, str] | None:
@@ -830,9 +928,8 @@ def verify_entry(
             position=position,
             valid=False,
             code="CHAIN_UNSUPPORTED_ALGORITHM",
-            detail=(
-                f"Key {signing_key_id} commits to an algorithm this verifier build "
-                f"cannot compute. The chain is NOT verified; upgrade the verifier."
+            detail=_describe_unsupported_algorithm(
+                str(signing_key_id), registered.spki_base64
             ),
             signature="unsupported",
         )
@@ -1149,16 +1246,26 @@ def _verify_cose_signature(
 
     key_alg = _resolve_key_algorithm(key.spki_base64)
     # A key that does not parse can verify nothing; report 'invalid' rather
-    # than misreporting garbage bytes as an algorithm gap.
+    # than misreporting garbage bytes as an algorithm gap. The exception is a
+    # runtime that cannot load a known-good Ed25519 key either: there, "did not
+    # parse" is ambiguous between tamper and refusal, and the chain is
+    # unverifiable on this host regardless, so say so rather than cry forgery.
     if key_alg == "unparseable":
-        return "invalid"
+        return (
+            "invalid"
+            if _runtime_can_compute(_ED25519_ALG)
+            else "unsupported-key-algorithm"
+        )
     if key_alg == "unrecognized":
         return "unsupported-key-algorithm"
 
     header_alg = _extract_header_alg(protected_bstr)
     if header_alg is None or header_alg not in key_alg.cose_algs:
         return "alg-mismatch"
-    if not key_alg.verifiable:
+    # Two independent reasons the signature cannot be checked: this build does
+    # not implement the algorithm, or the host runtime refuses to compute it
+    # (agents#113). Both must read as "not verified", never "did not verify".
+    if not key_alg.verifiable or not _runtime_can_compute(key_alg):
         return "unsupported-key-algorithm"
 
     if len(signature) == key_alg.signature_length and all(b == 0 for b in signature):
