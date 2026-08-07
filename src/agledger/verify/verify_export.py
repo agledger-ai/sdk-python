@@ -39,7 +39,7 @@ from typing import Any, Literal, Mapping, Sequence, cast
 
 from pydantic import BaseModel
 
-from agledger._runtime_crypto import runtime_can_compute
+from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 from agledger.verify.failures import FailureCode
 
 try:
@@ -1188,16 +1188,23 @@ def _verify_cose_signature(
 
     key_alg = _resolve_key_algorithm(key.spki_base64)
     # A key that does not parse can verify nothing; report 'invalid' rather
-    # than misreporting garbage bytes as an algorithm gap. The exception is a
-    # runtime that cannot load a known-good Ed25519 key either: there, "did not
-    # parse" is ambiguous between tamper and refusal, and the chain is
-    # unverifiable on this host regardless, so say so rather than cry forgery.
+    # than misreporting garbage bytes as an algorithm gap.
+    #
+    # One exception, and it is deliberately narrow: bytes that DECLARE
+    # themselves an Ed25519 key (by OID) on a host that cannot compute EdDSA.
+    # `cryptography` refuses such a key at load on some builds, so "did not
+    # parse" there means "this host will not touch it", not "someone forged
+    # it". Judged from the OID rather than from capability alone, so genuinely
+    # tampered key material still reads as tamper on every host, and both
+    # verifiers agree on garbage bytes.
     if key_alg == "unparseable":
-        return (
-            "invalid"
-            if _runtime_can_compute(_ED25519_ALG)
-            else "unsupported-key-algorithm"
-        )
+        try:
+            raw = base64.b64decode(key.spki_base64)
+        except Exception:
+            raw = b""
+        if looks_like_ed25519_key(raw) and not _runtime_can_compute(_ED25519_ALG):
+            return "unsupported-key-algorithm"
+        return "invalid"
     if key_alg == "unrecognized":
         return "unsupported-key-algorithm"
 

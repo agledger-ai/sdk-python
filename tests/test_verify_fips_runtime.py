@@ -172,6 +172,63 @@ def test_unrestricted_runtime_still_verifies_and_still_catches_forgery() -> None
     assert forged.broken_at.code == "CHAIN_SIGNATURE_INVALID"
 
 
+def _corrupt_key_material(export: dict[str, Any]) -> dict[str, Any]:
+    """Replace the embedded verification key with bytes that are not a key."""
+    meta = export["exportMetadata"]
+    garbage = base64.b64encode(b"this is not a public key at all").decode()
+    meta["signingPublicKey"] = garbage
+    meta["signingPublicKeys"] = {k: garbage for k in meta["signingPublicKeys"]}
+    return export
+
+
+def test_tampered_key_material_still_reads_as_tamper_on_a_healthy_host() -> None:
+    """The safety property the unparseable refinement must not break.
+
+    Garbage key material is tamper, not an environment problem, and saying
+    "upgrade your verifier" about it would send an auditor somewhere that can
+    never resolve it.
+    """
+    pub, priv = _make_keypair()
+    result = verify_export(_corrupt_key_material(_make_export(pub, priv)))
+    assert result.valid is False
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_SIGNATURE_INVALID"
+
+
+def test_tampered_key_material_still_reads_as_tamper_on_a_fips_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And it must keep reading as tamper on the host the fix targets.
+
+    The refinement keys off the Ed25519 OID rather than off capability alone,
+    so bytes that are not a key get the same verdict everywhere. This is also
+    what keeps the Python and TypeScript verifiers agreeing.
+    """
+    pub, priv = _make_keypair()
+    export = _corrupt_key_material(_make_export(pub, priv))
+    _refuse_ed25519_verify(monkeypatch)
+
+    result = verify_export(export)
+    assert result.valid is False
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_SIGNATURE_INVALID"
+
+
+def test_an_ed25519_key_refused_at_load_reads_as_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The case the refinement exists for: real Ed25519 key material that this
+    host will not load. Identified by OID, so it is distinguishable from the
+    garbage above even though both fail to parse."""
+    pub, priv = _make_keypair()
+    export = _make_export(pub, priv)
+    _refuse_ed25519_load(monkeypatch)
+
+    result = verify_export(export)
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_UNSUPPORTED_ALGORITHM"
+
+
 def test_runtime_probe_confirms_every_verifiable_algorithm() -> None:
     from agledger.verify.verify_export import (
         _EC_KEY_ALGORITHMS,

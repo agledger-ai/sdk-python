@@ -48,6 +48,26 @@ _CACHE: dict[str, bool] = {}
 
 AlgorithmName = Literal["Ed25519", "ES256"]
 
+# SPKI DER prefix for an Ed25519 public key: SEQUENCE(44) { SEQUENCE(5) {
+# OID 1.3.101.112 } BIT STRING(33) }. RFC 8410 fixes the whole structure, so an
+# Ed25519 SPKI is always these 12 bytes followed by the 32-byte key.
+_ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
+_ED25519_SPKI_LENGTH = 44
+_ED25519_RAW_LENGTH = 32
+
+
+def looks_like_ed25519_key(raw: bytes) -> bool:
+    """Whether these bytes DECLARE themselves an Ed25519 public key, judged
+    without ``cryptography``.
+
+    Needed because a host that refuses EdDSA may refuse at key load, leaving no
+    key object to ask about the algorithm. Reading the OID directly separates
+    "this is an Ed25519 key my runtime will not touch" from "these are garbage
+    bytes", which is the difference between an environment problem and tamper.
+    Structure only: it says nothing about whether the key is valid or trusted.
+    """
+    return raw.startswith(_ED25519_SPKI_PREFIX) and len(raw) == _ED25519_SPKI_LENGTH
+
 
 def _run_kat(alg_name: str) -> bool:
     from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, SECP256R1
