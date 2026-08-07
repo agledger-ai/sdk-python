@@ -4,6 +4,16 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-08-07
+
+### Fixed
+
+- **Vault checkpoints join on `chain_key`, so a healthy schema chain no longer fails.** A schema chain's checkpoint carries a derived UUIDv8 in `record_id` (the engine needs a non-null uuid for a chain whose rows have none), which matches no `audit_vault` row. Grouping checkpoints by that column stranded them, and a stock install returned a `CHECKPOINT_ROW_MISSING` failure on a vault nobody had touched: a tamper alarm for any audit gate wired to the exit code. Checkpoints now group on the producer's `chain_key`, falling back to `record_id` so dumps taken before the producer emitted it verify exactly as before. Failures also name a schema chain as `Chain schema:<orgId>` rather than `RecordRow <uuidv8>`, which sent auditors to `/v1/records/{id}` for a 404 (agents#103).
+
+### Changed (widened union)
+
+- **`CHAIN_KEY_NOT_YET_ACTIVE`** is now reported for an entry written BEFORE its signing key's activation. Both directions of the temporal key-window check previously reported `CHAIN_KEY_EXPIRED`, so a consumer branching on the code was told "expired" about a key that had not started yet and would investigate rotation or retention when the real condition is a backdated entry or clock skew. `CHAIN_KEY_EXPIRED` now means the retirement side only. Verdicts are unchanged: what failed before still fails (agents#112).
+
 ## [1.6.1] - 2026-08-07
 
 No code change from 1.6.0. That release was uploaded from a local session rather than by the tag-triggered workflow, so it carries no PEP 740 attestations; this version restores attested, provenance-carrying builds as the published artifact. Prefer it over 1.6.0 if you check attestations.

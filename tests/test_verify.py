@@ -480,3 +480,57 @@ def test_oob_keys_empty_publickey_rejected_with_accurate_diagnostic() -> None:
         verify_export(exp, public_keys=bad)
     # Diagnostic must reference the empty field, not lie about it being None.
     assert "empty-string" in str(excinfo.value)
+
+
+# --- temporal key-window direction split (agents#112) ------------------------
+#
+# Both directions used to report CHAIN_KEY_EXPIRED, so a consumer branching on
+# the code investigated rotation when the real condition was a backdated entry
+# or clock skew. The activation side is the security-relevant one.
+
+def test_temporal_split_predates_activation_is_not_yet_active() -> None:
+    from agledger.verify.verify_export import _temporal_key_failure
+
+    result = _temporal_key_failure(
+        "2026-08-07T06:57:13.022Z", "285ae6b39145b0f4", "2026-08-07T06:58:30.000Z", None
+    )
+    assert result is not None
+    code, detail = result
+    assert code == "CHAIN_KEY_NOT_YET_ACTIVE"
+    assert "predates key" in detail
+
+
+def test_temporal_split_postdates_retirement_is_expired() -> None:
+    from agledger.verify.verify_export import _temporal_key_failure
+
+    result = _temporal_key_failure(
+        "2026-08-07T06:57:13.022Z", "285ae6b39145b0f4", None, "2026-01-01T00:00:00.000Z"
+    )
+    assert result is not None
+    code, detail = result
+    assert code == "CHAIN_KEY_EXPIRED"
+    assert "postdates key" in detail
+
+
+def test_temporal_split_inside_window_passes() -> None:
+    from agledger.verify.verify_export import _temporal_key_failure
+
+    assert (
+        _temporal_key_failure(
+            "2026-06-01T00:00:00.000Z",
+            "k",
+            "2026-01-01T00:00:00.000Z",
+            "2026-12-01T00:00:00.000Z",
+        )
+        is None
+    )
+
+
+def test_new_code_is_registered_with_an_explanation() -> None:
+    from agledger.verify.failures import suggestion
+
+    text = suggestion("CHAIN_KEY_NOT_YET_ACTIVE")
+    assert "BEFORE" in text
+    assert "clock skew" in text
+    # The retirement side must stop claiming it also covers "not-yet-active".
+    assert "not-yet-active" not in suggestion("CHAIN_KEY_EXPIRED")
