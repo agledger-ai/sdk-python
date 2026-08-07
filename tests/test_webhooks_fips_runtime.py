@@ -52,6 +52,33 @@ def fips_host(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def fips_host_refusing_at_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The other FIPS build variant: `cryptography` refuses at KEY LOAD.
+
+    Whether the refusal lands at load or at verify depends on how the library
+    was built against OpenSSL, so both have to be covered. This variant is the
+    one that bypasses a gate placed after key resolution.
+    """
+    import cryptography.hazmat.primitives.serialization as serialization
+    from cryptography.exceptions import UnsupportedAlgorithm
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    real_load = serialization.load_der_public_key
+
+    def fake_load(data: bytes, *args: Any, **kwargs: Any) -> Any:
+        loaded = real_load(data, *args, **kwargs)
+        if isinstance(loaded, ed25519.Ed25519PublicKey):
+            raise UnsupportedAlgorithm("ed25519 is not supported by this backend")
+        return loaded
+
+    def fake_raw(data: bytes) -> Any:
+        raise UnsupportedAlgorithm("ed25519 is not supported by this backend")
+
+    monkeypatch.setattr(serialization, "load_der_public_key", fake_load)
+    monkeypatch.setattr(ed25519.Ed25519PublicKey, "from_public_bytes", fake_raw)
+
+
+@pytest.fixture
 def signed() -> tuple[dict[str, str], str]:
     """A genuinely valid delivery. Signing is unaffected; only verify is refused."""
     import base64
@@ -120,6 +147,68 @@ def test_deliveries_that_are_actually_bad_still_return_false(
     headers, spki = signed
     assert verify_rfc9421(headers, RFC_BODY + " ", spki) is False
     assert verify_rfc9421({k: v for k, v in headers.items() if k != "signature"}, RFC_BODY, spki) is False
+
+
+def test_a_host_refusing_at_key_load_also_raises(
+    fips_host_refusing_at_load: None, signed: tuple[dict[str, str], str]
+) -> None:
+    """The variant a gate placed after key resolution would miss entirely."""
+    headers, spki = signed
+    with pytest.raises(SignatureAlgorithmUnavailableError):
+        verify_rfc9421(headers, RFC_BODY, spki)
+
+
+def test_a_host_refusing_at_key_load_also_raises_for_raw_32_byte_keys(
+    fips_host_refusing_at_load: None,
+) -> None:
+    """Both key encodings the SDK accepts, not just SPKI."""
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    priv = ed25519.Ed25519PrivateKey.generate()
+    raw = base64.b64encode(
+        priv.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )
+    ).decode()
+    with pytest.raises(SignatureAlgorithmUnavailableError):
+        verify_rfc9421(_sign(priv), RFC_BODY, raw)
+
+
+def test_an_attacker_controlled_alg_mismatch_still_returns_false(
+    fips_host: None, signed: tuple[dict[str, str], str]
+) -> None:
+    """Nothing the sender controls may turn a definite reject into an error.
+
+    A P-256 key under `alg="ed25519"` is a reject on any host. If the sender
+    could steer that into a raise, they would have a lever on the receiver's
+    failure mode.
+    """
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    # A host where ES256 is also unavailable, so the assert would fire if it
+    # ran. FIPS does not produce this, which is why the ordering bug was
+    # latent rather than live.
+    _runtime_crypto._CACHE["ES256"] = False
+
+    ec_spki = base64.b64encode(
+        ec.generate_private_key(ec.SECP256R1())
+        .public_key()
+        .public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+    ).decode()
+    # Declares alg="ed25519" while the resolved key is P-256. The signature
+    # bytes are irrelevant: the mismatch is decided before they are examined.
+    headers = _sign(ed25519.Ed25519PrivateKey.generate(), alg="ed25519")
+    assert verify_rfc9421(headers, RFC_BODY, ec_spki) is False
 
 
 def test_unrestricted_host_is_unaffected(signed: tuple[dict[str, str], str]) -> None:

@@ -17,7 +17,7 @@ from agledger._errors import (
     SignatureAlgorithmUnavailableError,
     SignatureVerificationError,
 )
-from agledger._runtime_crypto import runtime_can_compute
+from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
@@ -171,6 +171,13 @@ def _load_public_key(base64_key: str) -> "Ed25519PublicKey | EllipticCurvePublic
             "Install via: pip install 'agledger[verify]'"
         ) from err
     raw = base64.b64decode(base64_key)
+    # Gate BEFORE loading, not after. A host that refuses EdDSA may refuse at
+    # key load, in which case the check further down never runs and the caught
+    # exception becomes a `False` that reads as a forged delivery. Both key
+    # encodings are covered: a bare 32-byte key is Ed25519 by definition here,
+    # and an SPKI is identified by its OID rather than by loading it.
+    if len(raw) == 32 or looks_like_ed25519_key(raw):
+        _assert_runtime_can_compute("Ed25519")
     if len(raw) == 32:
         return Ed25519PublicKey.from_public_bytes(raw)
     loaded = load_der_public_key(raw)
@@ -290,6 +297,9 @@ def verify_rfc9421(
 
     try:
         public_key = _resolve_public_key(key, keyid)
+    except SignatureAlgorithmUnavailableError:
+        # "Could not check" must not be flattened into "did not verify".
+        raise
     except Exception:
         return False
     if public_key is None:
@@ -360,22 +370,28 @@ def _verify_rfc9421_signature(
             public_key.verify(signature, base)
             return True
         if isinstance(public_key.curve, SECP256R1):
-            _assert_runtime_can_compute("ES256")
+            # Attacker-controlled checks first, capability last. A mismatched
+            # `alg` or a wrong-length signature is a definite reject, and must
+            # stay a reject rather than becoming an environment error: nothing
+            # the sender controls may decide whether we raise.
             if declared_alg is not None and declared_alg != "ecdsa-p256-sha256":
                 return False
             if len(signature) != 64:
                 return False
+            _assert_runtime_can_compute("ES256")
             r = int.from_bytes(signature[:32], "big")
             s = int.from_bytes(signature[32:], "big")
             public_key.verify(encode_dss_signature(r, s), base, ECDSA(SHA256()))
             return True
         return False
+    except SignatureAlgorithmUnavailableError:
+        # First, not last. `invalid_signature` is a caller-supplied class, so a
+        # future caller passing something broad would otherwise swallow this
+        # and silently reinstate the bug. Ordering makes the guarantee
+        # structural rather than incidental.
+        raise
     except invalid_signature:
         return False
-    except SignatureAlgorithmUnavailableError:
-        # "Could not check" must not be flattened into "did not verify"; every
-        # other failure in here really is a rejected delivery.
-        raise
     except Exception:
         return False
 
