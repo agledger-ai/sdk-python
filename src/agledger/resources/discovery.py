@@ -14,8 +14,14 @@ class DiscoveryResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def get_scope_profiles(self) -> list[dict[str, Any]]:
-        """List all available scope profiles. Public discovery endpoint."""
+    def get_scope_profiles(self) -> dict[str, Any]:
+        """List all available scope profiles. Public discovery endpoint.
+
+        Returns the page envelope the API sends: ``{"data": [...], "total",
+        "hasMore", "nextCursor"}``. Previously annotated ``list[...]``, which
+        made ``for p in client.discovery.get_scope_profiles()`` typecheck and
+        then iterate the envelope's KEYS.
+        """
         return self._http.get("/v1/scope-profiles")
 
     def get_conformance(self) -> dict[str, Any]:
@@ -31,8 +37,8 @@ class AsyncDiscoveryResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def get_scope_profiles(self) -> list[dict[str, Any]]:
-        """List all available scope profiles."""
+    async def get_scope_profiles(self) -> dict[str, Any]:
+        """List all available scope profiles. Returns the page envelope."""
         return await self._http.get("/v1/scope-profiles")
 
     async def get_conformance(self) -> dict[str, Any]:

@@ -4,6 +4,7 @@ from agledger._client import AgledgerClient, AsyncAgledgerClient
 from agledger._http import RateLimitInfo, SDK_VERSION
 from agledger._errors import (
     AgledgerError,
+    ConfigurationError,
     APIConnectionError,
     APIError,
     APITimeoutError,
@@ -99,6 +100,7 @@ __all__ = [
     "RateLimitInfo",
     # Errors
     "AgledgerError",
+    "ConfigurationError",
     "APIError",
     "AuthenticationError",
     "PermissionDeniedError",

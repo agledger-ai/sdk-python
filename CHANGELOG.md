@@ -4,7 +4,7 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.8.0] - 2026-08-07
 
 ### Fixed
 
@@ -24,6 +24,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **`verify_rfc9421` can now raise**, where before it only ever returned a bool. It raises only where the old code returned a wrong answer, so no correct caller changes behavior: a receiver that could verify ed25519 still verifies it, and a bad signature still returns `False`. On a host that cannot compute the algorithm, the standard `if not ok: return 401` becomes an uncaught exception and a 500, which is the right status for a server misconfiguration.
 - **`CHAIN_SIGNATURE_INVALID`'s remediation text no longer hardcodes "Ed25519"**, which has been wrong since ES256 verification landed and which compounded the bug above by naming the one algorithm that had not been computed. **`CHAIN_UNSUPPORTED_ALGORITHM`'s** text now names both of its causes and states that the result is not tamper evidence.
+
+### Changed (breaking for a client that never worked)
+
+- **`base_url` is now required.** It defaulted to `https://agledger.example.com`, a placeholder that resolves nowhere, so `AgledgerClient(api_key=...)` constructed fine and then failed every call against a host the caller never named and could only find by reading the SDK source. Omitting it now raises `ConfigurationError` at construction, where the mistake is. Every AGLedger deployment is self-hosted, so there was never a sensible default. This is the same fix the TypeScript SDK shipped at 1.7.0 (agents#109) and the CLI at 1.3.0 (agents#105); the Python client kept the placeholder through both, so the three clients disagreed about the same mistake. No working integration can be affected: a client with no base URL could never reach a Server. `api_key` still falls back to `AGLEDGER_API_KEY`.
+
+### Added
+
+- **`ConfigurationError`**, exported from the package root. Extends `AgledgerError`, not `APIError`, because nothing was sent: it is not a rejected request, and a caller catching `APIError` for server-side failures must not swallow it.
+
+### Fixed
+
+- **`discovery.get_scope_profiles()` was annotated `list[dict]` and has always returned the page envelope** (`{"data": [...], "total", "hasMore", "nextCursor"}`). Iterating the result gave you the envelope's keys. Now annotated `dict[str, Any]`, matching the other envelope-returning admin reads.
+
+- **Verifier remediation text drifted from `@agledger/verify-core`.** The module says it mirrors that file exactly, and after a punctuation pass on the TypeScript side six failure codes were telling auditors different things in the two languages. The strings match again, and a new test compares all 29 codes verbatim against the sibling checkout so this cannot drift silently. `suggestion(code)` wording changed for thirteen codes; no verdict or code changed.
 
 ## [1.7.0] - 2026-08-07
 

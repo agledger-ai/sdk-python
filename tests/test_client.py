@@ -7,7 +7,15 @@ import httpx
 import pytest
 import respx
 
-from agledger import AgledgerClient, AsyncAgledgerClient, AuthenticationError, RecordRow
+from agledger import (
+    AgledgerClient,
+    AgledgerError,
+    APIError,
+    AsyncAgledgerClient,
+    AuthenticationError,
+    ConfigurationError,
+    RecordRow,
+)
 
 
 RECORD_JSON = {
@@ -33,7 +41,7 @@ def test_records_create_typed_kwargs():
     respx.post("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.create(
         principal_agent_id="agt-principal",
         type="notarize-generic-v1",
@@ -56,7 +64,7 @@ def test_records_get():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.get("rec-123")
     assert record.id == "rec-123"
     assert record.type == "notarize-generic-v1"
@@ -80,7 +88,7 @@ def test_records_get_integrity():
             },
         )
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.get("rec-123", integrity=True)
     assert "integrity=true" in str(route.calls.last.request.url)
     assert record.integrity is not None
@@ -93,7 +101,7 @@ def test_records_list_actionable():
     route = respx.get("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.list(actionable=True)
     assert "actionable=true" in str(route.calls.last.request.url)
 
@@ -103,7 +111,7 @@ def test_auth_rotate_key_grace_period():
     route = respx.post("https://agledger.example.com/v1/auth/keys/rotate").mock(
         return_value=httpx.Response(200, json={"apiKey": "agl_adm_new", "keyId": "key-1"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.auth.rotate_key(grace_period_seconds=300)
     assert json.loads(route.calls.last.request.content) == {"gracePeriodSeconds": 300}
 
@@ -113,7 +121,7 @@ def test_records_list_with_status_filter():
     respx.get("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     page = client.records.list(org_id="ent-1", status="CREATED")
     assert len(page.data) == 1
     assert page.has_more is False
@@ -126,7 +134,7 @@ def test_records_transition():
     respx.post("https://agledger.example.com/v1/records/rec-123/transition").mock(
         return_value=httpx.Response(200, json=activated)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.transition("rec-123", "activate")
     assert record.status == "ACTIVE"
 
@@ -137,7 +145,7 @@ def test_records_request_revision():
     respx.post("https://agledger.example.com/v1/records/rec-123/revision").mock(
         return_value=httpx.Response(200, json=revised)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.request_revision("rec-123", "please fix X")
     assert record.status == "REVISION_REQUESTED"
 
@@ -155,7 +163,7 @@ def test_records_my_verdict_statistics():
             "asPerformer": {"data": [], "total": 0},
         })
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     stats = client.records.my_verdict_statistics()
     assert stats.agent_id == "agt-1"
     assert stats.as_principal["total"] == 1
@@ -167,7 +175,7 @@ def test_records_list_proposals():
     respx.get("https://agledger.example.com/v1/records/agent/proposals").mock(
         return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     page = client.records.list_proposals()
     assert len(page.data) == 1
     assert isinstance(page.data[0], RecordRow)
@@ -182,7 +190,7 @@ def test_records_bulk_create():
     respx.post("https://agledger.example.com/v1/records/bulk").mock(
         return_value=httpx.Response(207, json=bulk_resp)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.records.bulk_create([{"type": "notarize-generic-v1", "criteria": {}, "idempotencyKey": "k-1"}])
     assert result.summary.succeeded == 1
     assert result.summary.total == 1
@@ -229,7 +237,7 @@ def test_records_get_audit_export():
     route = respx.get("https://agledger.example.com/v1/records/rec-123/audit-export").mock(
         return_value=httpx.Response(200, json=export_resp)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.records.get_audit_export("rec-123")
     assert result.export_metadata.record_id == "rec-123"
     assert result.export_metadata.canonicalization == "RFC8949-CDE"
@@ -248,7 +256,7 @@ def test_completion_submit_typed_kwargs():
     respx.post("https://agledger.example.com/v1/records/rec-123/completions").mock(
         return_value=httpx.Response(200, json=completion_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     completion = client.completions.submit("rec-123", evidence={"delivered": True})
     assert completion.id == "rct-1"
 
@@ -258,7 +266,7 @@ def test_auth_header():
     route = respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="agl_agt_test123")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="agl_agt_test123")
     client.records.get("rec-123")
     assert route.calls[0].request.headers["authorization"] == "Bearer agl_agt_test123"
 
@@ -268,7 +276,7 @@ def test_user_agent_header():
     route = respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.get("rec-123")
     ua = route.calls[0].request.headers["user-agent"]
     assert ua == f"agledger-python/{agledger.__version__}"
@@ -279,7 +287,7 @@ def test_idempotency_key_on_post():
     route = respx.post("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.create(type="notarize-generic-v1", criteria={})
     assert "idempotency-key" in route.calls[0].request.headers
 
@@ -289,7 +297,7 @@ def test_no_idempotency_key_on_get():
     route = respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.get("rec-123")
     assert "idempotency-key" not in route.calls[0].request.headers
 
@@ -299,7 +307,7 @@ def test_no_content_type_on_get():
     route = respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.get("rec-123")
     assert "content-type" not in route.calls[0].request.headers
 
@@ -309,21 +317,21 @@ def test_context_manager():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    with AgledgerClient(api_key="test-key") as client:
+    with AgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         record = client.records.get("rec-123")
         assert record.id == "rec-123"
 
 
 def test_env_var_fallback(monkeypatch):
     monkeypatch.setenv("AGLEDGER_API_KEY", "agl_agt_from_env")
-    client = AgledgerClient()
+    client = AgledgerClient(base_url="https://agledger.example.com")
     assert client._http._api_key == "agl_agt_from_env"
 
 
 def test_no_api_key_raises(monkeypatch):
     monkeypatch.delenv("AGLEDGER_API_KEY", raising=False)
     with pytest.raises(AuthenticationError, match="No API key"):
-        AgledgerClient()
+        AgledgerClient(base_url="https://agledger.example.com")
 
 
 def test_populate_by_name():
@@ -350,7 +358,7 @@ def test_populate_by_name():
 
 def test_has_all_resources():
     """Verify the client wires every resource (sync + async)."""
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     resources = [
         "a2a", "admin", "agents", "audit", "auth", "capabilities", "compliance",
         "discovery", "disputes", "events", "federation", "federation_admin",
@@ -362,7 +370,7 @@ def test_has_all_resources():
 
 
 def test_admin_has_subresources():
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     assert hasattr(client.admin, "records")
     assert hasattr(client.admin, "vault")
     assert hasattr(client.admin.vault, "anchors")
@@ -371,7 +379,7 @@ def test_admin_has_subresources():
 
 
 def test_audit_has_org_reads_checkpoints():
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     assert hasattr(client.audit, "org_reads_checkpoints")
 
 
@@ -383,7 +391,7 @@ def test_admin_create_org():
     respx.post("https://agledger.example.com/v1/admin/orgs").mock(
         return_value=httpx.Response(200, json=response_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.create_org(name="Acme Corp", display_name="Acme")
     assert result["id"] == "org-1"
     sent = json.loads(respx.calls[0].request.content)
@@ -397,7 +405,7 @@ def test_admin_create_agent():
     respx.post("https://agledger.example.com/v1/admin/agents").mock(
         return_value=httpx.Response(200, json=response_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.create_agent(name="My Agent", org_id="org-1")
     assert result["id"] == "agt-1"
     sent = json.loads(respx.calls[0].request.content)
@@ -410,7 +418,7 @@ def test_admin_update_org_config():
     respx.patch("https://agledger.example.com/v1/admin/orgs/org-1/config").mock(
         return_value=httpx.Response(200, json=config)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.update_org_config("org-1", config)
     assert result["enforcement"]["agentApprovalRequired"] is True
 
@@ -420,7 +428,7 @@ def test_admin_set_capabilities_uses_contract_types_field():
     respx.put("https://agledger.example.com/v1/admin/agents/agt-1/capabilities").mock(
         return_value=httpx.Response(200, json={"agentId": "agt-1", "capabilities": ["notarize-generic-v1"]})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.admin.set_capabilities("agt-1", contract_types=["notarize-generic-v1"])
     sent = json.loads(respx.calls[0].request.content)
     assert "contractTypes" in sent
@@ -432,7 +440,7 @@ def test_admin_records_list():
     respx.get("https://agledger.example.com/v1/admin/records").mock(
         return_value=httpx.Response(200, json={"data": [RECORD_JSON], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.records.list()
     assert result["data"][0]["id"] == "rec-123"
 
@@ -442,7 +450,7 @@ def test_admin_records_import():
     respx.post("https://agledger.example.com/v1/admin/records/import").mock(
         return_value=httpx.Response(200, json={"imported": 1, "recordIds": ["rec-imp-1"], "source": "legacy"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.records.import_(
         org_id="ent-1", source="legacy",
         records=[{"principalAgentId": "agt-1", "type": "notarize-generic-v1", "platform": "x", "criteria": {}, "terminalStatus": "FULFILLED", "createdAt": "2026-01-01T00:00:00Z"}],
@@ -456,7 +464,7 @@ def test_admin_vault_anchors_list():
     respx.get("https://agledger.example.com/v1/admin/vault/anchors").mock(
         return_value=httpx.Response(200, json={"data": []})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.admin.vault.anchors.list(record_id="rec-1")
     assert "recordId=rec-1" in str(respx.calls[0].request.url)
 
@@ -466,7 +474,7 @@ def test_admin_vault_scan_run():
     respx.post("https://agledger.example.com/v1/admin/vault/scan").mock(
         return_value=httpx.Response(200, json={"jobId": "job-1", "status": "pending", "startedAt": "2026-04-27T00:00:00Z"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.vault.scan.run(record_ids=["rec-1", "rec-2"])
     assert result["jobId"] == "job-1"
 
@@ -476,7 +484,7 @@ def test_admin_vault_signing_keys_rotate():
     respx.post("https://agledger.example.com/v1/admin/vault/signing-keys/rotate").mock(
         return_value=httpx.Response(200, json={"id": "key-2", "status": "active", "createdAt": "2026-04-27T00:00:00Z"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.vault.signing_keys.rotate()
     assert result["id"] == "key-2"
 
@@ -491,7 +499,7 @@ def test_audit_org_reads_checkpoint_get():
             "witnessSignature": None, "witnessKeyId": None, "witnessCosignedAt": None,
         })
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     cp = client.audit.org_reads_checkpoints.get("cp-1")
     assert cp.id == "cp-1"
     assert cp.tree_size == 100
@@ -507,7 +515,7 @@ def test_audit_org_reads_checkpoint_cosign():
             "witnessSignature": None, "witnessKeyId": None, "witnessCosignedAt": None,
         })
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.audit.org_reads_checkpoints.cosign(
         "cp-1", witness_key_id="witness-1", witness_signature="sig-bytes",
     )
@@ -521,7 +529,7 @@ def test_disputes_list():
     respx.get("https://agledger.example.com/v1/disputes").mock(
         return_value=httpx.Response(200, json={"data": [], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     page = client.disputes.list(status="OPENED")
     assert page.data == []
     assert "status=OPENED" in str(respx.calls[0].request.url)
@@ -532,7 +540,7 @@ def test_webhooks_list_url_filter():
     respx.get("https://agledger.example.com/v1/webhooks").mock(
         return_value=httpx.Response(200, json={"data": [], "hasMore": False})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     page = client.webhooks.list(url="https://example.com/hook")
     assert page.data == []
     request_url = str(respx.calls[0].request.url)
@@ -547,7 +555,7 @@ async def test_async_records_get():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         record = await client.records.get("rec-123")
         assert record.id == "rec-123"
         assert isinstance(record, RecordRow)
@@ -559,7 +567,7 @@ async def test_async_context_manager():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(200, json=RECORD_JSON)
     )
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         record = await client.records.get("rec-123")
         assert record.id == "rec-123"
 
@@ -572,7 +580,7 @@ def test_admin_toggle_api_key():
     respx.patch("https://agledger.example.com/v1/admin/api-keys/key-1").mock(
         return_value=httpx.Response(200, json=response_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.toggle_api_key("key-1", is_active=True)
     assert result["isActive"] is True
     sent = json.loads(respx.calls[0].request.content)
@@ -584,7 +592,7 @@ def test_admin_get_webhook_health():
     respx.get("https://agledger.example.com/v1/admin/webhooks/health").mock(
         return_value=httpx.Response(200, json={"data": [{"id": "wh-1", "circuitState": "closed"}], "total": 1})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.get_webhook_health()
     assert result["data"][0]["circuitState"] == "closed"
 
@@ -594,7 +602,7 @@ def test_admin_update_circuit_breaker():
     respx.patch("https://agledger.example.com/v1/admin/webhooks/wh-1/circuit-breaker").mock(
         return_value=httpx.Response(200, json={"id": "wh-1", "circuitState": "open", "consecutiveFailures": 5})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.admin.update_circuit_breaker("wh-1", state="open")
     assert result["circuitState"] == "open"
     sent = json.loads(respx.calls[0].request.content)
@@ -613,7 +621,7 @@ def test_webhooks_get():
     respx.get("https://agledger.example.com/v1/webhooks/wh-1").mock(
         return_value=httpx.Response(200, json=webhook_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     webhook = client.webhooks.get("wh-1")
     assert webhook.id == "wh-1"
     assert webhook.url == "https://example.com/hook"
@@ -629,7 +637,7 @@ def test_webhooks_pause():
     respx.post("https://agledger.example.com/v1/webhooks/wh-1/pause").mock(
         return_value=httpx.Response(200, json=webhook_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     webhook = client.webhooks.pause("wh-1")
     assert webhook.id == "wh-1"
     assert webhook.is_paused is True
@@ -643,7 +651,7 @@ def test_records_counter_propose():
     respx.post("https://agledger.example.com/v1/records/rec-123/counter-propose").mock(
         return_value=httpx.Response(200, json=counter_json)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     record = client.records.counter_propose("rec-123", counter_deadline="2026-06-01T00:00:00Z")
     assert isinstance(record, RecordRow)
     assert record.acceptance_status == "COUNTER_PROPOSED"
@@ -667,7 +675,7 @@ def test_compliance_create_assessment_maps_snake_to_camel():
     respx.post(
         "https://agledger.example.com/v1/records/rec-123/ai-impact-assessment"
     ).mock(return_value=httpx.Response(201, json=assessment_json))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.compliance.create_assessment(
         "rec-123",
         risk_level="high",
@@ -698,7 +706,7 @@ def test_compliance_create_assessment_omits_optional_fields():
     respx.post(
         "https://agledger.example.com/v1/records/rec-123/ai-impact-assessment"
     ).mock(return_value=httpx.Response(201, json=assessment_json))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.compliance.create_assessment("rec-123", risk_level="minimal", domain="education")
     sent = json.loads(respx.calls[0].request.content)
     assert sent == {"riskLevel": "minimal", "domain": "education"}
@@ -710,7 +718,7 @@ def test_records_batch_get():
     respx.post("https://agledger.example.com/v1/records/batch").mock(
         return_value=httpx.Response(200, json=batch_response)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.records.batch_get(["rec-123", "rec-456"])
     assert len(result["data"]) == 2
     sent = json.loads(respx.calls[0].request.content)
@@ -718,7 +726,7 @@ def test_records_batch_get():
 
 
 def test_records_batch_get_validates_ids():
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     with pytest.raises(ValueError, match="1-100"):
         client.records.batch_get([])
 
@@ -750,7 +758,7 @@ def test_rate_limit_info_populated_from_headers():
             },
         )
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.get("rec-1")
     info = client.rate_limit_info
     assert info is not None
@@ -765,6 +773,48 @@ def test_rate_limit_info_none_when_headers_absent():
     respx.get("https://agledger.example.com/v1/records/rec-1").mock(
         return_value=httpx.Response(200, json=_RECORD_JSON)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.records.get("rec-1")
     assert client.rate_limit_info is None
+
+
+# ---------------------------------------------------------------------------
+# base_url is required (agents#109 parity with the TypeScript SDK)
+# ---------------------------------------------------------------------------
+class TestBaseUrlRequired:
+    """A placeholder host resolved nowhere, so a client built without a base URL
+    constructed fine and then failed every call against a host the caller never
+    named. The TypeScript SDK removed that default at 1.7.0; these hold the
+    Python side to the same contract."""
+
+    def test_omitting_base_url_raises_at_construction(self) -> None:
+        with pytest.raises(ConfigurationError, match="base_url is required"):
+            AgledgerClient(api_key="test-key")
+
+    def test_async_omitting_base_url_raises_at_construction(self) -> None:
+        with pytest.raises(ConfigurationError, match="base_url is required"):
+            AsyncAgledgerClient(api_key="test-key")
+
+    def test_empty_base_url_is_not_accepted(self) -> None:
+        with pytest.raises(ConfigurationError):
+            AgledgerClient(api_key="test-key", base_url="")
+
+    def test_the_error_never_names_a_placeholder_host(self) -> None:
+        try:
+            AgledgerClient(api_key="test-key")
+        except ConfigurationError as err:
+            assert "agledger.example.com" not in str(err)
+        else:  # pragma: no cover - the call above must raise
+            raise AssertionError("expected ConfigurationError")
+
+    def test_configuration_error_is_not_an_api_error(self) -> None:
+        # Nothing was sent, so this is not a rejected request. Callers that
+        # catch APIError to handle server-side failures must not swallow it.
+        assert not issubclass(ConfigurationError, APIError)
+        assert issubclass(ConfigurationError, AgledgerError)
+
+    def test_configuration_error_is_exported_from_the_package_root(self) -> None:
+        import agledger
+
+        assert agledger.ConfigurationError is ConfigurationError
+        assert "ConfigurationError" in agledger.__all__

@@ -14,6 +14,18 @@ class AgledgerError(Exception):
     pass
 
 
+class ConfigurationError(AgledgerError):
+    """The client was constructed with configuration it cannot work from.
+
+    Raised at construction, not on the first call, because that is where the
+    mistake is. Distinct from :class:`APIError`: nothing was sent, so no
+    request was made and nothing was rejected. Mirrors the TypeScript SDK's
+    ``ConfigurationError``.
+    """
+
+    pass
+
+
 class APIError(AgledgerError):
     """API returned an error response.
 

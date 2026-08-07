@@ -78,38 +78,38 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "CHAIN_POSITION_GAP": (
         "A chain position is missing or out of order. The chain was truncated or "
-        "reordered — obtain a complete, unmodified export/dump from the operator and re-run."
+        "reordered. Obtain a complete, unmodified export/dump from the operator and re-run."
     ),
     "CHAIN_GENESIS_INVALID": (
         "The first entry must carry previousHash = null. A non-null genesis link means "
-        "the head of the chain was removed — request the full chain from position 1."
+        "the head of the chain was removed. Request the full chain from position 1."
     ),
     "CHAIN_LINK_BROKEN": (
         "An entry's previousHash does not match the prior entry's payloadHash. The chain "
-        "was edited between these two entries — treat every entry from this position on as "
+        "was edited between these two entries. Treat every entry from this position on as "
         "untrusted."
     ),
     "CHAIN_HASH_MISMATCH": (
         "sha256(cose_sign1) does not equal the stored payloadHash. The envelope bytes or "
-        "the stored hash were altered — the signed bytes are authoritative; the row was "
+        "the stored hash were altered. The signed bytes are authoritative; the row was "
         "tampered with."
     ),
     "CHAIN_MALFORMED_ENTRY": (
         "An entry is missing a required field (coseSign1 or payloadHash). The export/dump "
-        "is incomplete or corrupt — regenerate it."
+        "is incomplete or corrupt. Regenerate it."
     ),
     "CHAIN_COSE_DECODE_FAILED": (
         "The COSE_Sign1 envelope did not decode as a tagged 4-element structure. The "
-        "signed bytes are corrupt — regenerate the export/dump."
+        "signed bytes are corrupt. Regenerate the export/dump."
     ),
     "CHAIN_COSE_HEADER_MISMATCH": (
         "The position/previousHash signed in the COSE protected header disagree with the "
-        "row columns. The visible columns were renumbered after signing — trust the signed "
+        "row columns. The visible columns were renumbered after signing. Trust the signed "
         "header, not the columns."
     ),
     "CHAIN_PAYLOAD_BINDING_MISMATCH": (
         "The signed payload's structure no longer matches the canonical projection of the "
-        "row columns it is bound to — the visible (denormalised) payload was altered after "
+        "row columns it is bound to: the visible (denormalised) payload was altered after "
         "signing. This is a binding-integrity failure, not a judgement on content."
     ),
     "CHAIN_OIDC_ACTOR_MISMATCH": (
@@ -163,16 +163,16 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "CHECKPOINT_ROW_MISSING": (
         "A signed checkpoint anchors a position that has no matching chain row. The chain was "
-        "truncated below a checkpoint (out-of-band DELETE/TRUNCATE) — the checkpoint is proof "
+        "truncated below a checkpoint (out-of-band DELETE/TRUNCATE). The checkpoint is proof "
         "of the missing rows."
     ),
     "CHECKPOINT_HASH_MISMATCH": (
         "A checkpoint's payloadHash does not match the chain row at its position. The chain "
-        "diverged from what was checkpointed — treat the chain as tampered."
+        "diverged from what was checkpointed. Treat the chain as tampered."
     ),
     "CHECKPOINT_SIGNATURE_INVALID": (
         "A checkpoint's COSE_Sign1 signature did not verify. The checkpoint was forged or "
-        "altered — re-run with out-of-band verification keys."
+        "altered. Re-run with out-of-band verification keys."
     ),
     "TENANT_READ_LEAF_HASH_MISMATCH": (
         "An org_admin_reads leaf hash does not match sha256(cose_sign1). The read-log leaf "
@@ -180,7 +180,7 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "TENANT_READ_LEAF_INDEX_GAP": (
         "org_admin_reads leaf indices are not gap-free for this org. A read-log entry was "
-        "removed — obtain the complete log."
+        "removed. Obtain the complete log."
     ),
     "TENANT_READ_SIGNATURE_INVALID": (
         "An org_admin_reads leaf's COSE_Sign1 signature did not verify. The read-log leaf "
@@ -199,7 +199,7 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "TENANT_CHECKPOINT_FORK": (
         "Two signed tree heads at the same tree_size carry different roots. This is an engine "
-        "fork or signing-key compromise — escalate immediately."
+        "fork or signing-key compromise. Escalate immediately."
     ),
 }
 

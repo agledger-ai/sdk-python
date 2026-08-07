@@ -20,6 +20,7 @@ from agledger._errors import (
     APIError,
     APITimeoutError,
     AuthenticationError,
+    ConfigurationError,
     BadRequestError,
     ConflictError,
     NotFoundError,
@@ -28,7 +29,11 @@ from agledger._errors import (
     UnprocessableError,
 )
 
-DEFAULT_BASE_URL = "https://agledger.example.com"
+# No default base URL. A placeholder resolved nowhere, so a client built
+# without one constructed fine and then failed every call against a host the
+# caller never named and could only find by reading the SDK source. Every
+# AGLedger deployment is self-hosted, so there was never a sensible default
+# (agents#109, fixed in the TypeScript SDK at 1.7.0 and mirrored here).
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_RETRIES = 3
 MAX_BACKOFF = 30.0
@@ -178,13 +183,19 @@ class HttpClient:
     def __init__(
         self,
         api_key: str,
-        base_url: str = DEFAULT_BASE_URL,
+        base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.Client | None = None,
     ) -> None:
         self._api_key = api_key
+        if not base_url:
+            raise ConfigurationError(
+                "base_url is required. AGLedger is self-hosted, so the SDK cannot guess "
+                "your Server: pass the base URL of your instance, e.g. "
+                'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
+            )
         self._base_url = base_url.rstrip("/")
         self._max_retries = max_retries
         self._timeout = timeout
@@ -448,13 +459,19 @@ class AsyncHttpClient:
     def __init__(
         self,
         api_key: str,
-        base_url: str = DEFAULT_BASE_URL,
+        base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self._api_key = api_key
+        if not base_url:
+            raise ConfigurationError(
+                "base_url is required. AGLedger is self-hosted, so the SDK cannot guess "
+                "your Server: pass the base URL of your instance, e.g. "
+                'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
+            )
         self._base_url = base_url.rstrip("/")
         self._max_retries = max_retries
         self._timeout = timeout
