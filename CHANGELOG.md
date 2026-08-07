@@ -14,8 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
   ES256 chains were never affected and still verify on a FIPS host.
 
+- **A FIPS-locked receiver no longer rejects every legitimate webhook as forged.** The same defect on the webhook surface: verifying an ed25519 delivery raises, the raise was caught and returned as `False`, and every documented caller turns that into a 401. `verify_rfc9421` and `construct_event_rfc9421` now raise `SignatureAlgorithmUnavailableError` when the host cannot compute the key's algorithm. Deliveries that are actually bad still return `False` exactly as before.
+
+### Added
+
+- **`SignatureAlgorithmUnavailableError`**, carrying the `algorithm` that could not be computed. Distinct from `SignatureVerificationError` because the two call for opposite responses: one is your server's configuration, the other is a rejected delivery.
+
 ### Changed
 
+- **`verify_rfc9421` can now raise**, where before it only ever returned a bool. It raises only where the old code returned a wrong answer, so no correct caller changes behavior: a receiver that could verify ed25519 still verifies it, and a bad signature still returns `False`. On a host that cannot compute the algorithm, the standard `if not ok: return 401` becomes an uncaught exception and a 500, which is the right status for a server misconfiguration.
 - **`CHAIN_SIGNATURE_INVALID`'s remediation text no longer hardcodes "Ed25519"**, which has been wrong since ES256 verification landed and which compounded the bug above by naming the one algorithm that had not been computed. **`CHAIN_UNSUPPORTED_ALGORITHM`'s** text now names both of its causes and states that the result is not tamper evidence.
 
 ## [1.7.0] - 2026-08-07

@@ -116,6 +116,15 @@ commits to (Ed25519 or ES256), and enforces the `created` replay
 window (default/max 300s). `construct_event_rfc9421` verifies and parses in one
 step. This path needs the `cryptography` extra (`pip install 'agledger[verify]'`).
 
+If the host runtime cannot compute the key's algorithm, both functions raise
+`SignatureAlgorithmUnavailableError` instead of returning `False`. The usual
+cause is an active OpenSSL FIPS provider, which carries no EdDSA. This is
+deliberately not a verification failure: returning `False` would make the
+standard `if not ok: return 401` reject every legitimate delivery as forged,
+when the fault is in the receiver's configuration rather than the sender's
+signature. Terminate the signature on an unrestricted host, or configure the
+sender for `ecdsa-p256-sha256`, which FIPS does permit.
+
 ## Offline Audit Export Verification
 
 Verify a Record's hash-chained, signed audit export without calling the API:
