@@ -52,18 +52,29 @@ client.records.submit_verdict(record.id, completion_id=completion.id, verdict="a
 ```python
 client = AgledgerClient(
     api_key="agl_agt_...",                              # or set AGLEDGER_API_KEY env var
-    base_url="https://agledger.internal.example.com",   # your instance URL
-    max_retries=2,                                      # default: 2
+    base_url="https://agledger.internal.example.com",   # your instance URL. Required.
+    max_retries=3,                                      # default: 3
     timeout=30.0,                                       # default: 30s
+    idempotency_key_prefix="my-app-",                   # default: ""
 )
 ```
+
+`base_url` is required: every AGLedger deployment is self-hosted, so there is no
+default server to call. Omitting it raises `ConfigurationError` at construction,
+where the mistake is, rather than failing every subsequent call against a host
+you never named. `api_key` is the one option that falls back to an environment
+variable (`AGLEDGER_API_KEY`).
 
 ## Async Support
 
 ```python
+import os
 from agledger import AsyncAgledgerClient
 
-async with AsyncAgledgerClient() as client:
+async with AsyncAgledgerClient(
+    api_key=os.environ["AGLEDGER_API_KEY"],
+    base_url=os.environ["AGLEDGER_EXTERNAL_URL"],
+) as client:
     record = await client.records.get("rec-123")
 ```
 

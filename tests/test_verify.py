@@ -534,3 +534,38 @@ def test_new_code_is_registered_with_an_explanation() -> None:
     assert "clock skew" in text
     # The retirement side must stop claiming it also covers "not-yet-active".
     assert "not-yet-active" not in suggestion("CHAIN_KEY_EXPIRED")
+
+
+def test_suggestion_text_mirrors_the_typescript_verifier_core_verbatim() -> None:
+    """The two taxonomies are a mirror, and the module docstring says so.
+
+    An auditor must read the same remediation sentence whether the chain was
+    checked by this SDK or by ``@agledger/verify-core``. Nothing enforced that,
+    so the two drifted the moment either side edited a string: a 2026-08-07
+    punctuation pass on the TypeScript side left six codes saying different
+    things in the two languages. Skipped when the sibling checkout is absent
+    (it is a separate repo), so CI on a lone clone stays green.
+    """
+    import re
+    from pathlib import Path
+
+    from agledger.verify.failures import _SUGGESTIONS as FAILURE_SUGGESTIONS
+
+    ts_path = Path.home() / "projects" / "agledger-verify-core" / "src" / "failures.ts"
+    if not ts_path.exists():
+        pytest.skip(f"verify-core checkout not present at {ts_path}")
+
+    ts = ts_path.read_text()
+    block = ts[ts.index("const SUGGESTIONS") : ts.index("/** The actionable next step")]
+    ts_map = {
+        m.group(1): m.group(2).replace("\\'", "'")
+        for m in re.finditer(r"(\w+):\s*\n?\s*'((?:[^'\\]|\\.)*)'", block)
+    }
+
+    assert set(ts_map) == set(FAILURE_SUGGESTIONS), (
+        "failure-code sets diverged: "
+        f"only in TS {sorted(set(ts_map) - set(FAILURE_SUGGESTIONS))}, "
+        f"only in Python {sorted(set(FAILURE_SUGGESTIONS) - set(ts_map))}"
+    )
+    mismatched = [c for c in ts_map if ts_map[c].strip() != FAILURE_SUGGESTIONS[c].strip()]
+    assert not mismatched, f"suggestion text drifted for: {mismatched}"

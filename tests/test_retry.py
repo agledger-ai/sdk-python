@@ -23,7 +23,7 @@ def test_retries_on_429():
         httpx.Response(429, json={"message": "Rate limited"}, headers={"retry-after": "0"}),
         httpx.Response(200, json=RECORD_JSON),
     ]
-    client = AgledgerClient(api_key="test-key", max_retries=1)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
     record = client.records.get("rec-123")
     assert record.id == "rec-123"
     assert len(route.calls) == 2
@@ -36,7 +36,7 @@ def test_retries_on_500():
         httpx.Response(500, json={"message": "Server error"}),
         httpx.Response(200, json=RECORD_JSON),
     ]
-    client = AgledgerClient(api_key="test-key", max_retries=1)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
     record = client.records.get("rec-123")
     assert record.id == "rec-123"
     assert len(route.calls) == 2
@@ -46,7 +46,7 @@ def test_retries_on_500():
 def test_no_retry_on_400():
     route = respx.post("https://agledger.example.com/v1/records")
     route.mock(return_value=httpx.Response(400, json={"message": "Bad request"}))
-    client = AgledgerClient(api_key="test-key", max_retries=2)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
         client.records.create(type="notarize-generic-v1", criteria={})
     assert len(route.calls) == 1  # No retries
@@ -56,7 +56,7 @@ def test_no_retry_on_400():
 def test_no_retry_on_404():
     route = respx.get("https://agledger.example.com/v1/records/x")
     route.mock(return_value=httpx.Response(404, json={"message": "Not found"}))
-    client = AgledgerClient(api_key="test-key", max_retries=2)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
         client.records.get("x")
     assert len(route.calls) == 1
@@ -70,7 +70,7 @@ def test_max_retries_exhausted():
         httpx.Response(500, json={"message": "fail"}),
         httpx.Response(500, json={"message": "fail"}),
     ]
-    client = AgledgerClient(api_key="test-key", max_retries=2)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
         client.records.get("rec-123")
     assert len(route.calls) == 3  # 1 initial + 2 retries
@@ -80,7 +80,7 @@ def test_max_retries_exhausted():
 def test_zero_retries():
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.mock(return_value=httpx.Response(500, json={"message": "fail"}))
-    client = AgledgerClient(api_key="test-key", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
     with pytest.raises(APIError):
         client.records.get("rec-123")
     assert len(route.calls) == 1
@@ -91,7 +91,7 @@ def test_connection_error():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         side_effect=httpx.ConnectError("Connection refused")
     )
-    client = AgledgerClient(api_key="test-key", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
     with pytest.raises(APIConnectionError):
         client.records.get("rec-123")
 
@@ -101,7 +101,7 @@ def test_timeout_error():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         side_effect=httpx.ReadTimeout("Read timed out")
     )
-    client = AgledgerClient(api_key="test-key", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
     with pytest.raises(APITimeoutError):
         client.records.get("rec-123")
 
@@ -111,7 +111,7 @@ def test_204_returns_none():
     respx.delete("https://agledger.example.com/v1/webhooks/wh-1").mock(
         return_value=httpx.Response(204)
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.webhooks.delete("wh-1")  # Should not raise
 
 
@@ -125,7 +125,7 @@ def test_no_retry_on_409_conflict():
     retrying would mask the client error and waste API budget."""
     route = respx.post("https://agledger.example.com/v1/records")
     route.mock(return_value=httpx.Response(409, json={"message": "Idempotency conflict", "code": "IDEMPOTENCY_CONFLICT"}))
-    client = AgledgerClient(api_key="test-key", max_retries=3)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=3)
     with pytest.raises(APIError):
         client.records.create(type="notarize-generic-v1", criteria={})
     assert len(route.calls) == 1
@@ -136,7 +136,7 @@ def test_no_retry_on_408():
     """408 is excluded from retry set (the API never emits it)."""
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.mock(return_value=httpx.Response(408, json={"message": "Request timeout"}))
-    client = AgledgerClient(api_key="test-key", max_retries=3)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=3)
     with pytest.raises(APIError):
         client.records.get("rec-123")
     assert len(route.calls) == 1

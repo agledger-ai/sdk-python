@@ -28,7 +28,7 @@ def test_stream_returns_events_and_cursor():
             },
         )
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.compliance.stream(since="2026-01-01T00:00:00Z")
 
     assert isinstance(result, AuditStreamResult)
@@ -52,7 +52,7 @@ def test_stream_has_more_when_at_limit():
             },
         )
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.compliance.stream(since="2026-01-01T00:00:00Z", limit=3)
 
     assert result.has_more is True
@@ -64,7 +64,7 @@ def test_stream_sends_correct_params():
     respx.get("https://agledger.example.com/v1/siem/stream").mock(
         return_value=httpx.Response(200, text="", headers={"content-type": "application/x-ndjson"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     client.compliance.stream(since="2026-01-01T00:00:00Z", limit=500, format="raw")
 
     req = respx.calls[0].request
@@ -79,7 +79,7 @@ def test_stream_empty_response():
     respx.get("https://agledger.example.com/v1/siem/stream").mock(
         return_value=httpx.Response(200, text="", headers={"content-type": "application/x-ndjson"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.compliance.stream(since="2026-01-01T00:00:00Z")
 
     assert result.events == []
@@ -117,7 +117,7 @@ def test_stream_all_iterates_pages():
         )
 
     respx.get("https://agledger.example.com/v1/siem/stream").mock(side_effect=side_effect)
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
 
     all_events = list(client.compliance.stream_all(since="2026-01-01T00:00:00Z", limit=2))
     assert len(all_events) == 3
@@ -138,7 +138,7 @@ async def test_async_stream():
             },
         )
     )
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         result = await client.compliance.stream(since="2026-01-01T00:00:00Z")
         assert len(result.events) == 2
         assert result.cursor == "2026-01-01T01:00:00Z_evt-2"

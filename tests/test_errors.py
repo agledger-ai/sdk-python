@@ -21,7 +21,7 @@ def test_401_raises_authentication_error():
     respx.get("https://agledger.example.com/v1/records/x").mock(
         return_value=httpx.Response(401, json={"message": "Invalid key", "code": "invalid_key"})
     )
-    client = AgledgerClient(api_key="bad-key", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="bad-key", max_retries=0)
     with pytest.raises(AuthenticationError) as exc_info:
         client.records.get("x")
     assert exc_info.value.status == 401
@@ -40,7 +40,7 @@ def test_403_raises_permission_denied_with_scopes_top_level():
             "details": {"keyScopes": ["health:read"]},
         })
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(PermissionDeniedError) as exc_info:
         client.records.get("x")
     assert exc_info.value.missing_scopes == ["records:read"]
@@ -57,7 +57,7 @@ def test_403_legacy_nested_missing_scopes():
             "details": {"missingScopes": ["records:read"], "keyScopes": ["health:read"]},
         })
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(PermissionDeniedError) as exc_info:
         client.records.get("x")
     assert exc_info.value.missing_scopes == ["records:read"]
@@ -68,7 +68,7 @@ def test_404_raises_not_found():
     respx.get("https://agledger.example.com/v1/records/x").mock(
         return_value=httpx.Response(404, json={"message": "Not found", "code": "not_found"})
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(NotFoundError):
         client.records.get("x")
 
@@ -78,7 +78,7 @@ def test_400_raises_bad_request():
     respx.post("https://agledger.example.com/v1/records").mock(
         return_value=httpx.Response(400, json={"message": "Missing field", "code": "validation_error"})
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(BadRequestError) as exc_info:
         client.records.create(type="notarize-generic-v1", criteria={})
     assert exc_info.value.is_input_error()
@@ -94,7 +94,7 @@ def test_422_raises_unprocessable_with_recovery_hint():
             "refreshUrl": "/v1/records/x",
         })
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(UnprocessableError) as exc_info:
         client.records.transition("x", "activate")
     assert exc_info.value.is_state_error()
@@ -111,7 +111,7 @@ def test_429_raises_rate_limit_with_retry_after():
             headers={"retry-after": "2.5"},
         )
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(RateLimitError) as exc_info:
         client.records.get("x")
     assert exc_info.value.retry_after == 2.5
@@ -166,7 +166,7 @@ def test_non_json_error_response():
     respx.get("https://agledger.example.com/v1/records/x").mock(
         return_value=httpx.Response(500, text="Internal Server Error")
     )
-    client = AgledgerClient(api_key="test", max_retries=0)
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
     with pytest.raises(APIError) as exc_info:
         client.records.get("x")
     assert exc_info.value.status == 500

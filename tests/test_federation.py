@@ -15,7 +15,7 @@ class TestFederationResource:
         respx.post(f"{BASE}/federation/v1/peer").mock(
             return_value=httpx.Response(201, json={"established": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation.peer_handshake(
                 hubId="hub-x",
                 signingPublicKey="ed25519-pk",
@@ -30,7 +30,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/peer/agent-sync").mock(
             return_value=httpx.Response(200, json={"synced": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.sync_agent_directory(
                 hubId="hub-x", agents=[], directoryHash="sha256-abc"
             )
@@ -41,7 +41,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/state-transitions").mock(
             return_value=httpx.Response(200, json={"accepted": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.submit_state_transition(
                 record_id="rec-1",
                 state="FULFILLED",
@@ -78,7 +78,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/signals").mock(
             return_value=httpx.Response(200, json={"relayed": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.relay_signal(
                 record_id="rec-1",
                 recommendation="HOLD",
@@ -105,7 +105,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/co-sign-requests").mock(
             return_value=httpx.Response(200, json={"queued": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.submit_co_sign_request(recordId="rec-1", payload="cbor:...")
         assert route.called
 
@@ -114,7 +114,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/disputes").mock(
             return_value=httpx.Response(200, json={"received": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.submit_dispute_protocol(recordId="rec-1", reason="mismatch")
         assert route.called
 
@@ -123,7 +123,7 @@ class TestFederationResource:
         route = respx.post(f"{BASE}/federation/v1/reputation/contribute").mock(
             return_value=httpx.Response(200, json={"contributed": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation.contribute_reputation(
                 agentId="a-1", type="notarize-generic-v1", period="2026-Q2",
                 totalRecords=10, totalVerified=9, totalPassed=9,
@@ -135,7 +135,7 @@ class TestFederationResource:
         respx.get(f"{BASE}/federation/v1/agents/a-1/reputation").mock(
             return_value=httpx.Response(200, json={"agentId": "a-1", "score": 95})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation.get_agent_reputation("a-1")
         assert result["score"] == 95
 
@@ -146,7 +146,7 @@ class TestFederationAdminResource:
         route = respx.post(f"{BASE}/federation/v1/admin/peering-tokens").mock(
             return_value=httpx.Response(201, json={"token": "tok-xyz", "label": "partner-x"})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.create_peering_token(label="partner-x")
         assert result["token"] == "tok-xyz"
         assert route.called
@@ -156,7 +156,7 @@ class TestFederationAdminResource:
         respx.get(f"{BASE}/federation/v1/admin/peers").mock(
             return_value=httpx.Response(200, json={"data": []})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.list_peers(status="active")
         assert "data" in result
 
@@ -165,7 +165,7 @@ class TestFederationAdminResource:
         route = respx.post(f"{BASE}/federation/v1/admin/peers/hub-x/revoke").mock(
             return_value=httpx.Response(200, json={"revoked": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation_admin.revoke_peer("hub-x", reason="compromise")
         assert route.called
 
@@ -174,7 +174,7 @@ class TestFederationAdminResource:
         route = respx.delete(f"{BASE}/federation/v1/admin/peers/hub-x").mock(
             return_value=httpx.Response(200, json={"deleted": True})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation_admin.delete_peer("hub-x")
         assert route.called
 
@@ -183,7 +183,7 @@ class TestFederationAdminResource:
         respx.get(f"{BASE}/federation/v1/admin/dlq").mock(
             return_value=httpx.Response(200, json={"data": []})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.list_dlq(limit=50)
         assert "data" in result
 
@@ -192,7 +192,7 @@ class TestFederationAdminResource:
         route = respx.post(f"{BASE}/federation/v1/admin/dlq/recover").mock(
             return_value=httpx.Response(200, json={"recovered": 0})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             client.federation_admin.recover_dlq()
         assert route.called
 
@@ -201,6 +201,6 @@ class TestFederationAdminResource:
         respx.get(f"{BASE}/federation/v1/admin/instance").mock(
             return_value=httpx.Response(200, json={"hubId": "h-001"})
         )
-        with AgledgerClient(api_key="agl_adm_test") as client:
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.get_instance()
         assert result["hubId"] == "h-001"

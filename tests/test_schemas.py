@@ -55,7 +55,7 @@ VALIDATE_JSON = {"valid": True}
 @respx.mock
 def test_get_schema():
     respx.get(f"{BASE}/v1/schemas/notarize-generic-v1").mock(return_value=httpx.Response(200, json=SCHEMA_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get("notarize-generic-v1")
     assert result["type"] == "notarize-generic-v1"
 
@@ -63,7 +63,7 @@ def test_get_schema():
 @respx.mock
 def test_list_schemas():
     respx.get(f"{BASE}/v1/schemas").mock(return_value=httpx.Response(200, json={"data": [SCHEMA_JSON], "hasMore": False}))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     page = client.schemas.list()
     assert len(page.data) == 1
 
@@ -71,7 +71,7 @@ def test_list_schemas():
 @respx.mock
 def test_get_rules():
     respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/rules").mock(return_value=httpx.Response(200, json=RULES_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get_rules("notarize-generic-v1")
     assert result["syncRuleIds"] == ["r1"]
 
@@ -79,7 +79,7 @@ def test_get_rules():
 @respx.mock
 def test_validate_completion():
     respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/validate").mock(return_value=httpx.Response(200, json=VALIDATE_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.validate_completion("notarize-generic-v1", {"quantity": 100})
     assert result["valid"] is True
     body = json.loads(respx.calls[0].request.content)
@@ -89,7 +89,7 @@ def test_validate_completion():
 @respx.mock
 def test_meta_schema():
     respx.get(f"{BASE}/v1/schemas/meta-schema").mock(return_value=httpx.Response(200, json=META_SCHEMA_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.meta_schema()
     assert "constraints" in result
 
@@ -97,7 +97,7 @@ def test_meta_schema():
 @respx.mock
 def test_get_template():
     route = respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/template").mock(return_value=httpx.Response(200, json=TEMPLATE_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get_template("notarize-generic-v1")
     assert result["sourceType"] == "notarize-generic-v1"
     assert route.calls.call_count == 1
@@ -106,7 +106,7 @@ def test_get_template():
 @respx.mock
 def test_blank():
     respx.get(f"{BASE}/v1/schemas/_blank").mock(return_value=httpx.Response(200, json=TEMPLATE_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.blank()
     assert "template" in result
 
@@ -114,7 +114,7 @@ def test_blank():
 @respx.mock
 def test_preview():
     respx.post(f"{BASE}/v1/schemas/preview").mock(return_value=httpx.Response(200, json=PREVIEW_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.preview({"type": "my-custom-v1", "recordSchema": {}, "completionSchema": {}})
     assert result["valid"] is True
 
@@ -122,7 +122,7 @@ def test_preview():
 @respx.mock
 def test_diff():
     route = respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/diff").mock(return_value=httpx.Response(200, json=DIFF_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.diff("notarize-generic-v1", from_version=1, to_version=2)
     assert result["type"] == "notarize-generic-v1"
     url = str(route.calls[0].request.url)
@@ -133,7 +133,7 @@ def test_diff():
 @respx.mock
 def test_export_schema():
     route = respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/export").mock(return_value=httpx.Response(200, json=EXPORT_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.export_schema("notarize-generic-v1", versions="1,2")
     assert result["type"] == "notarize-generic-v1"
     url = str(route.calls[0].request.url)
@@ -143,7 +143,7 @@ def test_export_schema():
 @respx.mock
 def test_import():
     route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(201, json=IMPORT_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.import_(MANIFEST, defaultGateMode="principal")
     assert result["type"] == "my-custom-v1"
     req = route.calls[0].request
@@ -158,7 +158,7 @@ def test_import():
 @respx.mock
 def test_register():
     respx.post(f"{BASE}/v1/schemas").mock(return_value=httpx.Response(200, json=VERSION_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.register({"type": "my-custom-v1", "displayName": "Custom", "recordSchema": {}, "completionSchema": {}})
     assert result["type"] == "notarize-generic-v1"
 
@@ -167,7 +167,7 @@ def test_register():
 def test_get_versions():
     page_json = {"data": [VERSION_JSON], "hasMore": False, "total": 1}
     respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/versions").mock(return_value=httpx.Response(200, json=page_json))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get_versions("notarize-generic-v1")
     assert len(result.data) == 1
     assert result.has_more is False
@@ -176,7 +176,7 @@ def test_get_versions():
 @respx.mock
 def test_get_version():
     respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/versions/1").mock(return_value=httpx.Response(200, json=VERSION_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get_version("notarize-generic-v1", 1)
     assert result["version"] == 1
 
@@ -184,7 +184,7 @@ def test_get_version():
 @respx.mock
 def test_check_compatibility():
     respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/check-compatibility").mock(return_value=httpx.Response(200, json=COMPAT_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.check_compatibility("notarize-generic-v1", {"recordSchema": {}, "completionSchema": {}})
     assert result["record"]["compatible"] is True
 
@@ -192,7 +192,7 @@ def test_check_compatibility():
 @respx.mock
 def test_update_version():
     respx.patch(f"{BASE}/v1/schemas/notarize-generic-v1/versions/1").mock(return_value=httpx.Response(200, json=VERSION_JSON))
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.update_version("notarize-generic-v1", 1, {"status": "DEPRECATED"})
     assert result["id"] == "sv-1"
 
@@ -205,7 +205,7 @@ def test_disable_enable():
     respx.patch(f"{BASE}/v1/schemas/notarize-generic-v1/enable").mock(
         return_value=httpx.Response(200, json={"type": "notarize-generic-v1", "status": "ACTIVE"})
     )
-    client = AgledgerClient(api_key="test-key")
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     assert client.schemas.disable("notarize-generic-v1")["status"] == "DISABLED"
     assert client.schemas.enable("notarize-generic-v1")["status"] == "ACTIVE"
 
@@ -216,7 +216,7 @@ def test_disable_enable():
 @pytest.mark.asyncio
 async def test_async_meta_schema():
     respx.get(f"{BASE}/v1/schemas/meta-schema").mock(return_value=httpx.Response(200, json=META_SCHEMA_JSON))
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         result = await client.schemas.meta_schema()
         assert "constraints" in result
 
@@ -225,7 +225,7 @@ async def test_async_meta_schema():
 @pytest.mark.asyncio
 async def test_async_diff():
     route = respx.get(f"{BASE}/v1/schemas/notarize-generic-v1/diff").mock(return_value=httpx.Response(200, json=DIFF_JSON))
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         result = await client.schemas.diff("notarize-generic-v1", from_version=1, to_version=2)
         assert result["type"] == "notarize-generic-v1"
         url = str(route.calls[0].request.url)
@@ -236,7 +236,7 @@ async def test_async_diff():
 @pytest.mark.asyncio
 async def test_async_export_schema():
     respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/export").mock(return_value=httpx.Response(200, json=EXPORT_JSON))
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         result = await client.schemas.export_schema("notarize-generic-v1")
         assert result["type"] == "notarize-generic-v1"
 
@@ -245,7 +245,7 @@ async def test_async_export_schema():
 @pytest.mark.asyncio
 async def test_async_import_schema():
     route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(201, json=IMPORT_JSON))
-    async with AsyncAgledgerClient(api_key="test-key") as client:
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
         result = await client.schemas.import_(MANIFEST)
         assert result["type"] == "my-custom-v1"
         import json as _json
