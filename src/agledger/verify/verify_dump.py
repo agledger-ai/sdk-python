@@ -117,6 +117,33 @@ def _chain_key(e: DumpRow) -> str:
     return f"schema:{org_id if org_id is not None else '__platform__'}"
 
 
+def _checkpoint_chain_key(cp: DumpRow) -> str:
+    """Group identity for a checkpoint, which is NOT always its record_id.
+
+    A schema chain's checkpoint carries a derived UUIDv8 in record_id (the
+    engine needs a non-null uuid for a chain whose rows have none), so joining
+    on that column strands the checkpoint and reports CHECKPOINT_ROW_MISSING
+    against a healthy vault. Join on the producer's chain_key; fall back to
+    record_id for older dumps, which is correct for every chain except schema
+    chains (agents#103).
+    """
+    ck = cp.get("chain_key")
+    if ck is not None:
+        return str(ck)
+    rid = cp.get("record_id")
+    # A checkpoint with neither key is malformed; group it under "" so it still
+    # surfaces as an orphan rather than silently joining a real chain.
+    return str(rid) if rid is not None else ""
+
+
+def _chain_label(chain_key: str) -> str:
+    """How a chain is named in failure messages. A per-record key IS a record
+    id, so "RecordRow <uuid>" is actionable; a schema key is not, and labelling
+    it that way sent auditors to /v1/records/{id} for a 404 (agents#103).
+    """
+    return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"RecordRow {chain_key}"
+
+
 def _group_by_chain(entries: list[DumpRow]) -> dict[str, list[DumpRow]]:
     by_chain: dict[str, list[DumpRow]] = {}
     for e in entries:
@@ -183,9 +210,10 @@ def _verify_vault_checkpoints(
     survives audit_vault TRUNCATE, so a chain shorter than (or hash-mismatched
     with) its anchor is evidence of out-of-band tampering."""
     for cp in checkpoints:
-        record_id = cp.get("record_id")
+        chain_key = _checkpoint_chain_key(cp)
+        label = _chain_label(chain_key)
         position = cp.get("chain_position")
-        chain = by_chain.get(str(record_id), [])
+        chain = by_chain.get(chain_key, [])
         idx = int(position) - 1 if isinstance(position, int) else -1
         entry = chain[idx] if 0 <= idx < len(chain) else None
         if entry is None:
@@ -193,10 +221,10 @@ def _verify_vault_checkpoints(
                 Failure(
                     code="CHECKPOINT_ROW_MISSING",
                     message=(
-                        f"RecordRow {record_id}: checkpoint at position {position} has no "
+                        f"{label}: checkpoint at position {position} has no "
                         f"matching audit_vault row (chain length {len(chain)})"
                     ),
-                    scope_id=_as_str(record_id),
+                    scope_id=chain_key,
                     position=_as_int(position),
                 )
             )
@@ -206,10 +234,10 @@ def _verify_vault_checkpoints(
                 Failure(
                     code="CHECKPOINT_HASH_MISMATCH",
                     message=(
-                        f"RecordRow {record_id} pos {position}: checkpoint payload_hash does "
+                        f"{label} pos {position}: checkpoint payload_hash does "
                         f"not match audit_vault row"
                     ),
-                    scope_id=_as_str(record_id),
+                    scope_id=chain_key,
                     position=_as_int(position),
                 )
             )
@@ -222,10 +250,10 @@ def _verify_vault_checkpoints(
                 Failure(
                     code="CHAIN_SIGNATURE_MISSING_KEY",
                     message=(
-                        f"RecordRow {record_id} pos {position}: checkpoint signing_key_id "
+                        f"{label} pos {position}: checkpoint signing_key_id "
                         f'"{signing_key_id}" not in dumped key registry'
                     ),
-                    scope_id=_as_str(record_id),
+                    scope_id=chain_key,
                     position=_as_int(position),
                     signing_key_id=_as_str(signing_key_id),
                 )
@@ -235,10 +263,10 @@ def _verify_vault_checkpoints(
                 Failure(
                     code="CHAIN_UNSUPPORTED_ALGORITHM",
                     message=(
-                        f"RecordRow {record_id} pos {position}: checkpoint signing key "
+                        f"{label} pos {position}: checkpoint signing key "
                         f"commits to an algorithm this verifier build cannot compute"
                     ),
-                    scope_id=_as_str(record_id),
+                    scope_id=chain_key,
                     position=_as_int(position),
                     signing_key_id=_as_str(signing_key_id),
                 )
@@ -248,10 +276,10 @@ def _verify_vault_checkpoints(
                 Failure(
                     code="CHECKPOINT_SIGNATURE_INVALID",
                     message=(
-                        f"RecordRow {record_id} pos {position}: checkpoint COSE_Sign1 "
+                        f"{label} pos {position}: checkpoint COSE_Sign1 "
                         f"signature does not verify"
                     ),
-                    scope_id=_as_str(record_id),
+                    scope_id=chain_key,
                     position=_as_int(position),
                     signing_key_id=_as_str(signing_key_id),
                 )
