@@ -195,3 +195,57 @@ def test_cli_missing_target_is_usage_error(capsys: pytest.CaptureFixture[str]) -
     f = "/nonexistent/path/to/nothing.json"
     code = run_cli([f])
     assert code == 2
+
+
+# --- checkpoint join on chain_key (agents#103) -------------------------------
+#
+# A schema chain's checkpoint carries a derived UUIDv8 in record_id that matches
+# no audit_vault row. Joining on that column stranded the checkpoint and failed
+# a healthy vault with CHECKPOINT_ROW_MISSING.
+
+_DERIVED_V8 = "019a0000-0000-8000-8000-0000000000ff"
+
+
+def _as_schema_chain(dump: object, chain_key: str) -> object:
+    """Relabel the chain a checkpoint anchors as a schema chain: rows gain
+    chain_key, and the checkpoint gets the derived v8 the engine writes."""
+    cp = dump.vault_checkpoints[0]  # type: ignore[attr-defined]
+    covered = str(cp.get("record_id"))
+    for e in dump.vault_entries:  # type: ignore[attr-defined]
+        if str(e.get("record_id")) == covered:
+            e["chain_key"] = chain_key
+    cp["chain_key"] = chain_key
+    cp["record_id"] = _DERIVED_V8
+    return dump
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")
+def test_checkpoint_joins_on_chain_key_healthy_schema_chain() -> None:
+    dump = _as_schema_chain(load_dump(str(_VALID_DUMP)), "schema:org-1")
+    report = verify_dump(dump)
+    missing = [f for f in report.vault.failures if f.code == "CHECKPOINT_ROW_MISSING"]
+    assert missing == [], f"healthy schema chain reported: {[f.message for f in missing]}"
+    assert report.ok
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")
+def test_truncated_schema_chain_still_fails_and_is_named_by_chain_key() -> None:
+    dump = _as_schema_chain(load_dump(str(_VALID_DUMP)), "schema:org-1")
+    anchored = [e for e in dump.vault_entries if e.get("chain_key") == "schema:org-1"]
+    dump.vault_entries = [e for e in dump.vault_entries if e is not anchored[-1]]
+    report = verify_dump(dump)
+    missing = [f for f in report.vault.failures if f.code == "CHECKPOINT_ROW_MISSING"]
+    assert missing, "truncated schema chain must still fail"
+    assert missing[0].scope_id == "schema:org-1"
+    assert "Chain schema:org-1" in missing[0].message
+    assert "RecordRow" not in missing[0].message
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")
+def test_dump_without_chain_key_falls_back_to_record_id() -> None:
+    dump = load_dump(str(_VALID_DUMP))
+    for e in dump.vault_entries:
+        e.pop("chain_key", None)
+    for cp in dump.vault_checkpoints:
+        cp.pop("chain_key", None)
+    assert verify_dump(dump).ok
