@@ -97,17 +97,24 @@ default to this when the Server has a vault signing key. The wire `alg`
 reflects the Server's active key; `verify_rfc9421` handles both.
 
 ```python
-from agledger.webhooks import verify_rfc9421
+from agledger.webhooks import verify_rfc9421, SignatureAlgorithmUnavailableError
 
 # Resolve the Server's published keys once (cache them); the delivery's
 # keyid is matched against them automatically.
 keys = client.verification_keys.list().data
 
-is_valid = verify_rfc9421(
-    request.headers,  # must include content-digest, signature-input, signature, x-agledger-idempotency-key
-    raw_body,
-    keys,             # or a single base64 public key string
-)
+try:
+    is_valid = verify_rfc9421(
+        request.headers,  # must include content-digest, signature-input, signature, x-agledger-idempotency-key
+        raw_body,
+        keys,             # or a single base64 public key string
+    )
+    if not is_valid:
+        return Response(status=401)
+except SignatureAlgorithmUnavailableError:
+    # This host cannot compute the algorithm, so nothing was checked. Your
+    # configuration, not the sender's: 401 would blame the wrong party.
+    return Response(status=500)
 ```
 
 `verify_rfc9421` recomputes the RFC 9530 Content-Digest, reconstructs the RFC 9421
