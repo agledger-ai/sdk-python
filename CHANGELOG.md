@@ -4,6 +4,10 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-08-07
+
+No code change from 1.6.0. That release was uploaded from a local session rather than by the tag-triggered workflow, so it carries no PEP 740 attestations; this version restores attested, provenance-carrying builds as the published artifact. Prefer it over 1.6.0 if you check attestations.
+
 ## [1.6.0] - 2026-08-05
 
 Signing-agility wave 2: ES256 verification across the offline and webhook surfaces. Ed25519 paths behave identically to 1.5.1.
