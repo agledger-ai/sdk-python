@@ -336,8 +336,9 @@ def _assert_runtime_can_compute(alg_name: str) -> None:
         f"This host cannot compute {alg_name}, so the webhook signature could not "
         f"be checked. The usual cause is an active OpenSSL FIPS provider, which "
         f"carries no EdDSA. This is NOT a failed signature: the delivery may be "
-        f"perfectly valid. Terminate the signature on an unrestricted host, or "
-        f"configure the sender for ecdsa-p256-sha256.",
+        f"valid, forged, or expired, and on this host none of those can be told "
+        f"apart. Terminate the signature on an unrestricted host, or configure "
+        f"the sender for ecdsa-p256-sha256.",
         algorithm=alg_name,
     )
 

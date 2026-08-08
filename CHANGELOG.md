@@ -14,7 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
   ES256 chains were never affected and still verify on a FIPS host.
 
-- **A FIPS-locked receiver no longer rejects every legitimate webhook as forged.** The same defect on the webhook surface: verifying an ed25519 delivery raises, the raise was caught and returned as `False`, and every documented caller turns that into a 401. `verify_rfc9421` and `construct_event_rfc9421` now raise `SignatureAlgorithmUnavailableError` when the host cannot compute the key's algorithm. Deliveries that are actually bad still return `False` exactly as before.
+  When the host refuses the key at LOAD rather than at verify, the verdict was already right but the detail line was not: with no key object to resolve, it fell through to the generic "upgrade the verifier" text, which sends a FIPS auditor to replace a build that is not the problem and never can be. That path now produces the same host-refusal sentence as the other one.
+
+- **A FIPS-locked receiver no longer rejects every legitimate webhook as forged.** The same defect on the webhook surface: verifying an ed25519 delivery raises, the raise was caught and returned as `False`, and every documented caller turns that into a 401. `verify_rfc9421` and `construct_event_rfc9421` now raise `SignatureAlgorithmUnavailableError` when the host cannot compute the key's algorithm.
+
+  **On such a host, no ed25519 delivery can be classified at all**, valid or forged: the check necessarily precedes signature verification, so a genuine forgery raises too. That is the honest result, since nothing was computed and nothing is known, but do not read the exception as evidence a delivery was legitimate. On every host that can compute the algorithm, which is all of them absent a FIPS-style restriction, behavior is unchanged and bad deliveries still return `False`. Deliveries rejected upstream of the key (a tampered body, a missing signature header) still return `False` everywhere.
 
 ### Added
 

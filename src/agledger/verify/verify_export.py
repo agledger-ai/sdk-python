@@ -409,6 +409,21 @@ def _runtime_can_compute(key_alg: KeyAlgorithm) -> bool:
     return runtime_can_compute(key_alg.name)
 
 
+def _is_runtime_refused_ed25519_key(spki_base64: str) -> bool:
+    """The narrow case where a key that would not LOAD must not read as tamper:
+    the bytes declare Ed25519 by OID and this host cannot compute Ed25519.
+
+    Judged from the OID rather than from capability alone, so genuinely tampered
+    key material still reads as tamper on every host, and both verifiers agree
+    on garbage bytes. On a host that CAN compute Ed25519 this is always False.
+    """
+    try:
+        raw = base64.b64decode(spki_base64)
+    except Exception:
+        raw = b""
+    return looks_like_ed25519_key(raw) and not _runtime_can_compute(_ED25519_ALG)
+
+
 def _describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
     """Detail line for CHAIN_UNSUPPORTED_ALGORITHM. Separates the two causes
     that share the code, because the remedies differ: upgrade the verifier,
@@ -417,6 +432,12 @@ def _describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
     """
     key_alg = _resolve_key_algorithm(spki_base64)
     if not isinstance(key_alg, KeyAlgorithm):
+        # On the host this sentence exists for, the key never loaded, so there
+        # is no algorithm to resolve and the generic text below would tell an
+        # auditor to upgrade a verifier build that is not the problem. Answer
+        # from the OID instead, the same way the outcome above was decided.
+        if _is_runtime_refused_ed25519_key(spki_base64):
+            return _describe_runtime_refusal(key_id, _ED25519_ALG)
         return (
             f"Key {key_id} commits to an algorithm this verifier build cannot "
             f"compute. The chain is NOT verified; upgrade the verifier."
@@ -426,6 +447,12 @@ def _describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
             f"Key {key_id} commits to {key_alg.name}, which this verifier build "
             f"cannot compute. The chain is NOT verified; upgrade the verifier."
         )
+    return _describe_runtime_refusal(key_id, key_alg)
+
+
+def _describe_runtime_refusal(key_id: str, key_alg: KeyAlgorithm) -> str:
+    """The host-refused-this-algorithm sentence, shared by both ways of
+    reaching it: a key that resolved, and a key this host would not load."""
     return (
         f"Key {key_id} commits to {key_alg.name}, which this verifier build "
         f"supports but this HOST RUNTIME refused to compute (an active OpenSSL "
@@ -1198,11 +1225,7 @@ def _verify_cose_signature(
     # tampered key material still reads as tamper on every host, and both
     # verifiers agree on garbage bytes.
     if key_alg == "unparseable":
-        try:
-            raw = base64.b64decode(key.spki_base64)
-        except Exception:
-            raw = b""
-        if looks_like_ed25519_key(raw) and not _runtime_can_compute(_ED25519_ALG):
+        if _is_runtime_refused_ed25519_key(key.spki_base64):
             return "unsupported-key-algorithm"
         return "invalid"
     if key_alg == "unrecognized":
