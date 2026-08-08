@@ -30,7 +30,14 @@ class AdminRecordsResource:
         terminal state with backdated timestamps and a ``BACKFILL_IMPORT`` vault entry
         tagged with the given source label.
 
-        Requires admin role + ``admin:backfill`` scope.
+        Platform-tier: this is a cross-org operator surface, so an org ``admin``
+        key is refused with 403 naming ``BACKFILL_IMPORT``. Use a platform key.
+
+        Returns ``{"source", "count", "imported": [...], "nextSteps"}``, where
+        each ``imported`` entry is ``{"index", "recordId", "chainPosition"}``
+        aligned 1:1 with ``records``. Set ``"publisher"`` on an item when two
+        publishers offer the same type in the org, otherwise the batch is
+        refused with 422 naming the offending index.
         """
         return self._http.post(
             "/v1/admin/records/import",

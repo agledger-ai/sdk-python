@@ -12,7 +12,7 @@ Two publishers offering the same `record_type` in one org is a supported state. 
 
 - **`records.create(publisher=...)`**, sync and async. `bulk_create` already took raw dicts, so it needed no change.
 
-- **`RecordRow.publisher`** reports the binding the engine actually used, present whether or not you pinned it. It is `str | None`, and the `None` is load-bearing: federation-received Records were judged by the originator against its own registration, and backfill-imported Records were admitted as historical fact, so neither was ever validated against a local one. Read `None` as "ask the originator", not as "the schema is missing here".
+- **`RecordRow.publisher`** reports the binding the engine actually used, present whether or not you pinned it. It is `str | None`, and the `None` is load-bearing: a federation-received Record was judged by the originator against its own registration, so it was never validated against a local one. Read `None` as "ask the originator", not as "the schema is missing here". Backfill-imported Records are not `None`; import binds the registration it validated against.
 
 - **`APIError.publishers`** carries the candidate labels off that 422, and **`APIError.type`** carries the RFC 9457 problem URI. Without these the error was unactionable in code: `_build_error` built a fixed kwargs dict and dropped everything else, so a caller could read the recovery hint but not the list it referred to. Branch on `type`, not on message text.
 
@@ -31,6 +31,12 @@ Pinning `publisher` against a Server older than this API release will be rejecte
 - **A real audit export could fail to parse.** `chain_integrity_reason` and `chain_integrity_detail.failure` are strict `Literal`s, so a value the API emits and the model does not list is a `ValidationError` at parse time rather than a type-checker complaint. Both were behind the wire: they were missing `unsupported_algorithm` (an entry signed under a COSE algorithm the engine cannot verify, which is not a tamper signal), and `failure` was additionally missing `signature_invalid`, `signing_key_unknown`, and `signing_key_drift`, which have reached it since v1.3.2. An export carrying any of the four raised instead of returning.
 
 - **`APIError.doc_url` is deprecated: no route emits it.** The engine's error schema has no `docUrl` property, so it is stripped from every serialized body and the attribute has always been `None`. The value it was meant to hold is `docs`, now mapped. `doc_url` is kept so existing callers keep working.
+
+- **`AccountProfile.agent_id` did not exist.** It was declared `str | None` against alias `agentId`, and `GET /v1/auth/me` has never returned it, in v1.3.4 or any build since. The agent id is `owner_id` when `owner_type == "agent"`. Removed rather than deprecated: every read returned `None`, so no working caller depends on it. (Found by driving a live Server; the TS SDK carried the identical phantom.)
+
+- **`schemas.diff()` could not scope to a publisher**, so on a type two publishers offer it had no reachable result: `?publisher=` was the one way to answer and the SDK never sent it. `diff()` now takes `publisher=` like its ten sibling schema methods, sync and async. Worth pinning even where it used to appear to work, since the engine previously resolved each side of the diff independently and could compare two unrelated publishers' schemas, reporting the difference as a breaking change.
+
+- **`admin.records.import_()` documented the wrong role and an undescribed response.** The docstring said "requires admin role + `admin:backfill` scope"; the route is platform-tier and answers an org admin key with `403 ... 'BACKFILL_IMPORT' requires platform role`. The return shape is now documented too (`{source, count, imported[], nextSteps}`, each entry `{index, recordId, chainPosition}`), along with the per-item `"publisher"` key needed on an ambiguous type. The method passes `records` through as raw dicts, so the new key needed no signature change.
 
 ### Fixed
 

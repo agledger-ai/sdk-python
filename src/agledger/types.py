@@ -330,10 +330,13 @@ class RecordRow(BaseModel):
     single-publisher org reads its one label (usually ``local``).
 
     ``None`` means the engine never validated this Record against a local
-    registration: federation-received Records (the originator ran the gate
-    against its own registration) and Records backfilled through the admin
-    import route. Read ``None`` as "ask the originator", not as "the schema is
-    missing here"."""
+    registration, which leaves exactly one case: federation-received Records,
+    where the originator ran the gate against its own registration. Read
+    ``None`` as "ask the originator", not as "the schema is missing here".
+
+    Records backfilled through the admin import route are NOT ``None``. Import
+    binds the registration it validated against, so a backfilled Record reads
+    its publisher label and a ``schema_url`` scoped to it."""
     schema_url: str | None = Field(None, alias="schemaUrl")
     """URL to the Type schema definition. Carries ``?publisher=`` whenever
     ``publisher`` is known, so the link resolves even for a type two publishers
@@ -1014,9 +1017,9 @@ class AccountProfile(BaseModel):
     api_key_id: str = Field(alias="apiKeyId")
     role: ApiKeyRole | str
     owner_id: str = Field(alias="ownerId")
+    """Owner of the key. When ``owner_type == "agent"`` this IS the agent id; when it is ``"org"`` this is the org id. There is no separate ``agentId`` field: one was declared here through 1.7.0 and ``/v1/auth/me`` has never returned it, so reading it always yielded ``None``."""
     owner_type: str = Field(alias="ownerType")
     scopes: list[str] | None = None
-    agent_id: str | None = Field(None, alias="agentId")
     org_id: str | None = Field(None, alias="orgId")
     name: str | None = None
     created_at: str | None = Field(None, alias="createdAt")
