@@ -84,11 +84,19 @@ class SchemasResource:
         """Preview a schema before registration."""
         return self._http.post("/v1/schemas/preview", json=schema_input)
 
-    def diff(self, type: str, *, from_version: int, to_version: int) -> dict[str, Any]:
-        """Diff two versions of a Type schema."""
+    def diff(
+        self, type: str, *, from_version: int, to_version: int, publisher: str | None = None
+    ) -> dict[str, Any]:
+        """Diff two versions of a Type schema.
+
+        Pin ``publisher`` on a type two publishers offer. Unpinned, the call
+        answers 422 rather than resolving each side independently, which could
+        otherwise compare two unrelated publishers' schemas and report the
+        difference as a breaking change.
+        """
         return self._http.get(
             f"/v1/schemas/{type}/diff",
-            params={"from": from_version, "to": to_version},
+            params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
     def export_schema(
@@ -216,10 +224,12 @@ class AsyncSchemasResource:
     async def preview(self, schema_input: dict[str, Any]) -> dict[str, Any]:
         return await self._http.post("/v1/schemas/preview", json=schema_input)
 
-    async def diff(self, type: str, *, from_version: int, to_version: int) -> dict[str, Any]:
+    async def diff(
+        self, type: str, *, from_version: int, to_version: int, publisher: str | None = None
+    ) -> dict[str, Any]:
         return await self._http.get(
             f"/v1/schemas/{type}/diff",
-            params={"from": from_version, "to": to_version},
+            params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
     async def export_schema(
