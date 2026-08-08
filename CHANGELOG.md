@@ -4,7 +4,33 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.8.0] - 2026-08-07
+## [1.8.0] - 2026-08-08
+
+### Added (multi-publisher schemas)
+
+Two publishers offering the same `record_type` in one org is a supported state. Once that happens a bare `type` no longer names a schema, so record creation refuses rather than picking one: `422 /problems/ambiguous-publisher`, with the candidates listed. The pick is withheld deliberately, because it would change the moment the other publisher shipped a higher version. None of that was expressible from this SDK: `create()` takes explicit keyword-only params, so `publisher=` raised `TypeError`.
+
+- **`records.create(publisher=...)`**, sync and async. `bulk_create` already took raw dicts, so it needed no change.
+
+- **`RecordRow.publisher`** reports the binding the engine actually used, present whether or not you pinned it. It is `str | None`, and the `None` is load-bearing: federation-received Records were judged by the originator against its own registration, and backfill-imported Records were admitted as historical fact, so neither was ever validated against a local one. Read `None` as "ask the originator", not as "the schema is missing here".
+
+- **`APIError.publishers`** carries the candidate labels off that 422, and **`APIError.type`** carries the RFC 9457 problem URI. Without these the error was unactionable in code: `_build_error` built a fixed kwargs dict and dropped everything else, so a caller could read the recovery hint but not the list it referred to. Branch on `type`, not on message text.
+
+- **`BulkCreateResultItem.problem_type` and `.context`**, matching the singleton error body. A failed item used to be a bare `error` string with no way to tell an ambiguous publisher from anything else.
+
+- **A `publisher=` argument on every scoped schema call**: `get`, `delete`, `get_rules`, `get_template`, `get_versions`, `get_version`, `update_version`, `disable`, `enable`, and `validate_completion`, sync and async. The engine has accepted `?publisher=` on these since before v1.3.4 and the SDK never sent it, so an org with two publishers could not read its own schemas through the SDK at all.
+
+- **`schemas.get_manifest()`**, for `GET /v1/schemas/{type}/manifest`. The route existed with no SDK method. It returns the canonical manifest plus the `manifestDigest` a peer computes on import.
+
+`schema_url` on a Record now carries `?publisher=` whenever the publisher is known. It stays an opaque string to follow; single-publisher orgs get `?publisher=local` where they used to get a bare path, so anything comparing `schema_url` against a literal needs updating.
+
+Pinning `publisher` against a Server older than this API release will be rejected as an unknown body field. Only send it in response to the 422, which only a Server that supports it can emit.
+
+### Fixed
+
+- **A real audit export could fail to parse.** `chain_integrity_reason` and `chain_integrity_detail.failure` are strict `Literal`s, so a value the API emits and the model does not list is a `ValidationError` at parse time rather than a type-checker complaint. Both were behind the wire: they were missing `unsupported_algorithm` (an entry signed under a COSE algorithm the engine cannot verify, which is not a tamper signal), and `failure` was additionally missing `signature_invalid`, `signing_key_unknown`, and `signing_key_drift`, which have reached it since v1.3.2. An export carrying any of the four raised instead of returning.
+
+- **`APIError.doc_url` is deprecated: no route emits it.** The engine's error schema has no `docUrl` property, so it is stripped from every serialized body and the attribute has always been `None`. The value it was meant to hold is `docs`, now mapped. `doc_url` is kept so existing callers keep working.
 
 ### Fixed
 

@@ -123,9 +123,15 @@ def _build_error(response: httpx.Response) -> APIError:
         "retryable": body.get("retryable"),
         "suggestion": body.get("suggestion"),
         "doc_url": body.get("docUrl"),
+        "docs": body.get("docs"),
         "recovery_hint": body.get("recoveryHint"),
         "refresh_url": body.get("refreshUrl"),
         "deadline": body.get("deadline"),
+        # RFC 9457 problem URI + the ambiguous-publisher candidate list. Both
+        # were dropped here, which left the 422 unactionable in code: the
+        # recovery hint named a list the caller had no way to read.
+        "type": body.get("type"),
+        "publishers": body.get("publishers"),
     }
 
     if cls is PermissionDeniedError:

@@ -322,8 +322,22 @@ class RecordRow(BaseModel):
     """Hint for completion evidence fields."""
     advisory_warnings: list[dict[str, Any]] | None = Field(None, alias="advisoryWarnings")
     """Advisory enforcement warnings."""
+    publisher: str | None = None
+    """Publisher label of the registration this Record binds to. With ``type`` and
+    ``contract_version`` it names exactly which schema the Record was judged
+    against, which ``type`` alone cannot once two publishers offer the same type.
+    Present whether or not ``publisher`` was pinned on create, so a
+    single-publisher org reads its one label (usually ``local``).
+
+    ``None`` means the engine never validated this Record against a local
+    registration: federation-received Records (the originator ran the gate
+    against its own registration) and Records backfilled through the admin
+    import route. Read ``None`` as "ask the originator", not as "the schema is
+    missing here"."""
     schema_url: str | None = Field(None, alias="schemaUrl")
-    """URL to the Type schema definition."""
+    """URL to the Type schema definition. Carries ``?publisher=`` whenever
+    ``publisher`` is known, so the link resolves even for a type two publishers
+    offer. Follow it verbatim; do not rebuild it from ``type``."""
     verdict_checks: dict[str, Any] | None = Field(None, alias="verdictChecks")
     """Detailed per-rule gate-evaluation results with tolerance bands, or None if the gate has not run."""
     verdict: str | None = Field(None, alias="verdict")
@@ -421,6 +435,14 @@ class BulkCreateResultItem(BaseModel):
     status: Literal["created", "replayed", "error"]
     data: RecordRow | None = None
     error: str | None = None
+    problem_type: str | None = Field(None, alias="problemType")
+    """RFC 9457 problem URI when the failure carries a narrower one than its
+    class, e.g. ``/problems/ambiguous-publisher``. Branch on this rather than on
+    the ``error`` prose."""
+    context: dict[str, Any] | None = None
+    """Structured extras from the failure, matching the singleton error body.
+    For ``/problems/ambiguous-publisher`` this carries ``publishers`` (the
+    candidate labels) and ``recordType``."""
 
 
 class BulkCreateSummary(BaseModel):
@@ -789,6 +811,16 @@ class AuditChainIntegrityDetail(BaseModel):
             "cert_expired",
             "cert_missing",
             "agent_signature_invalid",
+            # Per-entry signature failures. These reached this field with the
+            # v1.3.2 fail-closed verification work and were only ever added to
+            # chain_integrity_reason, so a real export carrying one of them
+            # failed to parse here rather than typing loosely.
+            "signature_invalid",
+            "signing_key_unknown",
+            "signing_key_drift",
+            # Signed under a COSE algorithm this engine build cannot verify.
+            # Not a tamper signal: check minVerifierVersion on the key.
+            "unsupported_algorithm",
         ]
         | None
     ) = None
@@ -835,6 +867,9 @@ class AuditExportMetadata(BaseModel):
             "signature_invalid",
             "signing_key_unknown",
             "signing_key_drift",
+            # Signed under a COSE algorithm this engine build cannot verify.
+            # Not a tamper signal: check minVerifierVersion on the key.
+            "unsupported_algorithm",
         ]
         | None
     ) = Field(None, alias="chainIntegrityReason")
