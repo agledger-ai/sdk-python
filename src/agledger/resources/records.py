@@ -55,6 +55,7 @@ class RecordsResource:
         *,
         type: str,
         criteria: dict[str, Any],
+        publisher: str | None = None,
         principal_agent_id: str | None = None,
         performer_agent_id: str | None = None,
         org_id: str | None = None,
@@ -83,8 +84,17 @@ class RecordsResource:
         enforcement_overrides: dict[str, Any] | None = None,
     ) -> RecordRow:
         """Create a Record. Admin keys pass ``principal_agent_id``; agent keys default
-        it to the authenticated agent."""
+        it to the authenticated agent.
+
+        ``publisher`` pins WHICH registration of ``type`` the Record binds to, and
+        is only needed when two publishers offer the same type in the org (an
+        imported peer manifest alongside a local registration). That case raises
+        ``UnprocessableError`` with ``type == "/problems/ambiguous-publisher"``
+        and the candidates on ``.publishers``, rather than the engine picking one.
+        Re-send pinned to one of those labels.
+        """
         body: dict[str, Any] = {"type": type, "criteria": criteria}
+        if publisher is not None: body["publisher"] = publisher
         if principal_agent_id is not None: body["principalAgentId"] = principal_agent_id
         if performer_agent_id is not None: body["performerAgentId"] = performer_agent_id
         if org_id is not None: body["orgId"] = org_id
@@ -426,6 +436,7 @@ class AsyncRecordsResource:
         *,
         type: str,
         criteria: dict[str, Any],
+        publisher: str | None = None,
         principal_agent_id: str | None = None,
         performer_agent_id: str | None = None,
         org_id: str | None = None,
@@ -455,6 +466,7 @@ class AsyncRecordsResource:
     ) -> RecordRow:
         """Create a Record."""
         body: dict[str, Any] = {"type": type, "criteria": criteria}
+        if publisher is not None: body["publisher"] = publisher
         if principal_agent_id is not None: body["principalAgentId"] = principal_agent_id
         if performer_agent_id is not None: body["performerAgentId"] = performer_agent_id
         if org_id is not None: body["orgId"] = org_id

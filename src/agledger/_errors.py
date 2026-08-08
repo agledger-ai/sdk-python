@@ -35,6 +35,10 @@ class APIError(AgledgerError):
 
     Key properties for consumers:
 
+    - ``type``: RFC 9457 problem URI (e.g. ``/problems/ambiguous-publisher``). Branch on this, not on prose.
+    - ``publishers``: candidate publisher labels on an ambiguous-publisher 422
+    - ``docs``: discovery-document pointer. ``doc_url`` is dead and always None.
+
     - ``status`` — HTTP status code
     - ``code`` — stable machine-readable error code (from API body)
     - ``retryable`` — API's ``retryable`` flag, falling back to status-based classification (429/5xx)
@@ -50,7 +54,23 @@ class APIError(AgledgerError):
     request_id: str | None
     details: Any | None
     retryable: bool
+    type: str | None
+    """RFC 9457 problem URI, from the body's ``type``, when the failure carries a
+    narrower one than its status class (e.g. ``/problems/ambiguous-publisher``).
+    Branch on this rather than on message prose. The bulk-create envelope calls
+    the same value ``problemType``."""
+    publishers: list[str] | None
+    """Candidate publisher labels on a 422 ``/problems/ambiguous-publisher``: the
+    type is offered by more than one publisher, so the engine refuses to pick.
+    Re-send pinned to one of these (``publisher=`` on ``records.create``, or on a
+    schema read)."""
     doc_url: str | None
+    """Deprecated. Always ``None``: no route emits ``docUrl``. The engine's error
+    schema has no such property, so it is stripped from every serialized body.
+    Read ``docs`` instead."""
+    docs: str | None
+    """Pointer to the discovery-document section describing the failed scheme.
+    Set on the federation 401 alongside the signing-input template."""
     suggestion: str | None
     recovery_hint: str | None
     refresh_url: str | None
@@ -73,9 +93,12 @@ class APIError(AgledgerError):
         retryable: bool | None = None,
         suggestion: str | None = None,
         doc_url: str | None = None,
+        docs: str | None = None,
         recovery_hint: str | None = None,
         refresh_url: str | None = None,
         deadline: str | None = None,
+        type: str | None = None,
+        publishers: list[str] | None = None,
         raw_body: bytes | None = None,
     ) -> None:
         self.status = status
@@ -83,7 +106,10 @@ class APIError(AgledgerError):
         self.request_id = request_id
         self.details = details
         self.retryable = retryable if retryable is not None else (status == 429 or status >= 500)
+        self.type = type
+        self.publishers = publishers
         self.doc_url = doc_url
+        self.docs = docs
         self.suggestion = suggestion
         self.recovery_hint = recovery_hint
         self.refresh_url = refresh_url
