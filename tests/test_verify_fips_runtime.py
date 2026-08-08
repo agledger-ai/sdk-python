@@ -229,6 +229,28 @@ def test_an_ed25519_key_refused_at_load_reads_as_unsupported(
     assert result.broken_at.code == "CHAIN_UNSUPPORTED_ALGORITHM"
 
 
+def test_load_refusal_detail_names_the_host_not_the_verifier_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verdict was already right on this path; the sentence was not.
+
+    With no key object to resolve, the detail fell through to the generic
+    "upgrade the verifier" text, which sends a FIPS auditor to replace a build
+    that is not the problem and never can be.
+    """
+    pub, priv = _make_keypair()
+    export = _make_export(pub, priv)
+    _refuse_ed25519_load(monkeypatch)
+
+    detail = verify_export(export).broken_at.detail  # type: ignore[union-attr]
+
+    assert "Ed25519" in detail
+    assert "HOST RUNTIME" in detail
+    assert "FIPS" in detail
+    assert "NOT tamper evidence" in detail
+    assert "upgrade the verifier" not in detail
+
+
 def test_runtime_probe_confirms_every_verifiable_algorithm() -> None:
     from agledger.verify.verify_export import (
         _EC_KEY_ALGORITHMS,

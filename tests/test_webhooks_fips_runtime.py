@@ -149,6 +149,29 @@ def test_deliveries_that_are_actually_bad_still_return_false(
     assert verify_rfc9421({k: v for k, v in headers.items() if k != "signature"}, RFC_BODY, spki) is False
 
 
+def test_a_forged_signature_raises_too_because_nothing_was_computed(
+    fips_host: None, signed: tuple[dict[str, str], str]
+) -> None:
+    """The honest and easily-misread consequence, pinned so it cannot drift.
+
+    The capability gate necessarily runs BEFORE verification, so on this host a
+    forgery is indistinguishable from a valid delivery: nothing was computed,
+    so nothing is known. The test above passes only because those cases fail at
+    the digest/header layer upstream of any key, which is not the same claim.
+    Nobody should "fix" this into a False, and no doc should promise that bad
+    deliveries return False on every host.
+    """
+    import base64
+
+    headers, spki = signed
+    raw = bytearray(base64.b64decode(headers["signature"][len("sig1=:") : -1]))
+    raw[0] ^= 0xFF
+    forged = dict(headers)
+    forged["signature"] = f"sig1=:{base64.b64encode(bytes(raw)).decode()}:"
+    with pytest.raises(SignatureAlgorithmUnavailableError):
+        verify_rfc9421(forged, RFC_BODY, spki)
+
+
 def test_a_host_refusing_at_key_load_also_raises(
     fips_host_refusing_at_load: None, signed: tuple[dict[str, str], str]
 ) -> None:

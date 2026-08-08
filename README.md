@@ -143,6 +143,11 @@ when the fault is in the receiver's configuration rather than the sender's
 signature. Terminate the signature on an unrestricted host, or configure the
 sender for `ecdsa-p256-sha256`, which FIPS does permit.
 
+Note that on such a host **no** delivery can be classified, valid or forged. The
+check has to run before signature verification, so a genuine forgery raises too.
+Treat the exception as "nothing is known about this delivery", never as evidence
+it was legitimate.
+
 ## Offline Audit Export Verification
 
 Verify a Record's hash-chained, signed audit export without calling the API:
