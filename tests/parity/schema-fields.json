@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.3.4",
+  "apiVersion": "1.4.0",
   "schemaCount": 11,
   "schemas": {
     "Completion": [
