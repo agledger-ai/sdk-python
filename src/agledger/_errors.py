@@ -37,6 +37,7 @@ class APIError(AgledgerError):
 
     - ``type``: RFC 9457 problem URI (e.g. ``/problems/ambiguous-publisher``). Branch on this, not on prose.
     - ``publishers``: candidate publisher labels on an ambiguous-publisher 422
+    - ``pinned_records`` / ``unattributable_records``: why a schema delete was refused
     - ``docs``: discovery-document pointer. ``doc_url`` is dead and always None.
 
     - ``status`` — HTTP status code
@@ -64,6 +65,16 @@ class APIError(AgledgerError):
     type is offered by more than one publisher, so the engine refuses to pick.
     Re-send pinned to one of these (``publisher=`` on ``records.create``, or on a
     schema read)."""
+    pinned_records: int | None
+    """Why a ``schemas.delete()`` was refused: Records written against the exact
+    registration the delete would have removed. Paired with
+    ``unattributable_records``, and the pair is the whole diagnosis. A non-zero
+    ``pinned_records`` is fixable by deleting the other publisher's registration
+    instead; a non-zero ``unattributable_records`` is not."""
+    unattributable_records: int | None
+    """Records of this type carrying no registration pin. They block a delete
+    under any publisher label, so this can be non-zero while ``pinned_records``
+    is 0 and the delete still fails."""
     doc_url: str | None
     """Deprecated. Always ``None``: no route emits ``docUrl``. The engine's error
     schema has no such property, so it is stripped from every serialized body.
@@ -99,6 +110,8 @@ class APIError(AgledgerError):
         deadline: str | None = None,
         type: str | None = None,
         publishers: list[str] | None = None,
+        pinned_records: int | None = None,
+        unattributable_records: int | None = None,
         raw_body: bytes | None = None,
     ) -> None:
         self.status = status
@@ -108,6 +121,8 @@ class APIError(AgledgerError):
         self.retryable = retryable if retryable is not None else (status == 429 or status >= 500)
         self.type = type
         self.publishers = publishers
+        self.pinned_records = pinned_records
+        self.unattributable_records = unattributable_records
         self.doc_url = doc_url
         self.docs = docs
         self.suggestion = suggestion

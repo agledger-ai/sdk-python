@@ -1023,6 +1023,10 @@ class AccountProfile(BaseModel):
     org_id: str | None = Field(None, alias="orgId")
     name: str | None = None
     created_at: str | None = Field(None, alias="createdAt")
+    expires_at: str | None = Field(None, alias="expiresAt")
+    """Expiry of this credential, or ``None`` when it does not expire."""
+    allowed_ips: list[str] | None = Field(None, alias="allowedIps")
+    """IP allowlist enforced on this key, or ``None`` when the key is unrestricted."""
     auth_type: str | None = Field(None, alias="authType")
     """Credential class: ``api_key`` (long-lived ``agl_`` key), ``ephemeral_cert`` (OIDC-bound short-lived signing cert, Mode 2), or ``oidc`` (direct OIDC bearer, Mode 1)."""
     cert: dict[str, Any] | None = None

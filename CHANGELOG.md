@@ -75,6 +75,16 @@ Pinning `publisher` against a Server older than this API release will be rejecte
 
 - **Verifier remediation text drifted from `@agledger/verify-core`.** The module says it mirrors that file exactly, and after a punctuation pass on the TypeScript side six failure codes were telling auditors different things in the two languages. The strings match again, and a new test compares all 29 codes verbatim against the sibling checkout so this cannot drift silently. `suggestion(code)` wording changed for thirteen codes; no verdict or code changed.
 
+### Fixed (declared shapes that did not match the engine)
+
+- **`APIError.pinned_records` and `.unattributable_records`**, the two counts that say why a schema delete was refused. Same trap `publishers` was: `_build_error` builds a fixed kwargs dict, so a field it does not name is unreachable rather than merely untyped, and the recovery hint said the type was still referenced with no way to learn whether that was fixable. The pair is the diagnosis. A non-zero `pinned_records` is fixable by deleting the other publisher's registration instead; `unattributable_records` counts Records naming no registration at all, which block the delete under every label.
+
+- **`AccountProfile.expires_at` and `.allowed_ips`**, both sent by `/v1/auth/me` and neither declared.
+
+- **`schemas.export_schema(publisher=...)`**, sync and async. Without it, an export of a type two publishers offer carried both registrations, whose `versions` entries can collide on the same number with nothing to tell them apart.
+
+`RecordRow.schema_url` needed no change: it was already `str | None`, which is what the engine now sends on a federation-received Record whose schema this Server does not hold. The TypeScript SDK declared it non-nullable and was corrected. `schemas.get()` returns the response body as a `dict`, so the `TypeSchema` field gaps corrected on the TypeScript side (`publisher` among them) never applied here.
+
 ## [1.7.0] - 2026-08-07
 
 ### Fixed

@@ -132,6 +132,12 @@ def _build_error(response: httpx.Response) -> APIError:
         # recovery hint named a list the caller had no way to read.
         "type": body.get("type"),
         "publishers": body.get("publishers"),
+        # Delete-precondition counts. Same trap as `publishers` above: the
+        # recovery hint says the type is still referenced, and without these
+        # the caller cannot tell a fixable pin from an unattributable Record
+        # that blocks the delete under every label.
+        "pinned_records": body.get("pinnedRecords"),
+        "unattributable_records": body.get("unattributableRecords"),
     }
 
     if cls is PermissionDeniedError:

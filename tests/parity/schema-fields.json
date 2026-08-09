@@ -99,6 +99,7 @@
       "optionalFields",
       "parentRecordId",
       "peerDigest",
+      "pinnedRecords",
       "previousStatus",
       "publisher",
       "publishers",
@@ -118,6 +119,7 @@
       "terminalReason",
       "title",
       "type",
+      "unattributableRecords",
       "validTransitions",
       "validationErrors",
       "version"
@@ -171,6 +173,7 @@
       "optionalFields",
       "parentRecordId",
       "peerDigest",
+      "pinnedRecords",
       "previousStatus",
       "publisher",
       "publishers",
@@ -191,6 +194,7 @@
       "terminalReason",
       "title",
       "type",
+      "unattributableRecords",
       "validTransitions",
       "validationErrors",
       "version"
