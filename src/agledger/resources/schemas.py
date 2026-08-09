@@ -105,13 +105,21 @@ class SchemasResource:
         *,
         versions: str | None = None,
         org_id: str | None = None,
+        publisher: str | None = None,
     ) -> dict[str, Any]:
-        """Export a Type schema bundle."""
+        """Export a Type schema bundle.
+
+        Pin ``publisher`` on a type two publishers offer. Without it the engine
+        emits both registrations, whose ``versions`` entries can carry the same
+        number with nothing to tell them apart.
+        """
         params: dict[str, Any] = {}
         if versions is not None:
             params["versions"] = versions
         if org_id is not None:
             params["orgId"] = org_id
+        if publisher is not None:
+            params["publisher"] = publisher
         return self._http.post(f"/v1/schemas/{type}/export", params=params)
 
     def import_(
@@ -238,12 +246,16 @@ class AsyncSchemasResource:
         *,
         versions: str | None = None,
         org_id: str | None = None,
+        publisher: str | None = None,
     ) -> dict[str, Any]:
+        """Export a Type schema bundle. Pin ``publisher`` on an ambiguous type."""
         params: dict[str, Any] = {}
         if versions is not None:
             params["versions"] = versions
         if org_id is not None:
             params["orgId"] = org_id
+        if publisher is not None:
+            params["publisher"] = publisher
         return await self._http.post(f"/v1/schemas/{type}/export", params=params)
 
     async def import_(
