@@ -1120,9 +1120,14 @@ class ConformanceResponse(BaseModel):
     ``criteriaMaxBytesDefault``, ``referencesMaxPerRequest``,
     ``referencesMaxPerRecordDefault``, ``referenceAttributesMaxKeys``,
     ``metadataMaxProperties``, ``recordBodyMaxBytes``,
-    ``delegationMaxDepthDefault``, ``delegationMaxDepthCeiling``. Several are
-    org-configurable, so read these rather than hardcoding: the value here is
-    what THIS Server will accept."""
+    ``delegationMaxDepthDefault``, ``delegationMaxDepthCeiling``,
+    ``cursorMaxLength``, ``paginationLimitMax``, ``searchCursorMaxLength``.
+    Several are org-configurable, so read these rather than hardcoding: the
+    value here is what THIS Server will accept. The three pagination caps bound
+    what a paging client must handle: round-trip ``nextCursor`` verbatim, keep
+    ``?limit=`` at or under ``paginationLimitMax`` for portability, and size
+    cursor storage to ``searchCursorMaxLength``, the widest token any route
+    mints."""
     version: str | None = None
     """AGLedger API version."""
 
