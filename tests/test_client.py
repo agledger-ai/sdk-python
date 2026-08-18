@@ -575,6 +575,65 @@ async def test_async_context_manager():
 # --- Admin API key tests ---
 
 @respx.mock
+def test_admin_list_api_keys_sends_camel_case_filters():
+    """Every filter but ``role`` is multi-word, and the querystring is
+    ``additionalProperties: false``, so a snake_case kwarg reaching the wire
+    unconverted is a 400 and not a filter the server quietly ignores. This
+    method took ``**params`` until 1.9.0, which made single-owner mode
+    unreachable from Python.
+    """
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False, "total": 0})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.list_api_keys(
+        owner_id="own-1",
+        org_id="org-1",
+        owner_type="agent",
+        role="agent",
+        is_active=True,
+        created_before="2026-08-01T00:00:00Z",
+        limit=2,
+        offset=0,
+        cursor="b2Zmc2V0OjE=",
+    )
+
+    params = route.calls.last.request.url.params
+    assert dict(params) == {
+        "ownerId": "own-1",
+        "orgId": "org-1",
+        "ownerType": "agent",
+        "role": "agent",
+        "isActive": "true",
+        "createdBefore": "2026-08-01T00:00:00Z",
+        "limit": "2",
+        "offset": "0",
+        "cursor": "b2Zmc2V0OjE=",
+    }
+
+
+@respx.mock
+def test_admin_list_api_keys_omits_unset_filters():
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False, "total": 0})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.list_api_keys(owner_id="own-1")
+    assert dict(route.calls.last.request.url.params) == {"ownerId": "own-1"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_admin_list_api_keys_sends_camel_case_filters():
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False, "total": 0})
+    )
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
+        await client.admin.list_api_keys(owner_id="own-1", is_active=False)
+    assert dict(route.calls.last.request.url.params) == {"ownerId": "own-1", "isActive": "false"}
+
+
+@respx.mock
 def test_admin_toggle_api_key():
     response_json = {"id": "key-1", "isActive": True}
     respx.patch("https://agledger.example.com/v1/admin/api-keys/key-1").mock(
