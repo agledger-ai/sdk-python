@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-17T23:02:03.272Z",
-  "sourceUrl": "/tmp/claude-1000/-home-mcoop-projects-agledger-agents/2df2e356-4648-4481-8535-8900aa38415d/scratchpad/spec-rc-live.json (AGLedger API v1.4.0)",
+  "generatedAt": "2026-08-18T02:27:05.765Z",
+  "sourceUrl": "local openapi.json from agledger-api main @ 4d52450b (post-v1.4.0, untagged; /health still reports 1.4.0)",
   "count": 193,
   "routes": [
     {
@@ -251,6 +251,7 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
+        "cursor",
         "limit",
         "offset",
         "status"
@@ -526,8 +527,10 @@
       "bodyFields": [],
       "queryFields": [
         "createdBefore",
+        "cursor",
         "isActive",
         "limit",
+        "offset",
         "orgId",
         "ownerId",
         "ownerType",
@@ -1639,6 +1642,7 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
+        "cursor",
         "limit",
         "offset"
       ],
@@ -1834,6 +1838,7 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
+        "cursor",
         "includeDisabled",
         "limit",
         "offset",
