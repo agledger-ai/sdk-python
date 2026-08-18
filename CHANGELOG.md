@@ -4,7 +4,11 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.9.0] - 2026-08-17
+## [1.9.0] - 2026-08-18
+
+### Added
+
+- **Three pagination caps documented on `Conformance.limits`.** `cursorMaxLength`, `paginationLimitMax`, and `searchCursorMaxLength` are published by the Server and reached callers through the untyped dict with no documentation. They bound what a paging client has to handle: round-trip ``nextCursor`` verbatim, keep ``limit`` at or under ``paginationLimitMax`` for portability across routes, and size cursor storage to ``searchCursorMaxLength``, the widest token any route mints.
 
 ### Fixed (calls that could never have worked)
 
