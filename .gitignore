@@ -14,3 +14,8 @@ sbom.cdx.json
 .DS_Store
 .env
 .env.*
+
+# `uv run` writes this; it is not tracked, and an untracked file here lands in
+# the sdist (hatchling packs the whole tree), which would ship a lockfile the
+# release build never produces.
+uv.lock
