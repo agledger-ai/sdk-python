@@ -37,7 +37,7 @@ from agledger.verify.types import (
 )
 # The shared verification core lives in verify_export: the per-entry chain walk
 # (verify_entry), the key registry (KeyCache / RegisteredKey), and the
-# merkle_root / verify_cose_sign1 primitives. Reused here verbatim — the dump
+# merkle_root / verify_cose_sign1 primitives. Reused here verbatim: the dump
 # verifier adds only the dump-structural passes the per-entry walk does not model.
 from agledger.verify.verify_export import (
     KeyCache,
@@ -114,7 +114,7 @@ def _chain_key(e: DumpRow) -> str:
     if rid is not None:
         return str(rid)
     org_id = as_mapping(e.get("payload")).get("orgId")
-    # ?? '__platform__' — only None/undefined becomes platform; "" is kept.
+    # ?? '__platform__': only None/undefined becomes platform; "" is kept.
     return f"schema:{org_id if org_id is not None else '__platform__'}"
 
 
@@ -304,7 +304,7 @@ def verify_vault_chains(
             Failure(
                 code="CHAIN_EMPTY",
                 message=(
-                    "audit_vault contains zero entries — empty or truncated vault, "
+                    "audit_vault contains zero entries: empty or truncated vault, "
                     "refusing to report clean."
                 ),
             )
@@ -312,7 +312,7 @@ def verify_vault_chains(
         return VaultChainsReport(0, 0, len(checkpoints), failures)
 
     # Format gate: format 2.0 requires cose_sign1 on every vault row. A row
-    # lacking it is a pre-cutover shape — fail closed rather than parse it.
+    # lacking it is a pre-cutover shape: fail closed rather than parse it.
     pre_cutover = [e for e in entries if not e.get("cose_sign1")]
     if pre_cutover:
         first = pre_cutover[0]
@@ -320,7 +320,7 @@ def verify_vault_chains(
             Failure(
                 code="UNSUPPORTED_FORMAT",
                 message=(
-                    f"audit_vault row {first.get('id')} lacks cose_sign1 — pre-2.0 dump "
+                    f"audit_vault row {first.get('id')} lacks cose_sign1: pre-2.0 dump "
                     f"shape. This verifier reads exportFormatVersion 2.0 / RFC8949-CDE; "
                     f"re-export from a current AGLedger instance."
                 ),
@@ -366,7 +366,7 @@ def _detect_checkpoint_forks(checkpoints: list[DumpRow], failures: list[Failure]
                     message=(
                         f"Org {cp.get('org_id')}: two checkpoints at tree_size "
                         f"{cp.get('tree_size')} carry different root_hash "
-                        f"({prior.get('id')} vs {cp.get('id')}) — engine fork or key compromise"
+                        f"({prior.get('id')} vs {cp.get('id')}): engine fork or key compromise"
                     ),
                     scope_id=_as_str(cp.get("org_id")),
                     tree_size=_as_int(cp.get("tree_size")),
@@ -398,7 +398,7 @@ def _verify_one_org_admin_reads_log(
                     leaf_index=_as_int(leaf.get("leaf_index")),
                 )
             )
-            return  # a gap stops the whole org — the log is incomplete
+            return  # a gap stops the whole org: the log is incomplete
         # leaf_hash is sha256(cose_sign1) post-cutover.
         envelope = base64.b64decode(str(leaf.get("cose_sign1")))
         recomputed = hashlib.sha256(envelope).hexdigest()
@@ -509,7 +509,7 @@ def verify_org_admin_reads_chains(
 
     _detect_checkpoint_forks(checkpoints, failures)
 
-    # Walk every org with leaves OR checkpoints — a checkpoint over an empty
+    # Walk every org with leaves OR checkpoints: a checkpoint over an empty
     # leaf set would otherwise slip through silently.
     org_ids = set(leaves_by_org) | set(checkpoints_by_org)
     for org_id in org_ids:
@@ -521,7 +521,7 @@ def verify_org_admin_reads_chains(
             failures,
         )
 
-    # Witness cosignatures are reported, not verified — the engine cannot verify
+    # Witness cosignatures are reported, not verified: the engine cannot verify
     # customer-chosen witness keys because their algorithm is untyped.
     witness_cosigned = [
         WitnessCosignedCheckpoint(
@@ -543,7 +543,7 @@ def verify_org_admin_reads_chains(
 def verify_dump(dump: Dump) -> VerifyReport:
     """Verify a full-vault dump. Runs the vault-chain pass and the
     org_admin_reads pass independently and ANDs their verdicts."""
-    # Build the signing-key registry once and share it across both passes — they
+    # Build the signing-key registry once and share it across both passes; they
     # draw from the same keys, so this also shares the lazy key-DER cache.
     keys = _build_vault_key_registry(dump.signing_keys)
     vault = verify_vault_chains(

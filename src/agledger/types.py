@@ -1,5 +1,5 @@
 """
-AGLedger SDK — Type definitions.
+AGLedger SDK: Type definitions.
 Mirrors the TypeScript SDK types. All models are Pydantic v2.
 """
 
@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class NextStep(BaseModel):
-    """A suggested next API call — guides agents through the lifecycle."""
+    """A suggested next API call: guides agents through the lifecycle."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -42,7 +42,7 @@ RecordType = (
     ]
     | str
 )
-"""Record Type identifier. The API ships NO built-in contract types — your org
+"""Record Type identifier. The API ships NO built-in contract types: your org
 owns its entire type namespace and you register your own via POST /v1/schemas.
 Every new org is auto-seeded with the four example contracts named above (use,
 edit, rename, or delete them); listed only as a discovery hint. Typed as an open
@@ -78,7 +78,7 @@ keyed by a real record id. Typed as the open ``Literal | str`` union so a
 server-added chain kind is not a break."""
 Verdict = Literal["accept", "reject"] | str
 """The principal verdict. Known values: ``accept``, ``reject``. Typed as the
-open ``Literal | str`` union for forward compatibility — new API versions
+open ``Literal | str`` union for forward compatibility: new API versions
 may add verdicts; code generic over ``Verdict`` then composes through
 ``submit_verdict`` without an extra narrowing step."""
 EuAiActRiskTier = Literal["unacceptable", "high", "limited", "minimal"]
@@ -116,9 +116,9 @@ class SignedStatement(BaseModel):
     previous_hash: str | None = Field(None, alias="previousHash")
     """leafHash of the prior entry (null only on chainPosition === 1)."""
     signing_key_id: str | None = Field(None, alias="signingKeyId")
-    """Vault signing key id — resolves to a public key at GET /v1/verification-keys."""
+    """Vault signing key id: resolves to a public key at GET /v1/verification-keys."""
     signed_at: str | None = Field(None, alias="signedAt")
-    """Signed instant of the head Signed Statement — the CWT ``iat`` claim (second
+    """Signed instant of the head Signed Statement: the CWT ``iat`` claim (second
     precision) sealed in the COSE_Sign1 protected header (API #877). THE authoritative
     timestamp for time-anchored contracts (wait windows, notice clocks); the Record's
     ``created_at`` is a millisecond DB clock that only approximates it. Null if the
@@ -156,7 +156,7 @@ class EntityReference(BaseModel):
 
 
 class SettlementSignalSummary(BaseModel):
-    """Settlement Signal projected onto a Record — the SETTLE/HOLD/RELEASE
+    """Settlement Signal projected onto a Record: the SETTLE/HOLD/RELEASE
     recommendation bound to the terminal verdict, plus federation delivery state."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
@@ -208,7 +208,7 @@ class RecordIntegrity(BaseModel):
     integrity_level: Literal[
         "hash_chain_only", "hash_chain_partial_signatures", "hash_chain_and_signatures", "invalid"
     ] = Field(alias="integrityLevel")
-    """Strength of the chain verification — whether every entry was signed or only hash-linked."""
+    """Strength of the chain verification: whether every entry was signed or only hash-linked."""
     reason: str | None = None
     """Failure class when ``verified`` is False (e.g. ``record_projection_drift``); None when verified."""
     entries: int
@@ -220,7 +220,7 @@ class RecordIntegrity(BaseModel):
 
 
 class RecordRow(BaseModel):
-    """A Record — a registered commitment between a principal and a performer."""
+    """A Record: a registered commitment between a principal and a performer."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -235,7 +235,7 @@ class RecordRow(BaseModel):
     created_by_key_id: str | None = Field(None, alias="createdByKeyId")
     """API key that created this Record."""
     type: str
-    """Record Type — a contract type registered for the org (GET /v1/schemas)."""
+    """Record Type: a contract type registered for the org (GET /v1/schemas)."""
     contract_version: str | None = Field(None, alias="contractVersion")
     """Type schema version."""
     platform: str
@@ -245,7 +245,7 @@ class RecordRow(BaseModel):
     status: RecordStatus | str
     """Current lifecycle status."""
     criteria: dict[str, Any]
-    """Acceptance criteria — what the performer must deliver."""
+    """Acceptance criteria: what the performer must deliver."""
     tolerance: dict[str, Any] | None = None
     """Tolerance bands for numeric criteria."""
     deadline: str | None = None
@@ -503,7 +503,7 @@ class CompletionSettlementSignal(BaseModel):
 
 
 class Completion(BaseModel):
-    """A Completion — structured evidence submitted by a performer."""
+    """A Completion: structured evidence submitted by a performer."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -603,7 +603,7 @@ class DisputeEvidence(BaseModel):
 
 
 class DisputeResponse(BaseModel):
-    """Response envelope from GET /v1/records/{id}/dispute — includes both dispute and evidence."""
+    """Response envelope from GET /v1/records/{id}/dispute: includes both dispute and evidence."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -613,7 +613,7 @@ class DisputeResponse(BaseModel):
 
 WebhookEventType = (
     Literal[
-        # Wildcard — subscribe to every event type
+        # Wildcard: subscribe to every event type
         "*",
         # Record lifecycle
         "record.created",
@@ -720,7 +720,7 @@ class VerdictResult(BaseModel):
     verdict: str
     recommendation: str
     record_status: RecordStatus | str | None = Field(None, alias="recordStatus")
-    """Record status after the verdict settled — FULFILLED (accept) or FAILED (reject),
+    """Record status after the verdict settled: FULFILLED (accept) or FAILED (reject),
     same vocabulary as the Record GET (API #876). Surfaced inline so the caller learns
     where the Record landed without a follow-up fetch."""
     reporter_type: str = Field(alias="reporterType")
@@ -769,7 +769,7 @@ class AuditExportEntry(BaseModel):
     The engine emits ``chainPosition`` + ``createdAt`` (v0.25.x and later);
     ``position`` + ``timestamp`` are the pre-v0.25 names, kept for backward
     compatibility with old exports. Either side may be absent on a given wire,
-    so both are typed optional — consumers should prefer the canonical names
+    so both are typed optional: consumers should prefer the canonical names
     and fall back to the legacy ones."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
@@ -777,7 +777,7 @@ class AuditExportEntry(BaseModel):
     chain_position: int | None = Field(None, alias="chainPosition")
     """Per-record monotonic chain position (1-indexed). Canonical field on current exports."""
     position: int | None = None
-    """Pre-v0.25 alias for ``chain_position`` — kept so old exports still parse."""
+    """Pre-v0.25 alias for ``chain_position``: kept so old exports still parse."""
     created_at: str | None = Field(None, alias="createdAt")
     """Canonical entry timestamp (engine v0.25+)."""
     timestamp: str | None = None
@@ -786,9 +786,9 @@ class AuditExportEntry(BaseModel):
     actor_id: str | None = Field(None, alias="actorId")
     actor_role: str | None = Field(None, alias="actorRole")
     actor_owner_id: str | None = Field(None, alias="actorOwnerId")
-    """F-705: owner id of the API key — org id (admin), agent id (agent), or platform sentinel."""
+    """F-705: owner id of the API key: org id (admin), agent id (agent), or platform sentinel."""
     actor_display_name: str | None = Field(None, alias="actorDisplayName")
-    """F-705: human-readable label for the actor owner. Display PROJECTION — NOT signature-covered."""
+    """F-705: human-readable label for the actor owner. Display PROJECTION: NOT signature-covered."""
     actor_owner_type: str | None = Field(None, alias="actorOwnerType")
     """F-705: owner table discriminator (``agent`` / ``org`` / ``platform``); pairs with ``actor_owner_id``."""
     actor_oidc_iss: str | None = Field(None, alias="actorOidcIss")
@@ -797,7 +797,7 @@ class AuditExportEntry(BaseModel):
     entry_type: str = Field(alias="entryType")
     human_readable_label: str | None = Field(None, alias="humanReadableLabel")
     """F-711: auditor-readable label for ``entry_type`` (e.g. RECORD_STATE_CHANGE → "Record state
-    transitioned"). Display PROJECTION — NOT signature-covered; the canonical machine-readable name
+    transitioned"). Display PROJECTION: NOT signature-covered; the canonical machine-readable name
     stays in ``entry_type``. Replaced the pre-launch ``description`` placeholder (engine v0.26.x+)."""
     payload: dict[str, Any]
     actor: AuditActor | None = None
@@ -805,7 +805,7 @@ class AuditExportEntry(BaseModel):
     evidence: dict[str, Any] | None = None
     """Completion evidence body, present only when the export was fetched with
     ``evidence=True`` AND this is a COMPLETION_SUBMITTED entry (API #870). UNSIGNED
-    projection — the chain binds it by hash only: recompute SHA-256 over the RFC 8785
+    projection: the chain binds it by hash only: recompute SHA-256 over the RFC 8785
     (JCS) canonicalization of this object and compare against ``payload.evidenceHash``.
     Encrypted-mode records inline the stored ciphertext envelope."""
     integrity: dict[str, Any]
@@ -860,14 +860,14 @@ class AuditSignatureCoverage(BaseModel):
 
 
 class AuditExportMetadata(BaseModel):
-    """Metadata envelope on a record audit export — mirrors TS RecordAuditExport.exportMetadata."""
+    """Metadata envelope on a record audit export: mirrors TS RecordAuditExport.exportMetadata."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     record_id: str = Field(alias="recordId")
     org_id: str | None = Field(None, alias="orgId")
     type: str
-    """Record Type identifier — a contract type registered for the org."""
+    """Record Type identifier: a contract type registered for the org."""
     operating_mode: Literal["cleartext", "encrypted"] | None = Field(None, alias="operatingMode")
     export_date: str = Field(alias="exportDate")
     total_entries: int = Field(alias="totalEntries")
@@ -885,7 +885,7 @@ class AuditExportMetadata(BaseModel):
             "cert_missing",
             "agent_signature_invalid",
             # API #888/#893 (v1.3.2): vault fails closed on per-entry signature
-            # verification — signature did not verify / signing key unresolvable /
+            # verification: signature did not verify / signing key unresolvable /
             # denormalized signing_key_id column drifted from the signed kid.
             "signature_invalid",
             "signing_key_unknown",
@@ -910,13 +910,13 @@ class AuditExportMetadata(BaseModel):
     export_format_version: str = Field(alias="exportFormatVersion")
     """`2.0` since the COSE_Sign1 cutover."""
     canonicalization: str
-    """`RFC8949-CDE` since 2.0 — deterministic CBOR per RFC 8949 §4.2.1."""
+    """`RFC8949-CDE` since 2.0: deterministic CBOR per RFC 8949 §4.2.1."""
     signing_public_key: str | None = Field(None, alias="signingPublicKey")
     signing_public_keys: dict[str, str] | None = Field(None, alias="signingPublicKeys")
 
 
 class VaultCheckpoint(BaseModel):
-    """A row from GET /v1/audit-vault/checkpoints — signed Merkle anchor."""
+    """A row from GET /v1/audit-vault/checkpoints: signed Merkle anchor."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -1003,7 +1003,7 @@ class ReputationScore(BaseModel):
     efficiency_score: float | None = Field(None, alias="efficiencyScore")
     composite_score: float | None = Field(None, alias="compositeScore")
     confidence_level: float | None = Field(None, alias="confidenceLevel")
-    """Statistical confidence (0-1) — a number, not a label. Null until the agent has history."""
+    """Statistical confidence (0-1): a number, not a label. Null until the agent has history."""
     lifetime_records: int = Field(0, alias="lifetimeRecords")
     lifetime_verdicts: int = Field(0, alias="lifetimeVerdicts")
     lifetime_accepted: int = Field(0, alias="lifetimeAccepted")
@@ -1050,9 +1050,9 @@ class AccountProfile(BaseModel):
     auth_type: str | None = Field(None, alias="authType")
     """Credential class: ``api_key`` (long-lived ``agl_`` key), ``ephemeral_cert`` (OIDC-bound short-lived signing cert, Mode 2), or ``oidc`` (direct OIDC bearer, Mode 1)."""
     cert: dict[str, Any] | None = None
-    """Present (non-null) only for ``ephemeral_cert`` sessions — the bound short-lived signing cert (``id``, ``thumbprint``, ``expiresAt``)."""
+    """Present (non-null) only for ``ephemeral_cert`` sessions: the bound short-lived signing cert (``id``, ``thumbprint``, ``expiresAt``)."""
     oidc: dict[str, Any] | None = None
-    """Present (non-null) for OIDC-bound sessions — the upstream IdP identity (``iss``, ``sub``)."""
+    """Present (non-null) for OIDC-bound sessions: the upstream IdP identity (``iss``, ``sub``)."""
 
 
 T = TypeVar("T")
@@ -1252,7 +1252,7 @@ class VerificationKey(BaseModel):
     public_key: str = Field(alias="publicKey")
     """Base64-encoded SPKI DER public key."""
     public_key_raw: str | None = Field(None, alias="publicKeyRaw")
-    """Base64 of the raw 32-byte Ed25519 key — for raw-key verifiers (RFC 9421 / Standard-Webhooks-style). Same key as ``public_key``, different encoding."""
+    """Base64 of the raw 32-byte Ed25519 key: for raw-key verifiers (RFC 9421 / Standard-Webhooks-style). Same key as ``public_key``, different encoding."""
     status: str
     activated_at: str | None = Field(None, alias="activatedAt")
     """May be a full ISO timestamp (engine ≥ v0.26.x) or a bare date string
@@ -1268,7 +1268,7 @@ class VerificationKeysResponse(BaseModel):
     data: list[VerificationKey]
     canonicalization: str
     hash_algorithm: str | None = Field(None, alias="hashAlgorithm")
-    """Optional — not emitted by every server build (F-706). Engines that
+    """Optional: not emitted by every server build (F-706). Engines that
     emit it set ``"SHA-256"``; absent means the implicit COSE/Ed25519 default."""
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")

@@ -18,7 +18,7 @@ class CapabilitiesResource:
     def set(self, agent_id: str, *, contract_types: list[str]) -> AgentCapabilities:
         """Set the authenticated agent's own capabilities (replaces all).
 
-        Body field is ``contractTypes`` on the wire — pass Python ``contract_types``.
+        Body field is ``contractTypes`` on the wire: pass Python ``contract_types``.
         """
         return AgentCapabilities.model_validate(
             self._http.put(f"/v1/agents/{agent_id}/capabilities", json={"contractTypes": contract_types})

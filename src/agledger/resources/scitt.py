@@ -50,7 +50,7 @@ class ScittKeysResource:
     def list(self) -> bytes:
         """Fetch the Transparency Service's COSE_KeySet (unauthenticated).
 
-        Returned as CBOR bytes — an array of COSE_Key maps.
+        Returned as CBOR bytes: an array of COSE_Key maps.
         """
         return self._http.get_bytes(
             "/.well-known/scitt-keys", accept="application/cose-key-set", auth_override="none"
@@ -64,7 +64,7 @@ class ScittKeysResource:
 
 
 class ScittResource:
-    """SCITT/SCRAPI transparency surface — signed-statement entries and keys."""
+    """SCITT/SCRAPI transparency surface: signed-statement entries and keys."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -73,7 +73,7 @@ class ScittResource:
 
     def get_configuration(self) -> dict[str, Any]:
         """Fetch the SCRAPI discovery document (``/.well-known/scitt-configuration``,
-        unauthenticated) — registration/resolution/checkpoint endpoints plus
+        unauthenticated): registration/resolution/checkpoint endpoints plus
         supported signature algorithms and registration policies. Returns JSON."""
         return self._http.get("/.well-known/scitt-configuration", auth_override="none")
 
@@ -115,7 +115,7 @@ class AsyncScittKeysResource:
 
 
 class AsyncScittResource:
-    """SCITT/SCRAPI transparency surface — signed-statement entries and keys."""
+    """SCITT/SCRAPI transparency surface: signed-statement entries and keys."""
 
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
@@ -124,7 +124,7 @@ class AsyncScittResource:
 
     async def get_configuration(self) -> dict[str, Any]:
         """Fetch the SCRAPI discovery document (``/.well-known/scitt-configuration``,
-        unauthenticated) — registration/resolution/checkpoint endpoints plus
+        unauthenticated): registration/resolution/checkpoint endpoints plus
         supported signature algorithms and registration policies. Returns JSON."""
         return await self._http.get("/.well-known/scitt-configuration", auth_override="none")
 

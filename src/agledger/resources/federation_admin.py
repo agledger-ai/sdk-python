@@ -1,4 +1,4 @@
-"""Federation admin resource — operator-side management of peer servers + DLQ."""
+"""Federation admin resource: operator-side management of peer servers + DLQ."""
 
 from __future__ import annotations
 

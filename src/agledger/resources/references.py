@@ -1,4 +1,4 @@
-"""References resource — reverse lookup by external ID."""
+"""References resource: reverse lookup by external ID."""
 
 from __future__ import annotations
 

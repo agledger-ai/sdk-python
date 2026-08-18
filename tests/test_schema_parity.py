@@ -3,19 +3,19 @@
 The field-level analogue of test_parity.py, and the Python mirror of the TS
 ``schema-parity.test.ts``. ``routes.json`` pins the route surface; the shared
 ``schema-fields.json`` snapshot pins the per-model FIELD surface. Together they
-catch the two ways the API drifts from the SDK — endpoints AND field shapes.
+catch the two ways the API drifts from the SDK: endpoints AND field shapes.
 
 This guard exists because route-only parity silently missed a full minor's worth
 of field renames/additions (0.26.x). A clean route diff (194/194) hid all of it.
 The TS SDK gained this guard in the 0.26.x wave; Python had only hand-written
-``test_response_contract.py`` regressions for specific past bugs — no snapshot
+``test_response_contract.py`` regressions for specific past bugs: no snapshot
 diff. This closes that TS/Python asymmetry: the Python models are now held to
 the same field snapshot, so the moment the API adds/renames a field a mapped
 model doesn't carry, this fails too.
 
 Comparison is on WIRE names (the camelCase the API emits): each Pydantic field's
 wire name is its ``alias`` if set, else the attribute name. We introspect
-``model_fields`` at runtime rather than parsing source — Pydantic already knows
+``model_fields`` at runtime rather than parsing source: Pydantic already knows
 the alias, so there is nothing to re-derive or get wrong.
 
 The snapshot is vendored into this repo at ``tests/parity/schema-fields.json``
@@ -46,13 +46,13 @@ _SNAPSHOT_PATH = Path(__file__).resolve().parent / "parity" / "schema-fields.jso
 
 # API component -> Python model. Mirrors the TS ALIASES exactly, by design: the
 # Python model names track the TS interface names. The two diverge from the API
-# component name where the SDK wraps or renames — the flat ``DisputeResponse``
+# component name where the SDK wraps or renames: the flat ``DisputeResponse``
 # component is the SDK's ``Dispute`` (the SDK DisputeResponse is a
 # {dispute, evidence} GET wrapper); ``WebhookSubscription`` is ``Webhook``;
 # ``NextStepAction`` is ``NextStep``.
 #
 # ``WebhookDelivery`` is intentionally absent: Python's ``list_deliveries``
-# returns ``Page[dict[str, Any]]`` (untyped rows), not a typed model — there is
+# returns ``Page[dict[str, Any]]`` (untyped rows), not a typed model; there is
 # nothing to drift-check. TS models it; Python doesn't. Tracked as a known,
 # deliberate divergence, not a gap this guard should fail on.
 ALIASES: dict[str, type[BaseModel]] = {
@@ -68,13 +68,13 @@ ALIASES: dict[str, type[BaseModel]] = {
 
 # Snapshot components the Python SDK deliberately does NOT model with a typed
 # class (so there is nothing to field-check). Every snapshot component must be
-# either in ALIASES or here — the coverage test below enforces that, so a NEW
+# either in ALIASES or here: the coverage test below enforces that, so a NEW
 # API component can't be silently skipped on the Python side (a future typed
 # model for any of these must move it from here into ALIASES).
 EXCLUDED_COMPONENTS: set[str] = {
     "WebhookDelivery",  # returned as Page[dict]; no typed model (see ALIASES note)
     "ErrorResponse",    # error envelope, surfaced via the exception hierarchy, not a data model
-    "RateLimitError",   # ditto — error shape, not a response model
+    "RateLimitError",   # ditto: error shape, not a response model
 }
 
 # SDK-only fields that are intentional, not drift. Keyed by API component name.
@@ -86,7 +86,7 @@ ALLOWED_SDK_ONLY: dict[str, set[str]] = {
 
 
 def _wire_fields(model_cls: type[BaseModel]) -> set[str]:
-    """The wire (camelCase) field names a model declares — alias if set, else
+    """The wire (camelCase) field names a model declares: alias if set, else
     the attribute name. This is what the model can deserialize by name from an
     API response."""
     return {(fi.alias or name) for name, fi in model_cls.model_fields.items()}
@@ -106,7 +106,7 @@ def snapshot() -> dict[str, list[str]]:
 def test_model_covers_every_api_field(
     snapshot: dict[str, list[str]], api_name: str, model_cls: type[BaseModel]
 ) -> None:
-    """The Python model must carry every field the API component declares —
+    """The Python model must carry every field the API component declares,
     else a consumer can't see it as a typed attribute (it lands in extras)."""
     api_fields = snapshot.get(api_name)
     assert api_fields is not None, f"API component {api_name} missing from snapshot"

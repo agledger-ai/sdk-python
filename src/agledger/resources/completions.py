@@ -24,7 +24,7 @@ class CompletionsResource:
 
         The API infers agent identity from the bearer token, so no agent_id
         parameter is needed. ``evidence_hash`` is the client-computed SHA-256 of
-        the canonicalized evidence (required in encrypted mode — the server
+        the canonicalized evidence (required in encrypted mode: the server
         cannot compute it). To carry AI-agent rationale, declare a field in your
         Type's ``completionSchema`` and put it inside ``evidence``; the server
         rejects unknown root-level keys.
@@ -66,7 +66,7 @@ class AsyncCompletionsResource:
 
         ``evidence_hash`` is the client-computed SHA-256 of the canonicalized
         evidence (required in encrypted mode). Carry AI-agent rationale inside
-        ``evidence`` via a ``completionSchema`` field — the server rejects
+        ``evidence`` via a ``completionSchema`` field: the server rejects
         unknown root-level keys.
         """
         body: dict[str, Any] = {"evidence": evidence}

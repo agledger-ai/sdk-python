@@ -2,7 +2,7 @@
 
 The cross-language behavioural contract is asserted by the dump conformance
 corpus in ``test_conformance.py``; these tests cover the pieces that live only in
-the dump package — the loader's fail-closed IO, the Merkle primitive, fork
+the dump package: the loader's fail-closed IO, the Merkle primitive, fork
 detection, and the CLI's auto-detect + exit-code wiring.
 """
 
@@ -163,7 +163,7 @@ def test_cli_quiet_suppresses_stdout(capsys: pytest.CaptureFixture[str]) -> None
 
 def test_cli_export_file_detected(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # A minimal export with an unsupported version forces a deterministic FAIL
-    # through the export path — the point is that the file branch fired.
+    # through the export path: the point is that the file branch fired.
     doc = {
         "exportMetadata": {
             "recordId": "rec-1",

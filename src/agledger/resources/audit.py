@@ -1,4 +1,4 @@
-"""Audit resource — verifiable read-trail surface (SCITT-style org-reads checkpoints)."""
+"""Audit resource: verifiable read-trail surface (SCITT-style org-reads checkpoints)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from agledger.types import OrgReadsCheckpoint, OrgReadsInclusionProof, VaultChec
 
 
 class OrgReadsCheckpointsResource:
-    """Org-admin reads checkpoint surface — SCITT-style signed tree heads
+    """Org-admin reads checkpoint surface: SCITT-style signed tree heads
     (``/v1/audit/org-reads/checkpoints/*``). Each cross-party admin read is
     logged into a per-org Merkle log and periodically anchored."""
 
@@ -36,7 +36,7 @@ class OrgReadsCheckpointsResource:
         witness_signature: str,
     ) -> OrgReadsCheckpoint:
         """Attach a witness cosignature to a checkpoint. The witness's signature
-        format/algorithm is the customer's choice — the API stores the bytes verbatim."""
+        format/algorithm is the customer's choice; the API stores the bytes verbatim."""
         return OrgReadsCheckpoint.model_validate(
             self._http.post(
                 f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/cosign",
@@ -92,7 +92,7 @@ class AsyncOrgReadsCheckpointsResource:
 
 
 class VaultCheckpointsResource:
-    """Vault checkpoint surface — per-record 6h signed Merkle anchors that survive
+    """Vault checkpoint surface: per-record 6h signed Merkle anchors that survive
     audit_vault TRUNCATE/DELETE. Pair with ``records.get_audit_export()`` to
     cross-check the live chain against checkpoint anchors offline."""
 
@@ -136,10 +136,10 @@ class AsyncVaultCheckpointsResource:
 
 
 class AuditResource:
-    """Audit resource — verifiable read-trail + vault-checkpoint surface.
+    """Audit resource: verifiable read-trail + vault-checkpoint surface.
 
-    - ``org_reads_checkpoints`` — SCITT-style cross-party read proofs.
-    - ``vault_checkpoints`` — per-record signed Merkle anchors used to detect
+    - ``org_reads_checkpoints``: SCITT-style cross-party read proofs.
+    - ``vault_checkpoints``: per-record signed Merkle anchors used to detect
       audit_vault truncation / out-of-band tampering offline.
     """
 
@@ -149,10 +149,10 @@ class AuditResource:
 
 
 class AsyncAuditResource:
-    """Audit resource — verifiable read-trail + vault-checkpoint surface.
+    """Audit resource: verifiable read-trail + vault-checkpoint surface.
 
-    - ``org_reads_checkpoints`` — SCITT-style cross-party read proofs.
-    - ``vault_checkpoints`` — per-record signed Merkle anchors used to detect
+    - ``org_reads_checkpoints``: SCITT-style cross-party read proofs.
+    - ``vault_checkpoints``: per-record signed Merkle anchors used to detect
       audit_vault truncation / out-of-band tampering offline.
     """
 

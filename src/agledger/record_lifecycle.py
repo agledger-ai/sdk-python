@@ -1,5 +1,5 @@
 """
-Record lifecycle state machine — customer-facing display statuses.
+Record lifecycle state machine: customer-facing display statuses.
 
 The API maps internal states to these display statuses; this table reflects
 what SDK consumers actually observe. Unknown statuses return empty arrays

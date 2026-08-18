@@ -10,7 +10,7 @@ Each vector pairs a real-shaped document with an expected verdict and a canonica
 and these Python verifiers all run the SAME corpus, so a wire-format change that
 breaks one language's verifier is caught here in lockstep.
 
-This MUST fail loudly on any mismatch — a ``pass`` vector returning invalid, or a
+This MUST fail loudly on any mismatch: a ``pass`` vector returning invalid, or a
 ``fail`` vector returning the wrong code, is the exact drift the corpus exists to
 catch. On the EXPORT runner, dump-only codes (inputs the ``/audit-export`` wire
 cannot carry) are skipped with an explicit reason; the dump runner covers them.
@@ -83,10 +83,10 @@ _VECTORS = _export_vectors()
 
 def test_manifest_present_and_nonempty() -> None:
     """Guard: the corpus must exist and carry export vectors. A missing corpus
-    must FAIL loudly here, not skip — a silently absent corpus would green the
+    must FAIL loudly here, not skip: a silently absent corpus would green the
     whole anti-drift gate while running zero vectors."""
     assert _MANIFEST.exists(), (
-        f"conformance corpus manifest missing at {_MANIFEST} — the anti-drift gate "
+        f"conformance corpus manifest missing at {_MANIFEST}: the anti-drift gate "
         f"cannot run; vendor the corpus (or pull the api#665 artifact) before testing"
     )
     manifest = _load_manifest()
@@ -164,10 +164,10 @@ _DUMP_VECTORS = _dump_vectors()
 
 def test_dump_manifest_present_and_nonempty() -> None:
     """Guard: the dump corpus must exist and carry the full required code set.
-    A missing corpus must FAIL loudly here, not skip — otherwise the gate greens
+    A missing corpus must FAIL loudly here, not skip; otherwise the gate greens
     while running zero dump vectors."""
     assert _DUMP_MANIFEST.exists(), (
-        f"dump conformance corpus manifest missing at {_DUMP_MANIFEST} — the "
+        f"dump conformance corpus manifest missing at {_DUMP_MANIFEST}: the "
         f"anti-drift gate cannot run; vendor the corpus (or pull the api#665 "
         f"artifact) before testing"
     )

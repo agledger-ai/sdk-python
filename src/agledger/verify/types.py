@@ -1,11 +1,11 @@
 """Dump-format shapes and report types for the offline full-vault verifier.
 
 Dump rows are read straight from NDJSON as plain ``dict`` (snake_case keys, the
-DB column names) — like the TS ``loader.ts``, the loader does not validate row
+DB column names): like the TS ``loader.ts``, the loader does not validate row
 shapes beyond what the walk needs; the verifier itself catches semantic
 problems. Only the OUTPUT (report) side is typed, so callers get a stable shape.
 
-This module deliberately imports neither ``pydantic`` nor ``httpx`` — the dump
+This module deliberately imports neither ``pydantic`` nor ``httpx``: the dump
 verification path's only third-party needs are ``cbor2`` + ``cryptography``.
 """
 
@@ -44,7 +44,7 @@ class Failure:
     signing_key_id: str | None = None
 
     def to_json(self) -> dict[str, Any]:
-        """camelCase dict, omitting unset optional fields — byte-compatible with
+        """camelCase dict, omitting unset optional fields: byte-compatible with
         the TS ``Failure`` JSON (TS ``JSON.stringify`` drops ``undefined``)."""
         out: dict[str, Any] = {"code": self.code, "message": self.message}
         optional = {

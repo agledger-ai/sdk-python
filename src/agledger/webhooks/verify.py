@@ -1,5 +1,5 @@
 """
-AGLedger SDK — Webhook signature verification.
+AGLedger SDK: Webhook signature verification.
 Mirrors the TypeScript SDK's webhooks/verify.ts.
 """
 
@@ -229,7 +229,7 @@ def verify_rfc9421(
     signature under the algorithm that key commits to, and enforces the
     ``created`` replay window.
 
-    :param headers: Delivery HTTP headers — must include ``content-digest``,
+    :param headers: delivery HTTP headers, which must include ``content-digest``,
         ``signature-input``, ``signature``, and ``x-agledger-idempotency-key``.
         Casing and multi-value (list) headers are handled.
     :param raw_body: The raw request body string (do NOT parse JSON first).
@@ -277,7 +277,7 @@ def verify_rfc9421(
     except Exception:
         return False
 
-    # Covered components, in declared order — only the two known header
+    # Covered components, in declared order: only the two known header
     # components are supported (derived components are deliberately excluded).
     inner = params[params.index("(") + 1 : params.index(")")]
     covered = [c.strip().strip('"') for c in inner.split()] if inner.strip() else []

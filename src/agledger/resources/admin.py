@@ -1,4 +1,4 @@
-"""Admin resource — org governance, key management, org provisioning,
+"""Admin resource: org governance, key management, org provisioning,
 vault inspection, and platform operations. Requires an ``admin``-role key."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from agledger._http import AsyncHttpClient, HttpClient
 
 
 class AdminRecordsResource:
-    """Admin sub-resource for Records — org-wide listing and historical backfill."""
+    """Admin sub-resource for Records: org-wide listing and historical backfill."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -160,7 +160,7 @@ def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
 
 
 class AdminTrustedIssuersResource:
-    """Trusted OIDC issuers — register the IdPs whose tokens may be exchanged
+    """Trusted OIDC issuers: register the IdPs whose tokens may be exchanged
     for ephemeral signing certs via ``POST /v1/auth/oidc/cert``."""
 
     def __init__(self, http: HttpClient) -> None:
@@ -215,7 +215,7 @@ class AdminTrustedIssuersResource:
         )
 
     def delete(self, issuer_id: str) -> dict[str, Any]:
-        """Delete a trusted issuer. Returns 409 if live certs still reference it —
+        """Delete a trusted issuer. Returns 409 if live certs still reference it;
         disable it (``update(id, enabled=False)``) and revoke its certs first."""
         return self._http.delete(f"/v1/admin/trusted-issuers/{issuer_id}")
 
@@ -259,7 +259,7 @@ class AdminResource:
     ) -> dict[str, Any]:
         """Create a new org.
 
-        Dev/test only — ``POST /v1/admin/orgs`` is not registered in production
+        Dev/test only: ``POST /v1/admin/orgs`` is not registered in production
         (dropped from the canonical OpenAPI spec in API v1.0.1) and 404s there.
         Provision production orgs via the operator ``provisioning/`` YAML.
         """
@@ -299,7 +299,7 @@ class AdminResource:
         return self._http.post("/v1/admin/agents", json=body)
 
     def set_capabilities(self, agent_id: str, *, contract_types: list[str]) -> dict[str, Any]:
-        """Set an agent's Type capabilities (PUT — replaces all).
+        """Set an agent's Type capabilities (PUT, which replaces all).
 
         Body field is ``contractTypes`` on the wire.
         """
@@ -420,7 +420,7 @@ class AdminResource:
 
         The API accepts only ``is_active`` (→ ``isActive``), ``reason``,
         ``scopes``, and ``scope_profile`` (→ ``scopeProfile``) here. ``label``,
-        ``expires_at``, and ``allowed_ips`` are settable only at create time —
+        ``expires_at``, and ``allowed_ips`` are settable only at create time;
         the server rejects them on update (``additionalProperties: false``)."""
         # Snake-to-camel for the fields the PATCH route actually accepts.
         mapping = {"is_active": "isActive", "scope_profile": "scopeProfile"}
@@ -618,7 +618,7 @@ class AsyncAdminVaultResource:
 
 
 class AsyncAdminTrustedIssuersResource:
-    """Trusted OIDC issuers (async) — register the IdPs whose tokens may be
+    """Trusted OIDC issuers (async): register the IdPs whose tokens may be
     exchanged for ephemeral signing certs via ``POST /v1/auth/oidc/cert``."""
 
     def __init__(self, http: AsyncHttpClient) -> None:
@@ -673,7 +673,7 @@ class AsyncAdminTrustedIssuersResource:
         )
 
     async def delete(self, issuer_id: str) -> dict[str, Any]:
-        """Delete a trusted issuer. Returns 409 if live certs still reference it —
+        """Delete a trusted issuer. Returns 409 if live certs still reference it;
         disable it (``update(id, enabled=False)``) and revoke its certs first."""
         return await self._http.delete(f"/v1/admin/trusted-issuers/{issuer_id}")
 

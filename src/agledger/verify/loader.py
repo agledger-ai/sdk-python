@@ -1,6 +1,6 @@
 """NDJSON dump-directory loader. Reads the five expected files and returns a
 typed :class:`Dump`. A missing file raises :class:`DumpLoadError` rather than
-producing a silent empty array — a verifier that reports OK on a half-empty dump
+producing a silent empty array: a verifier that reports OK on a half-empty dump
 is the wrong default. Mirrors the TS ``loader.ts``.
 
 Row shapes are NOT validated beyond JSON parsing: the verifier itself catches

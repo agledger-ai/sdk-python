@@ -1,4 +1,4 @@
-"""Records resource — CRUD, lifecycle transitions, delegation, rework loops, audit export."""
+"""Records resource: CRUD, lifecycle transitions, delegation, rework loops, audit export."""
 
 from __future__ import annotations
 
@@ -393,7 +393,7 @@ class RecordsResource:
         )
 
     def my_verdict_statistics(self) -> VerdictStatistics:
-        """Verdict statistics for the authenticated agent — per (principal, performer)
+        """Verdict statistics for the authenticated agent: per (principal, performer)
         pair counters of accept / reject / cancel-after-completion, decomposed into
         asPrincipal and asPerformer. Agent role only."""
         return VerdictStatistics.model_validate(
@@ -412,10 +412,10 @@ class RecordsResource:
 
         Vault entries carry an ``_actor`` envelope (key id, role, owner id) folded
         into the canonical payload; the hash chain covers it. Set ``receipts=True``
-        to opt the SCITT Receipts (Merkle inclusion proofs) into the export — only
+        to opt the SCITT Receipts (Merkle inclusion proofs) into the export: only
         emitted when the engine has a ``VAULT_SIGNING_KEY``. Set ``evidence=True`` to
         inline the completion evidence body at each COMPLETION_SUBMITTED entry (API
-        #870) — an UNSIGNED projection the chain binds by hash via
+        #870): an UNSIGNED projection the chain binds by hash via
         ``payload.evidenceHash``. JSON/NDJSON only.
         """
         params: dict[str, Any] = {"format": format}
@@ -430,7 +430,7 @@ class RecordsResource:
     def get_attestation(self, record_id: str) -> bytes:
         """Fetch the canonical COSE_Sign1 envelope stream for a Record's chain.
 
-        Returns ``application/cose-sequence`` bytes — a concatenation of tagged
+        Returns ``application/cose-sequence`` bytes: a concatenation of tagged
         COSE_Sign1 messages. Pair with ``agledger.verify`` for cryptographic
         verification.
         """
@@ -450,7 +450,7 @@ class RecordsResource:
         return self._http.get(f"/v1/records/{record_id}/attestation.bundle")
 
     def create_and_activate(self, **params: Any) -> RecordRow:
-        """Create, register, and activate a Record. Three API calls — if a step fails,
+        """Create, register, and activate a Record. Three API calls: if a step fails,
         the Record exists in the intermediate state."""
         record = self.create(**params)
         self.transition(record.id, "register")

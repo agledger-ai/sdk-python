@@ -117,11 +117,11 @@ def test_204_returns_none():
 
 # Regression for the retry-set realignment with TS (2026-05-28): drop 409 from
 # the retry set so an IDEMPOTENCY_CONFLICT surfaces immediately. Auto-retrying
-# 409s was masking real client errors — same idempotency key + different body.
+# 409s was masking real client errors: same idempotency key + different body.
 
 @respx.mock
 def test_no_retry_on_409_conflict():
-    """A 409 is structural (idempotency conflict). Must NOT auto-retry —
+    """A 409 is structural (idempotency conflict). Must NOT auto-retry;
     retrying would mask the client error and waste API budget."""
     route = respx.post("https://agledger.example.com/v1/records")
     route.mock(return_value=httpx.Response(409, json={"message": "Idempotency conflict", "code": "IDEMPOTENCY_CONFLICT"}))

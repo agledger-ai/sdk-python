@@ -1,5 +1,5 @@
 """
-AGLedger SDK — Webhook signature verification.
+AGLedger SDK: Webhook signature verification.
 """
 
 from agledger._errors import (

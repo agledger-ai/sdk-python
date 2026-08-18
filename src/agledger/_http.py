@@ -1,5 +1,5 @@
 """
-AGLedger SDK — HTTP client with retry, idempotency, and error mapping.
+AGLedger SDK: HTTP client with retry, idempotency, and error mapping.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ SDK_VERSION = _resolve_sdk_version()
 
 # Aligned with TS SDK (http.ts:#DEFAULT_RETRY_STATUSES). 408 is excluded
 # because the API never emits it. 409 IDEMPOTENCY_CONFLICT is excluded
-# because auto-retrying it would mask a real client error — a 409 means
+# because auto-retrying it would mask a real client error: a 409 means
 # "this idempotency key was already used with a different request body",
 # which is structural, not transient.
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}

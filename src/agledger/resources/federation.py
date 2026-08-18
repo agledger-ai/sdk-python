@@ -1,4 +1,4 @@
-"""Federation peer-facing surface — used by federated AGLedger instances over the wire."""
+"""Federation peer-facing surface: used by federated AGLedger instances over the wire."""
 
 from __future__ import annotations
 
