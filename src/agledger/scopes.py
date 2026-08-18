@@ -1,5 +1,5 @@
 """
-AGLedger SDK — API Key Scopes
+AGLedger SDK: API Key Scopes
 
 Mirrors the authoritative definitions in agledger-api/src/shared/scopes.ts.
 Keep this file in lockstep with the API.
@@ -78,7 +78,7 @@ ScopeProfileName = Literal[
 SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     "admin-observer": {
         "name": "admin-observer",
-        "description": "Read-only admin — audit, compliance, events, disputes, reputation, schemas, webhooks, records, completions",
+        "description": "Read-only admin: audit, compliance, events, disputes, reputation, schemas, webhooks, records, completions",
         "allowed_roles": ("admin",),
         "scopes": (
             Scopes.AUDIT_READ,
@@ -94,7 +94,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "admin-standard": {
         "name": "admin-standard",
-        "description": "Default admin — full org governance plus Record/Completion action rights (admin actions signed as admin in vault)",
+        "description": "Default admin: full org governance plus Record/Completion action rights (admin actions signed as admin in vault)",
         "allowed_roles": ("admin",),
         "scopes": (
             Scopes.AUDIT_READ,
@@ -122,7 +122,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "admin-iac": {
         "name": "admin-iac",
-        "description": "Infrastructure provisioning — agents, webhooks, keys, schemas",
+        "description": "Infrastructure provisioning; agents, webhooks, keys, schemas",
         "allowed_roles": ("admin",),
         "scopes": (
             Scopes.ADMIN_KEYS,
@@ -133,7 +133,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "admin-schema": {
         "name": "admin-schema",
-        "description": "Schema registry management — create, version, disable/enable custom types",
+        "description": "Schema registry management: create, version, disable/enable custom types",
         "allowed_roles": ("admin",),
         "scopes": (
             Scopes.SCHEMAS_READ,
@@ -143,7 +143,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "agent-full": {
         "name": "agent-full",
-        "description": "Full agent — Record lifecycle, Completions, disputes, events, and schemas",
+        "description": "Full agent: Record lifecycle, Completions, disputes, events, and schemas",
         "allowed_roles": ("agent",),
         "scopes": (
             Scopes.RECORDS_READ,
@@ -158,7 +158,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "agent-readonly": {
         "name": "agent-readonly",
-        "description": "Read-only agent — view Record history",
+        "description": "Read-only agent: view Record history",
         "allowed_roles": ("agent",),
         "scopes": (
             Scopes.RECORDS_READ,
@@ -167,7 +167,7 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
     },
     "agent-performer-only": {
         "name": "agent-performer-only",
-        "description": "Performer agent — can deliver Completions and read Records, but cannot be principal of new Records",
+        "description": "Performer agent: can deliver Completions and read Records, but cannot be principal of new Records",
         "allowed_roles": ("agent",),
         "scopes": (
             Scopes.RECORDS_READ,

@@ -47,7 +47,7 @@ jobs:
       - name: Install (with dev + verify extras)
         run: pip install -e '.[dev]'
 
-      # Full gate — identical to CI; a tagged release must not ship anything CI
+      # Full gate: identical to CI; a tagged release must not ship anything CI
       # would have rejected.
       - name: Lint (ruff)
         run: ruff check src tests
@@ -79,7 +79,7 @@ jobs:
           pip install build==1.5.0
           python -m build
 
-      # SBOM scoped to the SHIPPED wheel's runtime deps — install the built wheel
+      # SBOM scoped to the SHIPPED wheel's runtime deps: install the built wheel
       # (no dev/test extras) into a throwaway venv and enumerate that, NOT the
       # release runner's venv (which carries build/ruff/pyright/pytest).
       - name: Generate CycloneDX SBOM (scoped to the shipped wheel)
@@ -107,7 +107,7 @@ jobs:
 
       # Publishes dist/* to PyPI via OIDC trusted publishing. PEP 740 attestations
       # are ON by default under a trusted publisher (attestations: true is implicit).
-      # No API token — the Trusted Publisher mapping on PyPI authorizes this exact
+      # No API token: the Trusted Publisher mapping on PyPI authorizes this exact
       # repo + workflow. Pinned to v1.13.0 (commit SHA).
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

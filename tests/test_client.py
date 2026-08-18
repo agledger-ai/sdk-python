@@ -1,4 +1,4 @@
-"""Tests for AgledgerClient — resources, auth, context manager, typed kwargs."""
+"""Tests for AgledgerClient: resources, auth, context manager, typed kwargs."""
 
 import json
 
@@ -204,7 +204,7 @@ def test_records_bulk_create():
 def test_records_get_audit_export():
     # F-713 regression: the entry MUST be populated with the real server shape
     # (humanReadableLabel, NOT description). An empty `entries: []` masked the
-    # original crash — the model is only exercised when an entry is present.
+    # original crash: the model is only exercised when an entry is present.
     export_resp = {
         "exportMetadata": {
             "recordId": "rec-123",

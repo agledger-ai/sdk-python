@@ -77,7 +77,7 @@ def _build_entry(
     envelope = _build_cose_sign1(private_key, position, previous_hash, {"predicate": predicate})
     payload_hash = hashlib.sha256(envelope).hexdigest()
     return {
-        # Current exports are chainPosition-only — no legacy `position` (F-682).
+        # Current exports are chainPosition-only: no legacy `position` (F-682).
         "chainPosition": position,
         "timestamp": "2026-04-17T00:00:00Z",
         "createdAt": "2026-04-17T00:00:00Z",
@@ -131,7 +131,7 @@ def test_valid_export_verifies() -> None:
     assert result.verified_entries == 3
     assert result.broken_at is None
     assert result.signature_coverage.signed == 3
-    # Embedded keys (no out-of-band override) — provenance reflects the trust source.
+    # Embedded keys (no out-of-band override): provenance reflects the trust source.
     assert result.key_provenance.embedded == 3
     assert result.key_provenance.out_of_band == 0
 
@@ -267,7 +267,7 @@ def test_detects_signature_invalid() -> None:
 
 def test_detects_payload_binding_mismatch() -> None:
     # F-731: the attacker rewrites the human-readable row payload but leaves
-    # coseSign1 (the signed truth) intact — the offline verifier must catch the
+    # coseSign1 (the signed truth) intact: the offline verifier must catch the
     # drift between the decoded predicate and the row projection.
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
@@ -392,7 +392,7 @@ def test_oob_keys_accepts_compact_record_form() -> None:
 
 def test_oob_keys_accepts_sdk_natural_list_shape() -> None:
     """The .data list from `client.verification_keys.list()` is the natural
-    customer shape — must be accepted directly, not silently fall through to
+    customer shape: must be accepted directly, not silently fall through to
     embedded keys (F-698)."""
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
@@ -404,8 +404,8 @@ def test_oob_keys_accepts_sdk_natural_list_shape() -> None:
 
 
 def test_oob_keys_accepts_pydantic_models() -> None:
-    """Customers may pass `client.verification_keys.list().data` — list of
-    VerificationKey pydantic models — directly. The polymorphic normalizer
+    """Customers may pass `client.verification_keys.list().data`: list of
+    VerificationKey pydantic models: directly. The polymorphic normalizer
     handles either attribute (`key_id`/`public_key`) or alias (`keyId`/`publicKey`)
     access."""
     from agledger.types import VerificationKey
@@ -471,7 +471,7 @@ def test_oob_keys_empty_camelcase_does_not_silently_fall_back_to_snake() -> None
 
 
 def test_oob_keys_empty_publickey_rejected_with_accurate_diagnostic() -> None:
-    """`publicKey=""` must fail loudly — empty strings are structural errors
+    """`publicKey=""` must fail loudly: empty strings are structural errors
     at the OOB-key boundary, not a signal to look elsewhere."""
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)

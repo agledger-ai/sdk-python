@@ -1,4 +1,4 @@
-"""Tests for compliance.stream() and stream_all() — SIEM audit streaming."""
+"""Tests for compliance.stream() and stream_all(): SIEM audit streaming."""
 
 import json
 

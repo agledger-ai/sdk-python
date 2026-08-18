@@ -1,5 +1,5 @@
 """
-AGLedger SDK — Error classes.
+AGLedger SDK: Error classes.
 Follows Anthropic/OpenAI naming conventions. Never shadows Python builtins.
 """
 
@@ -41,14 +41,14 @@ class APIError(AgledgerError):
     - ``pinned_records`` / ``unattributable_records``: why a schema delete was refused
     - ``docs``: discovery-document pointer. ``doc_url`` is dead and always None.
 
-    - ``status`` — HTTP status code
-    - ``code`` — stable machine-readable error code (from API body)
-    - ``retryable`` — API's ``retryable`` flag, falling back to status-based classification (429/5xx)
-    - ``request_id`` — correlation ID (from API body or ``X-Request-Id`` header)
-    - ``doc_url`` — documentation link, only if the API returned one
-    - ``suggestion`` — typo-correction hint, only if the API returned one
-    - ``recovery_hint`` — machine-readable recovery guidance (e.g. on 422 INVALID_ACTION)
-    - ``refresh_url`` — concrete GET URL to re-fetch state (e.g. on 422 INVALID_ACTION)
+    - ``status``: HTTP status code
+    - ``code``: stable machine-readable error code (from API body)
+    - ``retryable``: API's ``retryable`` flag, falling back to status-based classification (429/5xx)
+    - ``request_id``: correlation ID (from API body or ``X-Request-Id`` header)
+    - ``doc_url``: documentation link, only if the API returned one
+    - ``suggestion``: typo-correction hint, only if the API returned one
+    - ``recovery_hint``: machine-readable recovery guidance (e.g. on 422 INVALID_ACTION)
+    - ``refresh_url``: concrete GET URL to re-fetch state (e.g. on 422 INVALID_ACTION)
     """
 
     status: int
@@ -95,7 +95,7 @@ class APIError(AgledgerError):
     raw_body: bytes | None
     """Raw response body for binary endpoints (``application/cose``,
     ``application/concise-problem-details+cbor``). Set when the API returns
-    a 4xx/5xx on a SCITT or attestation endpoint — decode with ``cbor2`` for
+    a 4xx/5xx on a SCITT or attestation endpoint: decode with ``cbor2`` for
     SCITT problem-details (RFC 9290)."""
 
     def __init__(
@@ -147,11 +147,11 @@ class APIError(AgledgerError):
         return self.retryable
 
     def is_input_error(self) -> bool:
-        """Whether this is a 400 validation error — fix the request and retry."""
+        """Whether this is a 400 validation error; fix the request and retry."""
         return self.status == 400
 
     def is_state_error(self) -> bool:
-        """Whether this is a 422 state error — resource is in the wrong state."""
+        """Whether this is a 422 state error: resource is in the wrong state."""
         return self.status == 422
 
     def is_auth_error(self) -> bool:
@@ -160,14 +160,14 @@ class APIError(AgledgerError):
 
 
 class AuthenticationError(APIError):
-    """401 — invalid or missing API key."""
+    """401: invalid or missing API key."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(401, **kwargs)
 
 
 class PermissionDeniedError(APIError):
-    """403 — insufficient scopes or permissions."""
+    """403: insufficient scopes or permissions."""
 
     missing_scopes: list[str]
     key_scopes: list[str] | None
@@ -185,31 +185,31 @@ class PermissionDeniedError(APIError):
 
 
 class NotFoundError(APIError):
-    """404 — resource not found."""
+    """404: resource not found."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(404, **kwargs)
 
 
 class BadRequestError(APIError):
-    """400 — request validation failed."""
+    """400: request validation failed."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(400, **kwargs)
 
 
 class ConflictError(APIError):
-    """409 — conflict (e.g., idempotency key reuse, state conflict)."""
+    """409: conflict (e.g., idempotency key reuse, state conflict)."""
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(409, **kwargs)
 
 
 class UnprocessableError(APIError):
-    """422 — resource in wrong state for the requested operation.
+    """422: resource in wrong state for the requested operation.
 
     On INVALID_ACTION the API attaches ``recovery_hint`` and ``refresh_url``
-    (and ``current_state`` / ``allowed_actions`` via ``details``) — surfaced on
+    (and ``current_state`` / ``allowed_actions`` via ``details``); surfaced on
     the base ``APIError`` properties.
     """
 
@@ -218,7 +218,7 @@ class UnprocessableError(APIError):
 
 
 class RateLimitError(APIError):
-    """429 — rate limit exceeded."""
+    """429: rate limit exceeded."""
 
     retry_after: float | None
 

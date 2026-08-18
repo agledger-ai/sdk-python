@@ -1,6 +1,6 @@
 """Canonical failure taxonomy for AGLedger offline verification.
 
-One enum, shared by every verifier surface — and, by mirroring these exact
+One enum, shared by every verifier surface and, by mirroring these exact
 strings, by this independent Python re-implementation of the TS verification
 core (``@agledger/verify-core``). SCREAMING_SNAKE to match the API's RFC 9290
 problem-detail codes, namespaced by sub-system:
@@ -13,7 +13,7 @@ problem-detail codes, namespaced by sub-system:
 Every code carries an actionable next step (:func:`suggestion`) so a result is a
 directive, not just a verdict.
 
-Mirrors ``packages/verify-core/src/failures.ts`` exactly — the export verifier
+Mirrors ``packages/verify-core/src/failures.ts`` exactly: the export verifier
 emits the subset reachable on the ``/audit-export`` wire; the dump verifier
 emits the full set.
 """
@@ -64,7 +64,7 @@ FailureCode = Literal[
 ]
 
 
-# Actionable next step per failure code — what the verifier's caller (auditor,
+# Actionable next step per failure code: what the verifier's caller (auditor,
 # compliance team, or agent) should do next. Mirrors failures.ts SUGGESTIONS.
 _SUGGESTIONS: dict[str, str] = {
     "UNSUPPORTED_FORMAT": (

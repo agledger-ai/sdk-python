@@ -1,15 +1,15 @@
-"""AGLedger SDK — offline audit verification (format 2.0, COSE_Sign1).
+"""AGLedger SDK: offline audit verification (format 2.0, COSE_Sign1).
 
 Two verifiers share one verification core:
 
-  - :func:`verify_export` — the per-record ``/audit-export`` JSON verifier::
+  - :func:`verify_export`: the per-record ``/audit-export`` JSON verifier::
 
         from agledger.verify import verify_export
         result = verify_export(data)
         if not result.valid:
             print(f"Broken at {result.broken_at.position}: {result.broken_at.code}")
 
-  - :func:`verify_dump` — the full-vault dump verifier (five NDJSON files: the
+  - :func:`verify_dump`: the full-vault dump verifier (five NDJSON files: the
     audit_vault chain, vault checkpoints, signing keys, and the org_admin_reads
     Merkle log + signed tree heads)::
 

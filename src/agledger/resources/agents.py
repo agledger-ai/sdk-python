@@ -1,4 +1,4 @@
-"""Agents resource — agent identity and references."""
+"""Agents resource: agent identity and references."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class AgentsResource:
     ) -> Page[AgentDirectoryEntry]:
         """List agents in the caller's org (peer directory).
 
-        Returns the lightweight directory shape — for full agent identity
+        Returns the lightweight directory shape: for full agent identity
         use ``get(agent_id)``.
         """
         params: dict[str, Any] = {}
@@ -58,7 +58,7 @@ class AgentsResource:
     ) -> dict[str, Any]:
         """List federated agents synced into the local directory from peers.
 
-        This is an audited read — the response carries a ``recordRead``
+        This is an audited read: the response carries a ``recordRead``
         checkpoint reference alongside the agent page.
         """
         params: dict[str, Any] = {}
@@ -112,7 +112,7 @@ class AsyncAgentsResource:
     ) -> dict[str, Any]:
         """List federated agents synced into the local directory from peers.
 
-        This is an audited read — the response carries a ``recordRead``
+        This is an audited read: the response carries a ``recordRead``
         checkpoint reference alongside the agent page.
         """
         params: dict[str, Any] = {}

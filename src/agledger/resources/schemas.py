@@ -1,4 +1,4 @@
-"""Schemas resource — Type schema registry, custom Type authoring, version management."""
+"""Schemas resource: Type schema registry, custom Type authoring, version management."""
 
 from __future__ import annotations
 
@@ -265,7 +265,7 @@ class AsyncSchemasResource:
         org_id: str | None = None,
         **options: Any,
     ) -> dict[str, Any]:
-        """Import a third-party schema manifest — see the sync ``import_`` docstring."""
+        """Import a third-party schema manifest: see the sync ``import_`` docstring."""
         body: dict[str, Any] = {"manifest": manifest, **options}
         if org_id is not None:
             body["orgId"] = org_id

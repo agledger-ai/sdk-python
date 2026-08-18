@@ -1,5 +1,5 @@
 """
-Authentication resource — `GET /v1/auth/me` (identity + scopes),
+Authentication resource: `GET /v1/auth/me` (identity + scopes),
 `POST /v1/auth/keys/rotate` (atomic key rotation), and
 `POST /v1/auth/oidc/cert` (OIDC-token → ephemeral signing cert exchange).
 Account provisioning happens via the admin endpoints.

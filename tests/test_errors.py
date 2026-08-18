@@ -31,7 +31,7 @@ def test_401_raises_authentication_error():
 
 @respx.mock
 def test_403_raises_permission_denied_with_scopes_top_level():
-    """RFC 9457 — missingScopes is a top-level extension field."""
+    """RFC 9457: missingScopes is a top-level extension field."""
     respx.get("https://agledger.example.com/v1/records/x").mock(
         return_value=httpx.Response(403, json={
             "message": "Missing scope",

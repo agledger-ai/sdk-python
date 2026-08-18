@@ -51,7 +51,7 @@ dev = [
     "respx>=0.22",
     "cryptography>=42.0",
     "cbor2>=5.6",
-    # Pinned so CI matches the gate the SDK was validated against — ruff stable
+    # Pinned so CI matches the gate the SDK was validated against. Ruff stable
     # adds lint rules and pyright tightens inference across releases; an
     # unpinned floor would let a tool bump turn CI red without a code change.
     "ruff==0.15.21",
@@ -85,11 +85,11 @@ ignore = ["E701"]
 
 [tool.pyright]
 # Strict-gate the shipped library only. Tests are exercised by pytest, not the
-# type gate — strict mode on test fixtures (respx mocks, ad-hoc dicts) is noise,
+# type gate: strict mode on test fixtures (respx mocks, ad-hoc dicts) is noise,
 # not signal. `pyright` with no args (as CI runs it) now checks exactly `src`.
 include = ["src"]
 # Resolve `import agledger` to the source tree (src layout) regardless of whether
-# an editable/wheel copy is also installed — keeps `pyright --verifytypes agledger`
+# an editable/wheel copy is also installed, which keeps `pyright --verifytypes agledger`
 # (the type-completeness gate) measuring exactly what ships, not a stale install.
 extraPaths = ["src"]
 typeCheckingMode = "strict"

@@ -1,4 +1,4 @@
-"""``agledger-verify`` — offline verifier for AGLedger audit chains.
+"""``agledger-verify``: offline verifier for AGLedger audit chains.
 
 Auto-detects the single positional argument:
   - a directory  -> full-vault NDJSON dump  -> load_dump + verify_dump
@@ -10,7 +10,7 @@ usage/IO into its own code refines the TS CLI's 0/1 so a missing file or bad
 argument is never mistaken for a tamper finding.) No network calls are made.
 
 Honors ``NO_COLOR`` per no-color.org (the output is already uncolored, so this
-is a no-op today — declared for forward compatibility) and ``--quiet`` (exit
+is a no-op today: declared for forward compatibility) and ``--quiet`` (exit
 code only, no stdout).
 """
 

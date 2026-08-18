@@ -1,4 +1,4 @@
-"""Verification keys resource — public, unauthenticated endpoint."""
+"""Verification keys resource: public, unauthenticated endpoint."""
 
 from __future__ import annotations
 from agledger._http import AsyncHttpClient, HttpClient

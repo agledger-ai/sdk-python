@@ -12,7 +12,7 @@ Verification walks every entry and asserts:
     3. previousHash links to the prior entry's payloadHash (genesis must be null)
     4. COSE_Sign1 envelope decodes cleanly
     5. Protected-header chain claim (private label -65537) matches the row's
-       position + previousHash — catches a row where the envelope and the
+       position + previousHash: catches a row where the envelope and the
        visible columns disagree about chain identity
     6. COSE_Sign1 signature verifies against the signingPublicKey for the
        entry's signingKeyId
@@ -25,7 +25,7 @@ This is an independent re-implementation of the shared TS verification core
 (``@agledger/verify-core``); it emits the SAME canonical SCREAMING_SNAKE
 ``FailureCode`` taxonomy and the same per-entry/``broken_at`` shape, so the two
 languages agree byte-for-byte over the shared conformance corpus
-(``testdata/conformance``). Zero engine dependency — the load-bearing property
+(``testdata/conformance``). Zero engine dependency: the load-bearing property
 of an offline auditor.
 """
 
@@ -80,20 +80,20 @@ except ImportError as _err:  # pragma: no cover
 # need inputs the ``/audit-export`` wire lacks), while the dump verifier
 # (``verify_dump.py``) reaches the rest. CHAIN_PAYLOAD_BINDING_MISMATCH became
 # export-reachable when the export began carrying the row payload (engine ≥
-# v0.26.x) — see verify_entry / F-731.
+# v0.26.x): see verify_entry / F-731.
 
 # Mirrors ``@agledger/verify-core``'s ``SignatureOutcome``:
-#   ok / invalid / decode-fail  — the signature was checked
-#   unsigned                    — no signature by design
-#   skipped                     — chain intact, entry has no signing key (engine booted keyless)
-#   not-checked                 — a structural check failed first, so the signature was never reached
+#   ok / invalid / decode-fail : the signature was checked
+#   unsigned                   : no signature by design
+#   skipped                    : chain intact, entry has no signing key (engine booted keyless)
+#   not-checked                : a structural check failed first, so the signature was never reached
 # unsupported: the trusted key commits to an algorithm this build cannot
 # compute (CHAIN_UNSUPPORTED_ALGORITHM); a failure state, never a benign skip.
 SignatureOutcome = Literal[
     "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail", "unsupported"
 ]
 
-#: Provenance of a verification key — ``out-of-band`` (caller-supplied from a
+#: Provenance of a verification key: ``out-of-band`` (caller-supplied from a
 #: trusted source) or ``embedded`` (shipped inside the export the engine
 #: produced). Mirrors ``@agledger/verify-core``'s ``KeySource``.
 KeySource = Literal["out-of-band", "embedded"]
@@ -114,7 +114,7 @@ _CHAIN_SUBLABEL_PREVIOUS_HASH = 2
 def as_mapping(value: Any) -> Mapping[str, Any]:
     """Narrow a decoded value to a ``Mapping`` for safe ``.get()`` access, or an
     empty mapping if it is not one. The single home for the row/payload/integrity
-    narrowing the export AND dump walkers both do — one function so the two
+    narrowing the export AND dump walkers both do: one function so the two
     verifiers can never drift in how they coerce a non-mapping field."""
     return cast("Mapping[str, Any]", value) if isinstance(value, Mapping) else {}
 
@@ -153,7 +153,7 @@ class KeyProvenance:
     """How many signature checks resolved against out-of-band vs embedded keys.
 
     ``embedded > 0`` means the verdict trusts keys shipped by the engine that
-    produced the export — supply out-of-band keys for an independent audit.
+    produced the export; supply out-of-band keys for an independent audit.
     """
 
     out_of_band: int = 0
@@ -188,7 +188,7 @@ def verify_export(
         (``GET /v1/verification-keys``, ``/.well-known/scitt-keys``). These
         override any key embedded in the export. For a real independent audit,
         supply keys here rather than trusting the export's own
-        ``signingPublicKeys``. Accepts either form — pass the ``.data`` list
+        ``signingPublicKeys``. Accepts either form: pass the ``.data`` list
         from ``client.verification_keys.list()`` directly, or a compact
         ``{keyId: base64SpkiDer}`` mapping. The wrong shape raises ``TypeError``
         rather than silently falling back to embedded keys
@@ -197,7 +197,7 @@ def verify_export(
         (else :data:`CHAIN_KEY_POLICY_VIOLATION`).
     :param require_out_of_band_keys: High-assurance auditor mode. An entry whose
         only available key is export-embedded fails
-        :data:`CHAIN_KEY_POLICY_VIOLATION` — verifying the engine against its own
+        :data:`CHAIN_KEY_POLICY_VIOLATION`; verifying the engine against its own
         embedded key is not an independent audit.
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
         signature-coverage discriminator, and a key-provenance tally.
@@ -323,7 +323,7 @@ class RegisteredKey:
     spki_base64: str
     source: KeySource
     #: Temporal-validity window (dump path only). ``None`` on the export path,
-    #: where the wire carries no key windows — the temporal check then no-ops.
+    #: where the wire carries no key windows: the temporal check then no-ops.
     activated_at: str | None = None
     retired_at: str | None = None
     #: Algorithm the key registry DECLARES for this key (the engine's
@@ -473,7 +473,7 @@ def _normalize_oob_keys(
     (agledger-agents#77 / F-698).
 
     Accepts:
-      - ``Mapping[str, str]`` — compact ``{keyId: base64SpkiDer}`` form
+      - ``Mapping[str, str]``: compact ``{keyId: base64SpkiDer}`` form
       - ``Sequence`` of ``{keyId, publicKey}`` entries (the ``.data`` list from
         ``client.verification_keys.list()``, ``VerificationKey`` pydantic models,
         or raw dicts of that shape)
@@ -488,7 +488,7 @@ def _normalize_oob_keys(
                 raise TypeError(
                     f"verify_export: public_keys[{k!r}] is not a base64 string "
                     f"(got {type(v).__name__}). If you passed the .data list from "
-                    f"client.verification_keys.list(), pass it as the list — not "
+                    f"client.verification_keys.list(), pass it as the list: not "
                     f"a dict built from it."
                 )
             out[str(k)] = v
@@ -512,7 +512,7 @@ def _normalize_oob_keys(
     for i, item in enumerate(items):
         # Dual-spelling lookup: prefer camelCase (the wire shape), then fall
         # back to snake_case (Pydantic attribute style). Use explicit `in` /
-        # `is not None` rather than `or` — `or` would treat an empty-string
+        # `is not None` rather than `or`: `or` would treat an empty-string
         # `keyId` as missing and silently substitute `key_id`, masking the
         # upstream bug. TS sibling reads only camelCase; this branch exists
         # only because Python's `verification_keys.list()` returns Pydantic
@@ -531,7 +531,7 @@ def _normalize_oob_keys(
         if not isinstance(key_id, str) or not isinstance(material, str):
             raise TypeError(
                 f"verify_export: public_keys[{i}] is missing required fields "
-                f"(keyId, publicKey) — got keyId={type(key_id).__name__}, "
+                f"(keyId, publicKey): got keyId={type(key_id).__name__}, "
                 f"publicKey={type(material).__name__}. Expected the SDK "
                 f"VerificationKey shape; publicKey must be SPKI DER base64."
             )
@@ -539,7 +539,7 @@ def _normalize_oob_keys(
             raise TypeError(
                 f"verify_export: public_keys[{i}] has empty-string keyId or "
                 f"publicKey (keyId={key_id!r}, publicKey-len={len(material)}). "
-                f"Empty fields are a structural error — fix the upstream "
+                f"Empty fields are a structural error; fix the upstream "
                 f"serializer rather than pass the empty value through."
             )
         out[key_id] = material
@@ -589,7 +589,7 @@ class KeyCache:
 
     def window(self, key_id: str) -> tuple[str | None, str | None]:
         """The key's ``(activated_at, retired_at)`` temporal window, or
-        ``(None, None)`` if unknown — the temporal check then no-ops."""
+        ``(None, None)`` if unknown: the temporal check then no-ops."""
         entry = self._registry.get(key_id)
         if entry is None:
             return (None, None)
@@ -737,7 +737,7 @@ def verify_entry(
             )
 
     # OIDC-actor cross-check (verificationGuide step 5): when the entry carries
-    # the denormalised actor OIDC columns (dump path only — the export wire does
+    # the denormalised actor OIDC columns (dump path only: the export wire does
     # not), confirm they agree with the identity signed in
     # predicate.on_behalf_of.oidc. Catches DBA tamper of the actor columns on a
     # synthesized row while coseSign1 stays intact. Export entries never carry
@@ -755,7 +755,7 @@ def verify_entry(
     if signing_key_id is None:
         # Fail closed under a key policy: a high-assurance run that requires a
         # specific key (or out-of-band keys) must NOT accept an unsigned/null-key
-        # entry as valid — otherwise an attacker forges an entry, nulls its
+        # entry as valid; otherwise an attacker forges an entry, nulls its
         # signingKeyId, and slips past the policy the auditor explicitly set.
         if require_key_id or require_out_of_band_keys:
             return EntryVerificationResult(
@@ -839,7 +839,7 @@ def verify_entry(
         )
 
     # Temporal key-validity (CHAIN_KEY_EXPIRED): runs only when BOTH the entry
-    # write time and a key window are present (dump path) — and only here, AFTER
+    # write time and a key window are present (dump path): and only here, AFTER
     # the key has resolved, because it reads the key's window. Placing it earlier
     # would mask a CHAIN_SIGNATURE_MISSING_KEY. Export entries carry no
     # ``createdAt`` and the export registry has no windows → skipped. Mirrors
@@ -914,7 +914,7 @@ def verify_entry(
 # --- Binding-integrity primitives (mirror packages/verify-core/src/primitives.ts) ---
 
 # Keys the engine lifts out of the row payload into dedicated predicate fields
-# (state_transition / traces) or treats as envelope siblings — excluded from the
+# (state_transition / traces) or treats as envelope siblings: excluded from the
 # passthrough so the rebuilt predicate matches what was signed.
 _RECORD_STATE_RESERVED_KEYS = frozenset(
     {"from", "to", "state_transition", "traces", "on_behalf_of", "traceparent"}
@@ -957,7 +957,7 @@ def _check_oidc_actor(
     """Cross-check the denormalised actor OIDC columns against the identity
     signed in ``predicate.on_behalf_of.oidc`` (the predicate is the already-
     decoded, UNSTRIPPED in-toto Statement predicate). Returns a failure result
-    or ``None`` (pass). Mirrors verify-core chain.ts checkOidcActor — three
+    or ``None`` (pass). Mirrors verify-core chain.ts checkOidcActor: three
     branches, with ``synthesized`` treated as a tri-state (True/False/None).
     """
     row_iss = actor_oidc.get("iss")
@@ -965,7 +965,7 @@ def _check_oidc_actor(
     row_sub = actor_oidc.get("sub")
     row_sub = row_sub if isinstance(row_sub, str) else None
     # Preserve the tri-state: True / False / None(undefined). The dump field is
-    # optional, so a missing key is None — matching the TS ``undefined`` branch.
+    # optional, so a missing key is None: matching the TS ``undefined`` branch.
     # Never coerce to bool.
     synthesized = actor_oidc.get("synthesized")
 
@@ -1021,7 +1021,7 @@ def _build_predicate_for_row(
 ) -> dict[str, Any] | None:
     """Re-project ``(record_id, entry_type, payload)`` into the predicate body
     using the same logic the engine applies at write time. Returns ``None`` when
-    the payload is structurally insufficient — the caller reads that as a binding
+    the payload is structurally insufficient: the caller reads that as a binding
     mismatch rather than crashing on attacker-zeroed payloads."""
     if entry_type in _SCHEMA_EVENT_OUTCOMES:
         return _build_schema_event_predicate(entry_type, payload)
@@ -1328,7 +1328,7 @@ def _parse_instant(value: str) -> datetime | None:
     """Parse an ISO-8601 timestamp to a comparable instant, normalising a
     trailing ``Z`` to ``+00:00``. ``fromisoformat`` handles ``Z`` natively from
     3.11 on, so the replace is now belt-and-braces rather than required. Returns
-    ``None`` on any parse failure — the caller reads that as "skip" (fail-open),
+    ``None`` on any parse failure: the caller reads that as "skip" (fail-open),
     matching the TS ``Number.isNaN(Date.parse(...))`` no-op."""
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -1377,7 +1377,7 @@ def _temporal_key_failure(
 def _hash_pair(left: str, right: str) -> str:
     """Hash two hex-string children into a parent hex digest. Per verify-core,
     the two hex STRINGS are concatenated and the resulting UTF-8 text is hashed
-    — NOT a byte concat, and NO RFC 9162 0x00/0x01 domain-separation prefixes
+   : NOT a byte concat, and NO RFC 9162 0x00/0x01 domain-separation prefixes
     (those belong to the SCITT receipt path, not org_admin_reads)."""
     return hashlib.sha256((left + right).encode()).hexdigest()
 

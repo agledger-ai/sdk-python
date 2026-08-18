@@ -1,4 +1,4 @@
-"""AGLedger SDK — Accountability and audit infrastructure for agentic systems."""
+"""AGLedger SDK: Accountability and audit infrastructure for agentic systems."""
 
 from agledger._client import AgledgerClient, AsyncAgledgerClient
 from agledger._http import RateLimitInfo, SDK_VERSION
@@ -125,7 +125,7 @@ __all__ = [
     "can_transition_to",
     "get_valid_transitions",
     "is_terminal_status",
-    # Types — Records
+    # Types: Records
     "RecordRow",
     "RecordIntegrity",
     "RecordStatus",
@@ -137,30 +137,30 @@ __all__ = [
     "GateMode",
     "GateEvaluationResult",
     "GateStatus",
-    # Types — Disputes
+    # Types: Disputes
     "Dispute",
     "DisputeEvidence",
     "DisputeResponse",
     "DisputeStatus",
     "EntityReference",
-    # Types — Webhooks
+    # Types: Webhooks
     "Webhook",
     "WebhookEventType",
     "WebhookTestResult",
-    # Types — Reputation / Events
+    # Types: Reputation / Events
     "ReputationScore",
     "Event",
-    # Types — Identity
+    # Types: Identity
     "AccountProfile",
     "AgentProfile",
     "AgentCapabilities",
-    # Types — Discovery / metadata
+    # Types: Discovery / metadata
     "NextStep",
     "HealthResponse",
     "StatusComponent",
     "StatusResponse",
     "ConformanceResponse",
-    # Types — Audit / Vault
+    # Types: Audit / Vault
     "AuditActor",
     "AuditExportEntry",
     "AuditExportMetadata",
@@ -178,13 +178,13 @@ __all__ = [
     "OrgReadsInclusionProof",
     "VaultCheckpoint",
     "VaultCheckpointChain",
-    # Types — Bulk operations
+    # Types: Bulk operations
     "BulkCreateResult",
     "BulkCreateResultItem",
     "BulkCreateSummary",
-    # Types — Pagination
+    # Types: Pagination
     "Page",
-    # Types — Compliance
+    # Types: Compliance
     "ComplianceRecord",
     "ComplianceExport",
     "AiImpactAssessment",

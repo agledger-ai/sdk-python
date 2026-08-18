@@ -1,5 +1,5 @@
 """
-AGLedger SDK — Client with resource sub-clients.
+AGLedger SDK: Client with resource sub-clients.
 Supports context manager protocol for proper connection cleanup.
 """
 

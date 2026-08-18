@@ -65,7 +65,7 @@ CRITICAL_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/events"),
     ("GET", "/v1/references"),
     ("GET", "/v1/verification-keys"),
-    # NB: POST /v1/admin/orgs (create-org) is intentionally NOT here — it was
+    # NB: POST /v1/admin/orgs (create-org) is intentionally NOT here; it was
     # dropped from the canonical OpenAPI spec in API v1.0.1 (dev/test-only, never
     # registered in production). admin.create_org() still reaches it for local
     # bootstrap; GET (list) remains canonical.
@@ -113,7 +113,7 @@ def test_critical_route_exists(
 ) -> None:
     """Each critical route must exist in the API spec."""
     key = f"{method} {path}"
-    assert key in route_map, f"Missing route {key} — API may have renamed or removed it"
+    assert key in route_map, f"Missing route {key}: API may have renamed or removed it"
 
 
 @pytest.mark.parametrize("method,path", RETIRED_ROUTES)
