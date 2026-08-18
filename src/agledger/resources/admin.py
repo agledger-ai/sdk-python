@@ -111,6 +111,36 @@ class AdminVaultResource:
         self.signing_keys: AdminVaultSigningKeysResource = AdminVaultSigningKeysResource(http)
 
 
+def _api_key_filters(
+    owner_id: str | None,
+    org_id: str | None,
+    owner_type: str | None,
+    role: str | None,
+    is_active: bool | None,
+    created_before: str | None,
+    limit: int | None,
+    offset: int | None,
+    cursor: str | None,
+) -> dict[str, Any]:
+    """Build the ``GET /v1/admin/api-keys`` querystring from snake_case kwargs.
+
+    The route is ``additionalProperties: false``, so a snake_case key on the
+    wire is a 400 and not a silently ignored filter. Only ``role`` survived the
+    passthrough these methods used to be, because it is a single word.
+    """
+    params: dict[str, Any] = {}
+    if owner_id is not None: params["ownerId"] = owner_id
+    if org_id is not None: params["orgId"] = org_id
+    if owner_type is not None: params["ownerType"] = owner_type
+    if role is not None: params["role"] = role
+    if is_active is not None: params["isActive"] = is_active
+    if created_before is not None: params["createdBefore"] = created_before
+    if limit is not None: params["limit"] = limit
+    if offset is not None: params["offset"] = offset
+    if cursor is not None: params["cursor"] = cursor
+    return params
+
+
 def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
     """Map snake_case trusted-issuer kwargs to the camelCase wire body."""
     mapping = {
@@ -310,18 +340,44 @@ class AdminResource:
 
     # --- API keys ---
 
-    def list_api_keys(self, **params: Any) -> dict[str, Any]:
+    def list_api_keys(
+        self,
+        *,
+        owner_id: str | None = None,
+        org_id: str | None = None,
+        owner_type: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        created_before: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
         """List API keys: one owner's when ``owner_id`` is set, otherwise every
         key on the install (platform keys only).
 
-        Filters: ``ownerId``, ``orgId``, ``ownerType``, ``role``, ``isActive``,
-        ``createdBefore``. Both modes cap at ``limit`` (default 200) and report
-        truncation through ``hasMore``, so a key audit that reads ``data`` and
-        stops under-reports on a large install. Use :meth:`list_all_api_keys`.
+        Both modes cap at ``limit`` (default 200) and report truncation through
+        ``hasMore``, so a key audit that reads ``data`` and stops under-reports
+        on a large install. Use :meth:`list_all_api_keys`.
         """
+        params = _api_key_filters(
+            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+        )
         return self._http.get_page("/v1/admin/api-keys", params=params)
 
-    def list_all_api_keys(self, **params: Any) -> Iterator[dict[str, Any]]:
+    def list_all_api_keys(
+        self,
+        *,
+        owner_id: str | None = None,
+        org_id: str | None = None,
+        owner_type: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        created_before: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> Iterator[dict[str, Any]]:
         """Auto-paginate through all API keys.
 
         Resends the filters with each cursor, which the single-owner cursor
@@ -329,6 +385,9 @@ class AdminResource:
         without the matching ``ownerId`` is a 400 rather than a silent slide
         into the install-wide listing at the same offset.
         """
+        params = _api_key_filters(
+            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+        )
         yield from self._http.paginate("/v1/admin/api-keys", params=params)
 
     def create_api_key(
@@ -711,13 +770,45 @@ class AsyncAdminResource:
             body["reason"] = reason
         return await self._http.post(f"/v1/admin/agents/{agent_id}/deactivate", json=body)
 
-    async def list_api_keys(self, **params: Any) -> dict[str, Any]:
+    async def list_api_keys(
+        self,
+        *,
+        owner_id: str | None = None,
+        org_id: str | None = None,
+        owner_type: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        created_before: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """List API keys: one owner's when ``owner_id`` is set, otherwise every
+        key on the install. See the sync counterpart for the truncation note."""
+        params = _api_key_filters(
+            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+        )
         return await self._http.get_page("/v1/admin/api-keys", params=params)
 
-    async def list_all_api_keys(self, **params: Any) -> AsyncIterator[dict[str, Any]]:
+    async def list_all_api_keys(
+        self,
+        *,
+        owner_id: str | None = None,
+        org_id: str | None = None,
+        owner_type: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        created_before: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Auto-paginate through all API keys, resending the filters with each
         cursor. See the sync counterpart for why the single-owner cursor needs
         them."""
+        params = _api_key_filters(
+            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+        )
         async for item in self._http.paginate("/v1/admin/api-keys", params=params):
             yield item
 

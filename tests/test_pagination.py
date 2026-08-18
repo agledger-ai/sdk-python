@@ -63,7 +63,7 @@ def test_list_all_api_keys_replays_owner_with_cursor():
         httpx.Response(200, json={"data": [{"id": "key-2"}], "hasMore": False, "nextCursor": None}),
     ]
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    keys = list(client.admin.list_all_api_keys(ownerId="org-1"))
+    keys = list(client.admin.list_all_api_keys(owner_id="org-1"))
 
     assert [k["id"] for k in keys] == ["key-1", "key-2"]
     assert len(route.calls) == 2
