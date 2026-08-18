@@ -9,7 +9,7 @@ key, either at load or at verify depending on how it was built.
 Both refusals used to be caught and reported as a failed signature, which is
 indistinguishable from a forgery. That told an auditor an intact chain had been
 tampered with, and told a webhook receiver that every legitimate delivery was
-forged (agents#113).
+forged.
 
 Lives here, outside ``agledger.verify``, so the webhook path can use it without
 pulling in the verify extra's dependencies.

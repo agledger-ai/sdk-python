@@ -1,6 +1,6 @@
 """Response-contract regression tests.
 
-These guard the F-713/F-710/F-706 bug class: SDK Pydantic models requiring a
+These guard a bug class: SDK Pydantic models requiring a
 field the server renamed/dropped, which crashes deserialization. Each test
 feeds a *real-server-shaped* payload (camelCase, exactly what the API emits)
 through a resource method and asserts the model parses. The reported crashes
@@ -22,7 +22,7 @@ def _client() -> AgledgerClient:
 
 @respx.mock
 def test_agents_get_parses_display_name_shape():
-    # F-713 class: server emits displayName (no name/slug/updatedAt).
+    # server emits displayName (no name/slug/updatedAt).
     respx.get(f"{BASE}/v1/agents/agt-1").mock(
         return_value=httpx.Response(200, json={
             "id": "agt-1", "orgId": "org-1", "displayName": "Acme Bot",
@@ -54,7 +54,7 @@ def test_agents_list_parses_directory_shape():
 
 @respx.mock
 def test_events_list_parses_type_and_data():
-    # F-713 class: server emits `type` + `data`, not `eventType` + `payload`.
+    # server emits `type` + `data`, not `eventType` + `payload`.
     respx.get(f"{BASE}/v1/events").mock(
         return_value=httpx.Response(200, json={
             "data": [{
@@ -93,7 +93,7 @@ def test_reputation_get_by_type_tolerates_null_scores():
 
 @respx.mock
 def test_completions_submit_omits_unknown_root_keys():
-    # F-710 class: only evidence/evidenceHash/idempotencyKey are accepted root
+    # only evidence/evidenceHash/idempotencyKey are accepted root
     # keys. `notes` is gone; `evidence_hash` maps to evidenceHash.
     import json
     route = respx.post(f"{BASE}/v1/records/rec-1/completions").mock(
@@ -110,7 +110,7 @@ def test_completions_submit_omits_unknown_root_keys():
 
 @respx.mock
 def test_get_chain_unwraps_paginated_envelope():
-    # F-730 class: /chain returns a paginated envelope, not a bare array.
+    # /chain returns a paginated envelope, not a bare array.
     # The old code iterated the dict's keys and crashed on the string "data".
     def _row(rid: str, status: str) -> dict:
         return {
@@ -134,7 +134,7 @@ def test_get_chain_unwraps_paginated_envelope():
 
 @respx.mock
 def test_record_reject_sends_message_not_reason():
-    # F-710 class: the reject route accepts only `message`.
+    # the reject route accepts only `message`.
     import json
     route = respx.post(f"{BASE}/v1/records/rec-1/reject").mock(
         return_value=httpx.Response(200, json={

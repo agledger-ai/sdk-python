@@ -25,7 +25,7 @@ class AuthResource:
         """Rotate the current API key.
 
         The old key is revoked immediately unless ``grace_period_seconds`` is given
-        (API #793), which keeps it valid for an overlap window so in-flight callers
+, which keeps it valid for an overlap window so in-flight callers
         can swap without a hard cutover.
         """
         body = {"gracePeriodSeconds": grace_period_seconds} if grace_period_seconds is not None else None
@@ -64,7 +64,7 @@ class AsyncAuthResource:
         """Rotate the current API key.
 
         The old key is revoked immediately unless ``grace_period_seconds`` is given
-        (API #793), which keeps the old key valid for an overlap window.
+, which keeps the old key valid for an overlap window.
         """
         body = {"gracePeriodSeconds": grace_period_seconds} if grace_period_seconds is not None else None
         return await self._http.post("/v1/auth/keys/rotate", json=body)

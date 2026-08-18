@@ -202,7 +202,7 @@ def test_records_bulk_create():
 
 @respx.mock
 def test_records_get_audit_export():
-    # F-713 regression: the entry MUST be populated with the real server shape
+    # Regression: the entry MUST be populated with the real server shape
     # (humanReadableLabel, NOT description). An empty `entries: []` masked the
     # original crash: the model is only exercised when an entry is present.
     export_resp = {
@@ -720,7 +720,7 @@ def test_records_counter_propose():
 
 @respx.mock
 def test_compliance_create_assessment_maps_snake_to_camel():
-    # F-740: create_assessment must accept idiomatic snake_case kwargs and emit
+    # create_assessment must accept idiomatic snake_case kwargs and emit
     # the camelCase wire shape (the route has additionalProperties:false).
     assessment_json = {
         "id": "aia-1",
@@ -838,7 +838,7 @@ def test_rate_limit_info_none_when_headers_absent():
 
 
 # ---------------------------------------------------------------------------
-# base_url is required (agents#109 parity with the TypeScript SDK)
+# base_url is required (parity with the TypeScript SDK)
 # ---------------------------------------------------------------------------
 class TestBaseUrlRequired:
     """A placeholder host resolved nowhere, so a client built without a base URL

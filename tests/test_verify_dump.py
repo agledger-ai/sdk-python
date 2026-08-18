@@ -87,7 +87,7 @@ def test_merkle_root_odd_duplicates_last_leaf() -> None:
 
 
 def test_hash_pair_is_hex_string_concat_not_byte_concat() -> None:
-    # Guards the F-682-class trap: the digest is over the concatenated hex TEXT,
+    # Guards the trap: the digest is over the concatenated hex TEXT,
     # not over the decoded bytes.
     assert _hash_pair("ab", "cd") == hashlib.sha256(b"abcd").hexdigest()
 
@@ -197,7 +197,7 @@ def test_cli_missing_target_is_usage_error(capsys: pytest.CaptureFixture[str]) -
     assert code == 2
 
 
-# --- checkpoint join on chain_key (agents#103) -------------------------------
+# --- checkpoint join on chain_key -------------------------------
 #
 # A schema chain's checkpoint carries a derived UUIDv8 in record_id that matches
 # no audit_vault row. Joining on that column stranded the checkpoint and failed

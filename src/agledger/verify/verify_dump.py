@@ -126,7 +126,7 @@ def _checkpoint_chain_key(cp: DumpRow) -> str:
     on that column strands the checkpoint and reports CHECKPOINT_ROW_MISSING
     against a healthy vault. Join on the producer's chain_key; fall back to
     record_id for older dumps, which is correct for every chain except schema
-    chains (agents#103).
+    chains.
     """
     ck = cp.get("chain_key")
     if ck is not None:
@@ -140,7 +140,7 @@ def _checkpoint_chain_key(cp: DumpRow) -> str:
 def _chain_label(chain_key: str) -> str:
     """How a chain is named in failure messages. A per-record key IS a record
     id, so "RecordRow <uuid>" is actionable; a schema key is not, and labelling
-    it that way sent auditors to /v1/records/{id} for a 404 (agents#103).
+    it that way sent auditors to /v1/records/{id} for a 404.
     """
     return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"RecordRow {chain_key}"
 

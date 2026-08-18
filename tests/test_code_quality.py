@@ -144,3 +144,27 @@ def test_no_em_dashes() -> None:
             if EM_DASH in line:
                 violations.append(f"{_rel(path)}:{lineno}  {line.strip()}")
     assert not violations, "Em dashes found:\n" + "\n".join(violations)
+
+
+# These packages are public; the trackers they used to cite are not. A private
+# issue number in a shipped docstring is a dead link for every consumer who
+# reads it, and the wheel ships every module verbatim. Say what the behaviour is
+# rather than where it was decided.
+_TRACKER_REF = re.compile(
+    r"(?:agledger-)?(?:agents|api|testbed|web)#\d+"
+    r"|(?<![\w/])#\d{2,4}\b"
+    r"|\bF-\d{3}\b"
+    r"|\bCR-\d+\b"
+)
+
+
+def test_no_tracker_references() -> None:
+    """Source, tests and shipped Markdown cite no issue numbers."""
+    violations: list[str] = []
+    for path in _prose_files():
+        if path.suffix in {".toml", ".yml", ".yaml"}:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if _TRACKER_REF.search(line):
+                violations.append(f"{_rel(path)}:{lineno}  {line.strip()}")
+    assert not violations, "Tracker references:\n" + "\n".join(violations)
