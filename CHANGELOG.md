@@ -28,9 +28,13 @@ Each of these was reachable from a typed, documented method and failed on every 
 
 - **`BulkCreateResultItem.recovery_hint`**, and **`APIError.registry_version`** for the `CONFLICTING_VERSION` 409, which names the registry slot a schema conflict is on.
 
+- **`admin.list_all_api_keys()`**, sync and async. `GET /v1/admin/api-keys` used to slice cross-owner mode in SQL and then report `hasMore: false` with `total` set to the count it had just sliced, so an install with more than 200 keys reported exactly 200 and called itself complete. That envelope is honest as of api#1251, and both modes now cap at `limit` (default 200), so a key audit reading `data` and stopping under-reports and can finally tell. The iterator resends the filters with each cursor, which the single-owner cursor requires: it carries the owner it was minted under, and replaying it without the matching `ownerId` is a 400 rather than a silent slide into the install-wide listing at the same offset.
+
 ### Changed
 
 - **`discovery.get_conformance()` returns `ConformanceResponse` instead of a raw `dict`.** The model was exported publicly and returned by nothing, which is how the `capabilities` bug above survived, and it left `limits` and `capabilities` with no typed reader. This matches every other resource method here and the TypeScript SDK's `getConformance()`. Callers doing `result["version"]` should use `result.version`, or `result.model_dump()` for the mapping; the model allows extra fields, so anything the Server adds still arrives.
+
+- **The parity snapshots track agledger-api main at `4d52450b`**, which is past v1.4.0 and untagged. The API reports `1.4.0` from `/health` either way, so `apiVersion` alone cannot tell the two apart; `routes.json` names the commit. The only drift over those six commits is a `cursor` query param reaching four routes (`/v1/admin/api-keys`, which also gains `offset`, plus `/v1/schemas`, compliance-records and the federation peer listing). This SDK's list methods take `**params`, so all four were already callable; the snapshot is what needed to move.
 
 ### Removed
 

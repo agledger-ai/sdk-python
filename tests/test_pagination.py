@@ -49,3 +49,24 @@ def test_list_all_single_page():
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     records = list(client.records.list_all(org_id="ent-1"))
     assert len(records) == 1
+
+
+@respx.mock
+def test_list_all_api_keys_replays_owner_with_cursor():
+    """A cursor minted under ``ownerId`` carries that owner, and the API rejects
+    a replay that drops it rather than serving the install-wide listing at the
+    same offset. So the iterator has to resend the filters, not just the cursor.
+    """
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys")
+    route.side_effect = [
+        httpx.Response(200, json={"data": [{"id": "key-1"}], "hasMore": True, "nextCursor": "b2Zmc2V0OjE="}),
+        httpx.Response(200, json={"data": [{"id": "key-2"}], "hasMore": False, "nextCursor": None}),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    keys = list(client.admin.list_all_api_keys(ownerId="org-1"))
+
+    assert [k["id"] for k in keys] == ["key-1", "key-2"]
+    assert len(route.calls) == 2
+    second = route.calls[1].request.url
+    assert second.params["ownerId"] == "org-1"
+    assert second.params["cursor"] == "b2Zmc2V0OjE="

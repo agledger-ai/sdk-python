@@ -3,6 +3,7 @@ vault inspection, and platform operations. Requires an ``admin``-role key."""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
@@ -310,8 +311,25 @@ class AdminResource:
     # --- API keys ---
 
     def list_api_keys(self, **params: Any) -> dict[str, Any]:
-        """List API keys."""
+        """List API keys: one owner's when ``owner_id`` is set, otherwise every
+        key on the install (platform keys only).
+
+        Filters: ``ownerId``, ``orgId``, ``ownerType``, ``role``, ``isActive``,
+        ``createdBefore``. Both modes cap at ``limit`` (default 200) and report
+        truncation through ``hasMore``, so a key audit that reads ``data`` and
+        stops under-reports on a large install. Use :meth:`list_all_api_keys`.
+        """
         return self._http.get_page("/v1/admin/api-keys", params=params)
+
+    def list_all_api_keys(self, **params: Any) -> Iterator[dict[str, Any]]:
+        """Auto-paginate through all API keys.
+
+        Resends the filters with each cursor, which the single-owner cursor
+        requires: it carries the owner it was minted under, and replaying it
+        without the matching ``ownerId`` is a 400 rather than a silent slide
+        into the install-wide listing at the same offset.
+        """
+        yield from self._http.paginate("/v1/admin/api-keys", params=params)
 
     def create_api_key(
         self,
@@ -695,6 +713,13 @@ class AsyncAdminResource:
 
     async def list_api_keys(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/api-keys", params=params)
+
+    async def list_all_api_keys(self, **params: Any) -> AsyncIterator[dict[str, Any]]:
+        """Auto-paginate through all API keys, resending the filters with each
+        cursor. See the sync counterpart for why the single-owner cursor needs
+        them."""
+        async for item in self._http.paginate("/v1/admin/api-keys", params=params):
+            yield item
 
     async def create_api_key(
         self,
