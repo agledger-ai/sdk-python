@@ -1,7 +1,7 @@
 """
 AGLedger SDK: API Key Scopes
 
-Mirrors the authoritative definitions in agledger-api/src/shared/scopes.ts.
+Mirrors the scope definitions the AGLedger API declares.
 Keep this file in lockstep with the API.
 """
 

@@ -36,7 +36,7 @@ Each of these was reachable from a typed, documented method and failed on every 
 
 - **`discovery.get_conformance()` returns `ConformanceResponse` instead of a raw `dict`.** The model was exported publicly and returned by nothing, which is how the `capabilities` bug above survived, and it left `limits` and `capabilities` with no typed reader. This matches every other resource method here and the TypeScript SDK's `getConformance()`. Callers doing `result["version"]` should use `result.version`, or `result.model_dump()` for the mapping; the model allows extra fields, so anything the Server adds still arrives.
 
-- **The parity snapshots track agledger-api main at `ea04d2e1`**, which is past v1.4.0 and untagged. The API reports `1.4.0` from `/health` either way, so `apiVersion` alone cannot tell the two apart; `routes.json` names the commit. The client-visible drift since v1.4.0 is a `cursor` query param reaching four routes (`/v1/admin/api-keys`, which also gains `offset`, plus `/v1/schemas`, compliance-records and the federation peer listing). The three others take `**params` and were already callable; the api-key listings are typed now, so they name `cursor` and `offset` explicitly.
+- **The parity snapshots track API 1.4.0 plus the post-release pagination changes above.** The client-visible drift is a `cursor` query param reaching four routes (`/v1/admin/api-keys`, which also gains `offset`, plus `/v1/schemas`, compliance-records and the federation peer listing). The three others take `**params` and were already callable; the api-key listings are typed now, so they name `cursor` and `offset` explicitly.
 
 ### Removed
 
