@@ -9,7 +9,9 @@ import os
 import random
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from typing import Any, AsyncIterator, Iterator, cast
 
@@ -132,6 +134,7 @@ def _build_error(response: httpx.Response) -> APIError:
         # recovery hint named a list the caller had no way to read.
         "type": body.get("type"),
         "publishers": body.get("publishers"),
+        "registry_version": body.get("registryVersion"),
         # Delete-precondition counts. Same trap as `publishers` above: the
         # recovery hint says the type is still referenced, and without these
         # the caller cannot tell a fixable pin from an unattributable Record
@@ -164,6 +167,37 @@ def _backoff(attempt: int, retry_after: float | None = None) -> float:
     base = min(0.5 * (2**attempt), MAX_BACKOFF)
     jitter = random.uniform(0, base * 0.25)
     return base + jitter
+
+
+def _query_params(params: dict[str, Any] | None) -> dict[str, Any]:
+    """Drop empty values and expand mappings into the API's bracket notation.
+
+    ``httpx`` serializes a dict parameter as its Python repr, so
+    ``search(metadata={"state": "blocked"})`` went out as
+    ``metadata={'state': 'blocked'}`` and came back 400. The engine wants
+    ``metadata[state]=blocked``, which is what the ``criteria`` and ``metadata``
+    filters on ``GET /v1/records/search`` are documented to take.
+
+    ``datetime`` becomes ISO-8601 rather than ``str(dt)``, whose space separator
+    the date-time query params reject.
+    """
+    out: dict[str, Any] = {}
+    for key, value in (params or {}).items():
+        if value is None:
+            continue
+        if isinstance(value, datetime):
+            out[key] = value.isoformat()
+        elif isinstance(value, Mapping):
+            nested = cast("Mapping[str, Any]", value)
+            for sub, sub_value in nested.items():
+                if sub_value is None:
+                    continue
+                out[f"{key}[{sub}]"] = (
+                    sub_value.isoformat() if isinstance(sub_value, datetime) else sub_value
+                )
+        else:
+            out[key] = value
+    return out
 
 
 def _base_headers(
@@ -255,7 +289,7 @@ class HttpClient:
                     url,
                     headers=headers,
                     json=json,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=timeout or self._timeout,
                 )
 
@@ -365,7 +399,7 @@ class HttpClient:
                     url,
                     headers=headers,
                     content=body,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=timeout or self._timeout,
                 )
                 self._capture_response_meta(response)
@@ -407,7 +441,7 @@ class HttpClient:
                     "GET",
                     url,
                     headers=headers,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=kwargs.get("timeout") or self._timeout,
                 )
 
@@ -530,7 +564,7 @@ class AsyncHttpClient:
                     url,
                     headers=headers,
                     json=json,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=timeout or self._timeout,
                 )
 
@@ -633,7 +667,7 @@ class AsyncHttpClient:
                     url,
                     headers=headers,
                     content=body,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=timeout or self._timeout,
                 )
                 self._capture_response_meta(response)
@@ -675,7 +709,7 @@ class AsyncHttpClient:
                     "GET",
                     url,
                     headers=headers,
-                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    params=_query_params(params),
                     timeout=kwargs.get("timeout") or self._timeout,
                 )
 

@@ -277,7 +277,21 @@ class RecordRow(BaseModel):
     chain_depth: int | None = Field(None, alias="chainDepth")
     """Depth in the delegation chain (0 = root)."""
     child_record_ids: list[str] | None = Field(None, alias="childRecordIds")
-    """IDs of child Records in the delegation chain."""
+    """IDs of child Records in the delegation chain, OLDEST first by creation
+    time. Do not read ``[0]`` as the latest child: for the newest child of a
+    type, use ``records.search(parent_record_id=..., type=...)``, which returns
+    newest first."""
+    supersedes_record_id: str | None = Field(None, alias="supersedesRecordId")
+    """The earlier Record this one replaces, asserted by the writer at create and
+    immutable thereafter. Orthogonal to delegation: ``parent_record_id`` says
+    what this Record is part of, this says which earlier Record it makes stale.
+    It sits inside the create-time signature, so an offline verifier
+    reconstructs the same lineage the API reports."""
+    superseded_by_count: int | None = Field(None, alias="supersededByCount")
+    """How many later Records name this one as their ``supersedesRecordId``. 0
+    means this Record is current. Greater than 1 is a FORK: two writers
+    superseded the same Record independently, so there are that many current
+    heads and no single answer."""
     parent_principal_org_matches_performer: bool | None = Field(
         None, alias="parentPrincipalOrgMatchesPerformer"
     )
@@ -446,6 +460,12 @@ class BulkCreateResultItem(BaseModel):
     """Structured extras from the failure, matching the singleton error body.
     For ``/problems/ambiguous-publisher`` this carries ``publishers`` (the
     candidate labels) and ``recordType``."""
+    recovery_hint: str | None = Field(None, alias="recoveryHint")
+    """What to do next about this item, when the failure carries a pointer.
+    Mirrors the ``recoveryHint`` a singleton caller gets in the RFC 9457 body.
+    For ``/problems/idempotency-key-reuse`` the fix is a fresh
+    ``idempotencyKey``: resending the same item unchanged fails identically
+    until the key expires."""
 
 
 class BulkCreateSummary(BaseModel):
@@ -1080,14 +1100,29 @@ class StatusResponse(BaseModel):
 class ConformanceResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
-    capabilities: dict[str, bool] | None = None
-    """Feature capability flags — which features are wired on this install (e.g. recordLifecycle, twoPhaseGate, euAiActCompliance, oidcWorkloadIdentity). Open-ended; read defensively."""
+    capabilities: dict[str, Any] | None = None
+    """Feature capability flags: which features are wired on this install (e.g.
+    ``recordLifecycle``, ``twoPhaseGate``, ``euAiActCompliance``,
+    ``oidcWorkloadIdentity``). Open-ended; read defensively.
+
+    Values are NOT all booleans. ``signingAlgorithms`` is a list of the COSE
+    algorithms this build can sign with, e.g. ``["Ed25519"]``. This was typed
+    ``dict[str, bool]``, which rejects every real response, and nothing caught it
+    because no method returned this model."""
     contract_types: int | None = Field(None, alias="contractTypes")
     """Number of registered contract types in this org."""
     schemas_url: str | None = Field(None, alias="schemasUrl")
     """URL to list all type schemas (criteria + evidence structure)."""
     settlement_signals: list[str] | None = Field(None, alias="settlementSignals")
     """Supported settlement signal types (e.g. SETTLE, HOLD, RELEASE)."""
+    limits: dict[str, int] | None = None
+    """The numeric caps this install enforces, keyed by name:
+    ``criteriaMaxBytesDefault``, ``referencesMaxPerRequest``,
+    ``referencesMaxPerRecordDefault``, ``referenceAttributesMaxKeys``,
+    ``metadataMaxProperties``, ``recordBodyMaxBytes``,
+    ``delegationMaxDepthDefault``, ``delegationMaxDepthCeiling``. Several are
+    org-configurable, so read these rather than hardcoding: the value here is
+    what THIS Server will accept."""
     version: str | None = None
     """AGLedger API version."""
 
@@ -1205,14 +1240,6 @@ class AiImpactAssessment(BaseModel):
     human_oversight: dict[str, Any] | None = Field(None, alias="humanOversight")
     testing_results: dict[str, Any] | None = Field(None, alias="testingResults")
     created_at: str = Field(alias="createdAt")
-
-
-class EuAiActReport(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
-
-    records_assessed: int = Field(0, alias="recordsAssessed")
-    high_risk_count: int = Field(0, alias="highRiskCount")
-    generated_at: str = Field(alias="generatedAt")
 
 
 class VerificationKey(BaseModel):

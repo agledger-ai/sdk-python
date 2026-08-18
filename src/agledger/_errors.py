@@ -37,6 +37,7 @@ class APIError(AgledgerError):
 
     - ``type``: RFC 9457 problem URI (e.g. ``/problems/ambiguous-publisher``). Branch on this, not on prose.
     - ``publishers``: candidate publisher labels on an ambiguous-publisher 422
+    - ``registry_version``: the registry slot a schema version conflict is on
     - ``pinned_records`` / ``unattributable_records``: why a schema delete was refused
     - ``docs``: discovery-document pointer. ``doc_url`` is dead and always None.
 
@@ -65,6 +66,10 @@ class APIError(AgledgerError):
     type is offered by more than one publisher, so the engine refuses to pick.
     Re-send pinned to one of these (``publisher=`` on ``records.create``, or on a
     schema read)."""
+    registry_version: int | None
+    """Registry version slot a schema conflict is on: the integer MAJOR component
+    of ``manifest.version``. Minor and patch bumps stay in the same slot, so
+    escaping a ``CONFLICTING_VERSION`` 409 needs a major bump."""
     pinned_records: int | None
     """Why a ``schemas.delete()`` was refused: Records written against the exact
     registration the delete would have removed. Paired with
@@ -110,6 +115,7 @@ class APIError(AgledgerError):
         deadline: str | None = None,
         type: str | None = None,
         publishers: list[str] | None = None,
+        registry_version: int | None = None,
         pinned_records: int | None = None,
         unattributable_records: int | None = None,
         raw_body: bytes | None = None,
@@ -121,6 +127,7 @@ class APIError(AgledgerError):
         self.retryable = retryable if retryable is not None else (status == 429 or status >= 500)
         self.type = type
         self.publishers = publishers
+        self.registry_version = registry_version
         self.pinned_records = pinned_records
         self.unattributable_records = unattributable_records
         self.doc_url = doc_url
