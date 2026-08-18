@@ -72,6 +72,9 @@ class RecordsResource:
         eu_ai_act_domain: str | None = None,
         human_oversight: dict[str, Any] | None = None,
         parent_record_id: str | None = None,
+        supersedes_record_id: str | None = None,
+        references: list[dict[str, Any]] | None = None,
+        share: bool | None = None,
         external_task_id: str | None = None,
         project_ref: str | None = None,
         depends_on: list[str] | None = None,
@@ -111,6 +114,9 @@ class RecordsResource:
         if eu_ai_act_domain is not None: body["euAiActDomain"] = eu_ai_act_domain
         if human_oversight is not None: body["humanOversight"] = human_oversight
         if parent_record_id is not None: body["parentRecordId"] = parent_record_id
+        if supersedes_record_id is not None: body["supersedesRecordId"] = supersedes_record_id
+        if references is not None: body["references"] = references
+        if share is not None: body["share"] = share
         if external_task_id is not None: body["externalTaskId"] = external_task_id
         if project_ref is not None: body["projectRef"] = project_ref
         if depends_on is not None: body["dependsOn"] = depends_on
@@ -193,8 +199,10 @@ class RecordsResource:
         org_id: str | None = None,
         status: str | None = None,
         type: str | None = None,
-        principal_agent_id: str | None = None,
+        role: str | None = None,
         performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
         from_date: str | None = None,
         to_date: str | None = None,
         sort: str | None = None,
@@ -206,7 +214,19 @@ class RecordsResource:
         updated_before: str | None = None,
         gate_mode: str | None = None,
         operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
         limit: int | None = None,
+        offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
         """Search Records with advanced filters."""
@@ -214,8 +234,10 @@ class RecordsResource:
         if org_id is not None: params["orgId"] = org_id
         if status is not None: params["status"] = status
         if type is not None: params["type"] = type
-        if principal_agent_id is not None: params["principalAgentId"] = principal_agent_id
+        if role is not None: params["role"] = role
         if performer_agent_id is not None: params["performerAgentId"] = performer_agent_id
+        if category is not None: params["category"] = category
+        if project_ref is not None: params["projectRef"] = project_ref
         if from_date is not None: params["from"] = from_date
         if to_date is not None: params["to"] = to_date
         if sort is not None: params["sort"] = sort
@@ -227,7 +249,19 @@ class RecordsResource:
         if updated_before is not None: params["updatedBefore"] = updated_before
         if gate_mode is not None: params["gateMode"] = gate_mode
         if operating_mode is not None: params["operatingMode"] = operating_mode
+        if superseded is not None: params["superseded"] = superseded
+        if supersedes_record_id is not None: params["supersedesRecordId"] = supersedes_record_id
+        if criteria is not None: params["criteria"] = criteria
+        if metadata is not None: params["metadata"] = metadata
+        if has_dispute is not None: params["hasDispute"] = has_dispute
+        if dispute_status is not None: params["disputeStatus"] = dispute_status
+        if imported is not None: params["imported"] = imported
+        if source is not None: params["source"] = source
+        if ref_system is not None: params["ref.system"] = ref_system
+        if ref_type is not None: params["ref.type"] = ref_type
+        if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
+        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         raw = self._http.get_page("/v1/records/search", params=params)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
@@ -453,6 +487,9 @@ class AsyncRecordsResource:
         eu_ai_act_domain: str | None = None,
         human_oversight: dict[str, Any] | None = None,
         parent_record_id: str | None = None,
+        supersedes_record_id: str | None = None,
+        references: list[dict[str, Any]] | None = None,
+        share: bool | None = None,
         external_task_id: str | None = None,
         project_ref: str | None = None,
         depends_on: list[str] | None = None,
@@ -483,6 +520,9 @@ class AsyncRecordsResource:
         if eu_ai_act_domain is not None: body["euAiActDomain"] = eu_ai_act_domain
         if human_oversight is not None: body["humanOversight"] = human_oversight
         if parent_record_id is not None: body["parentRecordId"] = parent_record_id
+        if supersedes_record_id is not None: body["supersedesRecordId"] = supersedes_record_id
+        if references is not None: body["references"] = references
+        if share is not None: body["share"] = share
         if external_task_id is not None: body["externalTaskId"] = external_task_id
         if project_ref is not None: body["projectRef"] = project_ref
         if depends_on is not None: body["dependsOn"] = depends_on
@@ -563,8 +603,10 @@ class AsyncRecordsResource:
         org_id: str | None = None,
         status: str | None = None,
         type: str | None = None,
-        principal_agent_id: str | None = None,
+        role: str | None = None,
         performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
         from_date: str | None = None,
         to_date: str | None = None,
         sort: str | None = None,
@@ -576,7 +618,19 @@ class AsyncRecordsResource:
         updated_before: str | None = None,
         gate_mode: str | None = None,
         operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
         limit: int | None = None,
+        offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
         """Search Records with advanced filters."""
@@ -584,8 +638,10 @@ class AsyncRecordsResource:
         if org_id is not None: params["orgId"] = org_id
         if status is not None: params["status"] = status
         if type is not None: params["type"] = type
-        if principal_agent_id is not None: params["principalAgentId"] = principal_agent_id
+        if role is not None: params["role"] = role
         if performer_agent_id is not None: params["performerAgentId"] = performer_agent_id
+        if category is not None: params["category"] = category
+        if project_ref is not None: params["projectRef"] = project_ref
         if from_date is not None: params["from"] = from_date
         if to_date is not None: params["to"] = to_date
         if sort is not None: params["sort"] = sort
@@ -597,7 +653,19 @@ class AsyncRecordsResource:
         if updated_before is not None: params["updatedBefore"] = updated_before
         if gate_mode is not None: params["gateMode"] = gate_mode
         if operating_mode is not None: params["operatingMode"] = operating_mode
+        if superseded is not None: params["superseded"] = superseded
+        if supersedes_record_id is not None: params["supersedesRecordId"] = supersedes_record_id
+        if criteria is not None: params["criteria"] = criteria
+        if metadata is not None: params["metadata"] = metadata
+        if has_dispute is not None: params["hasDispute"] = has_dispute
+        if dispute_status is not None: params["disputeStatus"] = dispute_status
+        if imported is not None: params["imported"] = imported
+        if source is not None: params["source"] = source
+        if ref_system is not None: params["ref.system"] = ref_system
+        if ref_type is not None: params["ref.type"] = ref_type
+        if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
+        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         raw = await self._http.get_page("/v1/records/search", params=params)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]

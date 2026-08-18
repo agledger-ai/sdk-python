@@ -4,6 +4,38 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed (calls that could never have worked)
+
+Each of these was reachable from a typed, documented method and failed on every call. Mocks could not catch them because they assert on what the SDK sends, and the parity snapshot could not, because it is built from the SDK's own idea of the shape. All were found by driving the SDK against a live Server.
+
+- **Mapping query params are expanded into the API's bracket notation.** `httpx` renders a dict parameter as its Python repr, so `search(metadata={"state": "blocked"})` went out as `metadata={'state': 'blocked'}` and came back `400 querystring/metadata must be object`. Metadata-filtered search had never worked from this SDK. A `datetime` in a query param now serializes as ISO-8601 rather than `str(dt)`, whose space separator the date-time params reject.
+
+- **`records.search(principal_agent_id=...)` is removed.** No record endpoint accepts a `principalAgentId` query param, and the search querystring rejects unknown properties, so it was a guaranteed `400`. Filter with `role="principal"` instead.
+
+- **`ConformanceResponse.capabilities` was typed `dict[str, bool]`, which rejects every real response.** `capabilities.signingAlgorithms` is a list. Nothing caught it because no method returned the model (see below).
+
+### Added (API drift this release tracks)
+
+- **`RecordRow.supersedes_record_id` and `RecordRow.superseded_by_count`.** Supersession answers "which record is current" on an append-only ledger. `supersedes_record_id` is create-only, immutable, and inside the create-time signature, so an offline verifier reconstructs the same lineage the API reports. A count above 1 is a fork, not an error.
+
+- **`records.create(supersedes_record_id=...)`.** `create()` takes explicit keyword-only params, so before this a superseding record could not be created from Python at all: the call raised `TypeError`. Also adds `references=` and `share=`, both long accepted by `POST /v1/records` and neither expressible here.
+
+- **`records.search()` gains `superseded`, `supersedes_record_id`, `criteria`, `metadata`, `role`, `category`, `project_ref`, `has_dispute`, `dispute_status`, `imported`, `source`, `ref_system` / `ref_type` / `ref_id`, and `offset`.** `criteria` filters on signed bytes; `metadata` filters on an unsigned annotation an offline verifier cannot see.
+
+- **`ConformanceResponse.limits`**: the numeric caps this install enforces. Several are org-configurable, so read them rather than hardcoding.
+
+- **`BulkCreateResultItem.recovery_hint`**, and **`APIError.registry_version`** for the `CONFLICTING_VERSION` 409, which names the registry slot a schema conflict is on.
+
+### Changed
+
+- **`discovery.get_conformance()` returns `ConformanceResponse` instead of a raw `dict`.** The model was exported publicly and returned by nothing, which is how the `capabilities` bug above survived, and it left `limits` and `capabilities` with no typed reader. This matches every other resource method here and the TypeScript SDK's `getConformance()`. Callers doing `result["version"]` should use `result.version`, or `result.model_dump()` for the mapping; the model allows extra fields, so anything the Server adds still arrives.
+
+### Removed
+
+- **`EuAiActReport`.** No API route produces that shape, in this release or any earlier one. The two SDKs had even invented different shapes for it, which is the clearest evidence it was never real.
+
 ## [1.8.0] - 2026-08-08
 
 ### Added (multi-publisher schemas)

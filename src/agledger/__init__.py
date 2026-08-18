@@ -53,7 +53,6 @@ from agledger.types import (
     DisputeResponse,
     DisputeStatus,
     EntityReference,
-    EuAiActReport,
     Event,
     HealthResponse,
     GateEvaluationResult,
@@ -189,5 +188,4 @@ __all__ = [
     "ComplianceRecord",
     "ComplianceExport",
     "AiImpactAssessment",
-    "EuAiActReport",
 ]
