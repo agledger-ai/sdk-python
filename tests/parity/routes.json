@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-18T02:27:05.765Z",
-  "sourceUrl": "local openapi.json from agledger-api main @ 4d52450b (post-v1.4.0, untagged; /health still reports 1.4.0)",
+  "generatedAt": "2026-08-18T02:47:02.848Z",
+  "sourceUrl": "local openapi.json from agledger-api main @ ea04d2e1 (post-v1.4.0, untagged; /health still reports 1.4.0)",
   "count": 193,
   "routes": [
     {
