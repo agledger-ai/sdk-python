@@ -80,7 +80,7 @@ except ImportError as _err:  # pragma: no cover
 # need inputs the ``/audit-export`` wire lacks), while the dump verifier
 # (``verify_dump.py``) reaches the rest. CHAIN_PAYLOAD_BINDING_MISMATCH became
 # export-reachable when the export began carrying the row payload (engine ≥
-# v0.26.x): see verify_entry / F-731.
+# v0.26.x): see verify_entry.
 
 # Mirrors ``@agledger/verify-core``'s ``SignatureOutcome``:
 #   ok / invalid / decode-fail : the signature was checked
@@ -191,8 +191,7 @@ def verify_export(
         ``signingPublicKeys``. Accepts either form: pass the ``.data`` list
         from ``client.verification_keys.list()`` directly, or a compact
         ``{keyId: base64SpkiDer}`` mapping. The wrong shape raises ``TypeError``
-        rather than silently falling back to embedded keys
-        (agledger-agents#77 / F-698).
+        rather than silently falling back to embedded keys.
     :param require_key_id: If set, every entry must reference this keyId
         (else :data:`CHAIN_KEY_POLICY_VIOLATION`).
     :param require_out_of_band_keys: High-assurance auditor mode. An entry whose
@@ -469,8 +468,7 @@ def _normalize_oob_keys(
     ``TypeError`` at the boundary if the shape is wrong.
 
     Fail-closed by design: an OOB-key argument that silently falls back to
-    embedded keys would lie about the audit-independence claim
-    (agledger-agents#77 / F-698).
+    embedded keys would lie about the audit-independence claim.
 
     Accepts:
       - ``Mapping[str, str]``: compact ``{keyId: base64SpkiDer}`` form
@@ -706,7 +704,7 @@ def verify_entry(
     # denormalized row ``payload`` (engine ≥ v0.26.x), re-decode the predicate
     # signed inside coseSign1 and deep-equal it against the predicate rebuilt
     # from the row columns. Catches post-export tampering of the human-readable
-    # ``payload``/``criteria`` view while ``coseSign1`` is left intact (F-731).
+    # ``payload``/``criteria`` view while ``coseSign1`` is left intact.
     # Absent ``payload`` (older exports) → skipped, never a silent pass.
     # Binding-integrity and the OIDC-actor cross-check both read the signed
     # predicate, so decode it ONCE here and share it (a dump entry that carries
@@ -821,7 +819,7 @@ def verify_entry(
                 ),
             )
 
-    # Signed-kid binding (engine mirror: signing_key_drift, #893). The row's
+    # Signed-kid binding (engine mirror: signing_key_drift). The row's
     # signingKeyId column selected the key above, but the column is a
     # denormalized convenience; the kid at protected-header label 4 is
     # signature-covered. A divergence means the column was rewritten after
@@ -1176,7 +1174,7 @@ def _extract_kid(protected_bstr: bytes) -> str | None:
     lowercase hex, matching the engine's ``vault_signing_keys.key_id`` shape.
     ``None`` when absent or malformed. The caller cross-checks it against the
     row's ``signingKeyId`` column: the column is a denormalized convenience,
-    the kid is signed (engine mirror: signing_key_drift, #893)."""
+    the kid is signed (engine mirror: signing_key_drift)."""
     try:
         header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
     except Exception:
@@ -1235,8 +1233,8 @@ def _verify_cose_signature(
     if header_alg is None or header_alg not in key_alg.cose_algs:
         return "alg-mismatch"
     # Two independent reasons the signature cannot be checked: this build does
-    # not implement the algorithm, or the host runtime refuses to compute it
-    # (agents#113). Both must read as "not verified", never "did not verify".
+    # not implement the algorithm, or the host runtime refuses to compute it.
+    # Both must read as "not verified", never "did not verify".
     if not key_alg.verifiable or not _runtime_can_compute(key_alg):
         return "unsupported-key-algorithm"
 
@@ -1347,7 +1345,7 @@ def _temporal_key_failure(
     written exactly at activation or retirement is valid (strict ``<`` / ``>``
     comparisons). Unparseable timestamps are skipped (no failure), mirroring TS.
 
-    The two directions carry different codes (agents#112): reporting "expired"
+    The two directions carry different codes: reporting "expired"
     for a key that had not started yet sent consumers to investigate rotation
     when the real condition is a backdated entry or clock skew.
     """

@@ -23,7 +23,7 @@ def _client() -> AgledgerClient:
 
 @respx.mock
 def test_vault_checkpoint_carries_the_chain_discriminator():
-    # #995: three chains are checkpointed. Only chain="record" is keyed by a
+    # Three chains are checkpointed. Only chain="record" is keyed by a
     # real record id; "schema" and "admin" carry a derived key that resolves to
     # no record, so a caller must read `chain` before dereferencing `recordId`.
     respx.get(f"{BASE}/v1/audit-vault/checkpoints").mock(
@@ -84,7 +84,7 @@ def test_vault_checkpoint_parses_without_chain_on_an_older_server():
 
 @respx.mock
 def test_compliance_export_surfaces_the_row_cap():
-    # #968/#991: the export is capped at 10000 rows, newest first. Before this,
+    # The export is capped at 10000 rows, newest first. Before this,
     # recordCount was the only signal and a truncated export was
     # indistinguishable from a complete one.
     respx.post(f"{BASE}/v1/compliance/export").mock(

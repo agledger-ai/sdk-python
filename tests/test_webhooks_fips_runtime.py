@@ -1,6 +1,6 @@
 """A FIPS-locked receiver must not reject legitimate deliveries as forged.
 
-Mirrors the TS SDK's ``webhooks-fips-runtime.test.ts`` (agents#113).
+Mirrors the TS SDK's ``webhooks-fips-runtime.test.ts``.
 
 The FIPS provider carries no EdDSA, so verifying an ed25519 webhook raises
 inside ``verify_rfc9421``. That was caught and returned as ``False``, which

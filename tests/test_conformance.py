@@ -38,7 +38,7 @@ _DUMP_MANIFEST = _CONFORMANCE_DIR / "manifest-dump.json"
 # of these is skipped with a clear reason; the dump runner below covers them.
 # CHAIN_PAYLOAD_BINDING_MISMATCH is NOT here: the export now carries the row
 # payload (engine ≥ v0.26.x), so the binding check runs on the export path too
-# and Python must catch it (F-731).
+# and Python must catch it.
 _DUMP_ONLY_CODES = frozenset(
     {
         "CHAIN_OIDC_ACTOR_MISMATCH",
@@ -87,7 +87,7 @@ def test_manifest_present_and_nonempty() -> None:
     whole anti-drift gate while running zero vectors."""
     assert _MANIFEST.exists(), (
         f"conformance corpus manifest missing at {_MANIFEST}: the anti-drift gate "
-        f"cannot run; vendor the corpus (or pull the api#665 artifact) before testing"
+        f"cannot run; vendor the corpus before testing"
     )
     manifest = _load_manifest()
     assert manifest.get("formatVersion") == "2.0"
@@ -168,8 +168,7 @@ def test_dump_manifest_present_and_nonempty() -> None:
     while running zero dump vectors."""
     assert _DUMP_MANIFEST.exists(), (
         f"dump conformance corpus manifest missing at {_DUMP_MANIFEST}: the "
-        f"anti-drift gate cannot run; vendor the corpus (or pull the api#665 "
-        f"artifact) before testing"
+        f"anti-drift gate cannot run; vendor the corpus before testing"
     )
     manifest = json.loads(_DUMP_MANIFEST.read_text())
     assert manifest.get("formatVersion") == "2.0"

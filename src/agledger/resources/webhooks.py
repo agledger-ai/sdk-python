@@ -26,8 +26,8 @@ class WebhooksResource:
         from ``agledger.webhooks``). Settlement-event subscriptions default to
         ``ed25519`` when the Server has a vault signing key.
 
-        ``record_types`` filters record-scoped events by record type (API
-        #825): ``["*"]`` means all types; any other list is fail-closed (only
+        ``record_types`` filters record-scoped events by record type:
+        ``["*"]`` means all types; any other list is fail-closed (only
         the listed types are delivered). Omit for no filter.
         """
         body: dict[str, Any] = {"url": url, "eventTypes": event_types}
@@ -140,8 +140,8 @@ class AsyncWebhooksResource:
         from ``agledger.webhooks``). Settlement-event subscriptions default to
         ``ed25519`` when the Server has a vault signing key.
 
-        ``record_types`` filters record-scoped events by record type (API
-        #825): ``["*"]`` means all types; any other list is fail-closed (only
+        ``record_types`` filters record-scoped events by record type:
+        ``["*"]`` means all types; any other list is fail-closed (only
         the listed types are delivered). Omit for no filter.
         """
         body: dict[str, Any] = {"url": url, "eventTypes": event_types}

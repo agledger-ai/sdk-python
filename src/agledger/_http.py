@@ -35,7 +35,7 @@ from agledger._errors import (
 # without one constructed fine and then failed every call against a host the
 # caller never named and could only find by reading the SDK source. Every
 # AGLedger deployment is self-hosted, so there was never a sensible default
-# (agents#109, fixed in the TypeScript SDK at 1.7.0 and mirrored here).
+# (fixed in the TypeScript SDK at 1.7.0 and mirrored here).
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_RETRIES = 3
 MAX_BACKOFF = 30.0

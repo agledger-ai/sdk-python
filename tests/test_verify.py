@@ -70,14 +70,14 @@ def _build_entry(
 ) -> dict[str, Any]:
     # Sign a faithful in-toto v1 Statement: the engine signs ``{predicate: ...}``
     # where the predicate is the canonical row projection (record_id, entry_type,
-    # payload). The binding check (F-731) re-derives exactly this from the row, so
+    # payload). The binding check re-derives exactly this from the row, so
     # the synthetic envelope must carry it too.
     record_id = payload.get("recordId") if isinstance(payload.get("recordId"), str) else "REC-test-001"
     predicate = {"record_id": record_id, "entry_type": _ENTRY_TYPE, "payload": payload}
     envelope = _build_cose_sign1(private_key, position, previous_hash, {"predicate": predicate})
     payload_hash = hashlib.sha256(envelope).hexdigest()
     return {
-        # Current exports are chainPosition-only: no legacy `position` (F-682).
+        # Current exports are chainPosition-only: no legacy `position`.
         "chainPosition": position,
         "timestamp": "2026-04-17T00:00:00Z",
         "createdAt": "2026-04-17T00:00:00Z",
@@ -202,7 +202,7 @@ def test_detects_position_gap() -> None:
 
 
 def test_verifies_legacy_position_export() -> None:
-    """Pre-v0.25 exports used `position` instead of `chainPosition` (F-682 back-compat)."""
+    """Pre-v0.25 exports used `position` instead of `chainPosition` (back-compat)."""
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
     for e in exp["entries"]:
@@ -266,7 +266,7 @@ def test_detects_signature_invalid() -> None:
 
 
 def test_detects_payload_binding_mismatch() -> None:
-    # F-731: the attacker rewrites the human-readable row payload but leaves
+    # the attacker rewrites the human-readable row payload but leaves
     # coseSign1 (the signed truth) intact: the offline verifier must catch the
     # drift between the decoded predicate and the row projection.
     pub, priv = _make_keypair()
@@ -378,7 +378,7 @@ def test_null_key_entry_fails_closed_under_key_policy() -> None:
     assert require_oob.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
 
 
-# F-698 regression: public_keys polymorphic acceptance + TypeError on bad shape.
+# Regression: public_keys polymorphic acceptance + TypeError on bad shape.
 # Mirrors packages/verify-core/src/__tests__/oob-key-shapes.test.ts.
 
 def test_oob_keys_accepts_compact_record_form() -> None:
@@ -393,7 +393,7 @@ def test_oob_keys_accepts_compact_record_form() -> None:
 def test_oob_keys_accepts_sdk_natural_list_shape() -> None:
     """The .data list from `client.verification_keys.list()` is the natural
     customer shape: must be accepted directly, not silently fall through to
-    embedded keys (F-698)."""
+    embedded keys."""
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
     keys_list = [{"keyId": "vault-key-1", "publicKey": pub, "algorithm": "Ed25519"}]
@@ -482,7 +482,7 @@ def test_oob_keys_empty_publickey_rejected_with_accurate_diagnostic() -> None:
     assert "empty-string" in str(excinfo.value)
 
 
-# --- temporal key-window direction split (agents#112) ------------------------
+# --- temporal key-window direction split ------------------------
 #
 # Both directions used to report CHAIN_KEY_EXPIRED, so a consumer branching on
 # the code investigated rotation when the real condition was a backdated entry

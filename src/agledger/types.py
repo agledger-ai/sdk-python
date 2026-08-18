@@ -72,7 +72,7 @@ RecordTransitionAction = Literal["register", "propose", "activate", "cancel"]
 OperatingMode = Literal["cleartext", "encrypted"]
 GateMode = Literal["auto", "principal"]
 VaultCheckpointChain = Literal["record", "schema", "admin"] | str
-"""Which chain a vault checkpoint anchors (API v1.3.4, #995). All three are the
+"""Which chain a vault checkpoint anchors (API v1.3.4). All three are the
 same signed-checkpoint construction over a different chain; only ``record`` is
 keyed by a real record id. Typed as the open ``Literal | str`` union so a
 server-added chain kind is not a break."""
@@ -119,7 +119,7 @@ class SignedStatement(BaseModel):
     """Vault signing key id: resolves to a public key at GET /v1/verification-keys."""
     signed_at: str | None = Field(None, alias="signedAt")
     """Signed instant of the head Signed Statement: the CWT ``iat`` claim (second
-    precision) sealed in the COSE_Sign1 protected header (API #877). THE authoritative
+    precision) sealed in the COSE_Sign1 protected header. THE authoritative
     timestamp for time-anchored contracts (wait windows, notice clocks); the Record's
     ``created_at`` is a millisecond DB clock that only approximates it. Null if the
     envelope fails to decode."""
@@ -196,7 +196,7 @@ class SettlementSignalSummary(BaseModel):
 
 
 class RecordIntegrity(BaseModel):
-    """Tamper-evidence result attached to a Record read with ``integrity=True`` (API #732)."""
+    """Tamper-evidence result attached to a Record read with ``integrity=True``."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -440,7 +440,7 @@ class RecordRow(BaseModel):
     share: bool | None = None
     """Whether this Record participates in revenue share, or None when not configured."""
     integrity: "RecordIntegrity | None" = None
-    """Tamper-evidence result, present only when read with ``integrity=True`` (API #732)."""
+    """Tamper-evidence result, present only when read with ``integrity=True``."""
 
 
 class BulkCreateResultItem(BaseModel):
@@ -486,7 +486,7 @@ class BulkCreateResult(BaseModel):
 
 
 class CompletionSettlementSignal(BaseModel):
-    """The auto-gate's inline settlement decision on a Completion (API #816). A
+    """The auto-gate's inline settlement decision on a Completion. A
     leaner projection than ``SettlementSignalSummary`` (no federation delivery
     state), carrying just the gate outcome the caller needs at completion time."""
 
@@ -498,7 +498,7 @@ class CompletionSettlementSignal(BaseModel):
     """Engine verdict that drove the recommendation."""
     reason_code: str | None = Field(None, alias="reasonCode")
     """Discriminator code (same as the settlement webhook), e.g. ``AUTO_SETTLE``, or
-    ``AUTO_SETTLE_WITHIN_TOLERANCE`` (API #824) when the gate cleared only via a
+    ``AUTO_SETTLE_WITHIN_TOLERANCE`` when the gate cleared only via a
     non-zero tolerance band rather than the base criteria threshold. None when not classifiable."""
 
 
@@ -531,7 +531,7 @@ class Completion(BaseModel):
         None, alias="settlementSignal"
     )
     """The auto-gate's settle/hold/reject decision, surfaced inline so the caller learns the
-    outcome at completion time without a follow-up GET (API #816). ``structural_validation ==
+    outcome at completion time without a follow-up GET. ``structural_validation ==
     'ACCEPTED'`` means only the body parsed; this field carries the gate's decision. None when
     the gate did not render inline (encrypted Records, principal-mode held at PENDING_VERDICT,
     or the inline run was skipped); read ``record_status`` and ``records.get(id)`` in that case."""
@@ -625,7 +625,7 @@ WebhookEventType = (
         "record.gate_complete",
         # Principal-mode record held at PROCESSING awaiting the principal verdict;
         # payload carries the completionId to verdict against plus the engine/rollup
-        # advisory result (API #913).
+        # advisory result.
         "record.gate_held",
         "record.fulfilled",
         "record.failed",
@@ -682,7 +682,7 @@ class Webhook(BaseModel):
     url: str
     event_types: list[str] | None = Field(None, alias="eventTypes")
     record_types: list[str] | None = Field(None, alias="recordTypes")
-    """Record-type filter for record-scoped events (API #825). ``["*"]`` means all
+    """Record-type filter for record-scoped events. ``["*"]`` means all
     record types (wildcard sentinel); any other list means record events are
     delivered ONLY for the listed types (fail-closed). ``None`` = no filter."""
     is_active: bool = Field(alias="isActive")
@@ -721,7 +721,7 @@ class VerdictResult(BaseModel):
     recommendation: str
     record_status: RecordStatus | str | None = Field(None, alias="recordStatus")
     """Record status after the verdict settled: FULFILLED (accept) or FAILED (reject),
-    same vocabulary as the Record GET (API #876). Surfaced inline so the caller learns
+    same vocabulary as the Record GET. Surfaced inline so the caller learns
     where the Record landed without a follow-up fetch."""
     reporter_type: str = Field(alias="reporterType")
     reported_at: str = Field(alias="reportedAt")
@@ -786,17 +786,17 @@ class AuditExportEntry(BaseModel):
     actor_id: str | None = Field(None, alias="actorId")
     actor_role: str | None = Field(None, alias="actorRole")
     actor_owner_id: str | None = Field(None, alias="actorOwnerId")
-    """F-705: owner id of the API key: org id (admin), agent id (agent), or platform sentinel."""
+    """Owner id of the API key: org id (admin), agent id (agent), or platform sentinel."""
     actor_display_name: str | None = Field(None, alias="actorDisplayName")
-    """F-705: human-readable label for the actor owner. Display PROJECTION: NOT signature-covered."""
+    """Human-readable label for the actor owner. Display PROJECTION: NOT signature-covered."""
     actor_owner_type: str | None = Field(None, alias="actorOwnerType")
-    """F-705: owner table discriminator (``agent`` / ``org`` / ``platform``); pairs with ``actor_owner_id``."""
+    """Owner table discriminator (``agent`` / ``org`` / ``platform``); pairs with ``actor_owner_id``."""
     actor_oidc_iss: str | None = Field(None, alias="actorOidcIss")
     actor_oidc_sub: str | None = Field(None, alias="actorOidcSub")
     actor_oidc_synthesized: bool | None = Field(None, alias="actorOidcSynthesized")
     entry_type: str = Field(alias="entryType")
     human_readable_label: str | None = Field(None, alias="humanReadableLabel")
-    """F-711: auditor-readable label for ``entry_type`` (e.g. RECORD_STATE_CHANGE → "Record state
+    """Auditor-readable label for ``entry_type`` (e.g. RECORD_STATE_CHANGE → "Record state
     transitioned"). Display PROJECTION: NOT signature-covered; the canonical machine-readable name
     stays in ``entry_type``. Replaced the pre-launch ``description`` placeholder (engine v0.26.x+)."""
     payload: dict[str, Any]
@@ -804,7 +804,7 @@ class AuditExportEntry(BaseModel):
     """Optional ``_actor`` envelope surfaced from the canonical payload."""
     evidence: dict[str, Any] | None = None
     """Completion evidence body, present only when the export was fetched with
-    ``evidence=True`` AND this is a COMPLETION_SUBMITTED entry (API #870). UNSIGNED
+    ``evidence=True`` AND this is a COMPLETION_SUBMITTED entry. UNSIGNED
     projection: the chain binds it by hash only: recompute SHA-256 over the RFC 8785
     (JCS) canonicalization of this object and compare against ``payload.evidenceHash``.
     Encrypted-mode records inline the stored ciphertext envelope."""
@@ -812,7 +812,7 @@ class AuditExportEntry(BaseModel):
 
 
 class AuditChainIntegrityDetail(BaseModel):
-    """Localizes a chain-integrity failure. Null on a clean chain (#F-489)."""
+    """Localizes a chain-integrity failure. Null on a clean chain."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -884,7 +884,7 @@ class AuditExportMetadata(BaseModel):
             "cert_expired",
             "cert_missing",
             "agent_signature_invalid",
-            # API #888/#893 (v1.3.2): vault fails closed on per-entry signature
+            # API v1.3.2: vault fails closed on per-entry signature
             # verification: signature did not verify / signing key unresolvable /
             # denormalized signing_key_id column drifted from the signed kid.
             "signature_invalid",
@@ -926,7 +926,7 @@ class VaultCheckpoint(BaseModel):
     #: On ``"schema"`` and ``"admin"`` it is a derived key that resolves to no
     #: record, and fetching it returns 404 by design.
     record_id: str = Field(alias="recordId")
-    #: Which chain this row anchors (API v1.3.4, #995). ``record`` is the
+    #: Which chain this row anchors (API v1.3.4). ``record`` is the
     #: per-record chain, ``schema`` an org's schema-registration chain
     #: (record-less), ``admin`` the platform-ops chain. All three are the same
     #: signed-checkpoint construction. None on a pre-1.3.4 server.
@@ -1142,7 +1142,7 @@ class AgentProfile(BaseModel):
 
     Wire field is ``displayName`` (not ``name``); there is no ``slug`` or
     ``updatedAt`` on the agent surface. Earlier models required those three and
-    crashed every ``agents.get()`` call (same class as F-713)."""
+    crashed every ``agents.get()`` call."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -1217,7 +1217,7 @@ class ComplianceExport(BaseModel):
     #: before treating this as the size of the match set.
     record_count: int | None = Field(None, alias="recordCount")
     #: True when the filters matched more than the 10000-row export cap, so the
-    #: export holds only the newest 10000 rows (API v1.3.4, #968/#991). Window
+    #: export holds only the newest 10000 rows (API v1.3.4). Window
     #: with ``filters.from`` / ``filters.to`` to cover the rest. On a download
     #: the same answer rides the ``X-AGLedger-Export-Truncated`` response
     #: header, the only carrier for a ``csv`` download (the body is raw rows,
@@ -1268,7 +1268,7 @@ class VerificationKeysResponse(BaseModel):
     data: list[VerificationKey]
     canonicalization: str
     hash_algorithm: str | None = Field(None, alias="hashAlgorithm")
-    """Optional: not emitted by every server build (F-706). Engines that
+    """Optional: not emitted by every server build. Engines that
     emit it set ``"SHA-256"``; absent means the implicit COSE/Ed25519 default."""
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")

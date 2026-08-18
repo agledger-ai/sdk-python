@@ -1,6 +1,6 @@
 """A FIPS-locked runtime must not report an intact Ed25519 chain as forged.
 
-Mirrors ``@agledger/verify-core``'s ``fips-runtime.test.ts`` (agents#113).
+Mirrors ``@agledger/verify-core``'s ``fips-runtime.test.ts``.
 
 The measured behaviour: with the OpenSSL FIPS provider active there is no
 EdDSA, so a perfectly good Ed25519 key either fails to load or raises on

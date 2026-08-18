@@ -257,7 +257,7 @@ class SignatureAlgorithmUnavailableError(Exception):
     is your server's configuration, the second is a rejected delivery.
     Returning ``False`` for both made a FIPS-locked receiver 401 every
     legitimate ed25519 delivery as though it were forged, with nothing anywhere
-    saying why (agents#113).
+    saying why.
 
     The usual cause is an active OpenSSL FIPS provider, which carries no EdDSA.
     Either terminate the ed25519 webhook signature somewhere unrestricted, or

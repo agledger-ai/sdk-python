@@ -133,7 +133,7 @@ class RecordsResource:
         """Get a Record by ID.
 
         Pass ``integrity=True`` to re-verify the audit chain and cross-check the
-        served row against it (API #732); the result is on ``RecordRow.integrity``.
+        served row against it; the result is on ``RecordRow.integrity``.
         """
         params = {"integrity": integrity} if integrity is not None else None
         return RecordRow.model_validate(self._http.get(f"/v1/records/{record_id}", params=params))
@@ -159,7 +159,7 @@ class RecordsResource:
         """List Records with optional filters.
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
-        action awaits the caller's structural side (API #731). Agent keys only.
+        action awaits the caller's structural side. Agent keys only.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
@@ -287,13 +287,13 @@ class RecordsResource:
     def accept(self, record_id: str, message: str | None = None) -> RecordRow:
         """Accept a PROPOSED Record (as performer). The optional ``message``
         explains the acceptance (max 2000 chars; the API also accepts
-        ``reason``/``notes`` as wire-level aliases of the same field, #780)."""
+        ``reason``/``notes`` as wire-level aliases of the same field)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/accept", json=body))
 
     def reject(self, record_id: str, message: str | None = None) -> RecordRow:
         """Reject a PROPOSED Record (as performer). The optional ``message``
-        explains the rejection (``reason``/``notes`` are wire-level aliases, #780)."""
+        explains the rejection (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/reject", json=body))
 
@@ -414,8 +414,8 @@ class RecordsResource:
         into the canonical payload; the hash chain covers it. Set ``receipts=True``
         to opt the SCITT Receipts (Merkle inclusion proofs) into the export: only
         emitted when the engine has a ``VAULT_SIGNING_KEY``. Set ``evidence=True`` to
-        inline the completion evidence body at each COMPLETION_SUBMITTED entry (API
-        #870): an UNSIGNED projection the chain binds by hash via
+        inline the completion evidence body at each COMPLETION_SUBMITTED entry:
+        an UNSIGNED projection the chain binds by hash via
         ``payload.evidenceHash``. JSON/NDJSON only.
         """
         params: dict[str, Any] = {"format": format}
@@ -536,7 +536,7 @@ class AsyncRecordsResource:
         return RecordRow.model_validate(await self._http.post("/v1/records", json=body))
 
     async def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
-        """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain (API #732)."""
+        """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain."""
         params = {"integrity": integrity} if integrity is not None else None
         return RecordRow.model_validate(
             await self._http.get(f"/v1/records/{record_id}", params=params)
@@ -563,7 +563,7 @@ class AsyncRecordsResource:
         """List Records with optional filters.
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
-        action awaits the caller's structural side (API #731). Agent keys only.
+        action awaits the caller's structural side. Agent keys only.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
@@ -689,7 +689,7 @@ class AsyncRecordsResource:
 
     async def accept(self, record_id: str, message: str | None = None) -> RecordRow:
         """Accept a PROPOSED Record (as performer). The optional ``message``
-        explains the acceptance (``reason``/``notes`` are wire-level aliases, #780)."""
+        explains the acceptance (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(
             await self._http.post(f"/v1/records/{record_id}/accept", json=body)
@@ -697,7 +697,7 @@ class AsyncRecordsResource:
 
     async def reject(self, record_id: str, message: str | None = None) -> RecordRow:
         """Reject a PROPOSED Record (as performer). The optional ``message``
-        explains the rejection (``reason``/``notes`` are wire-level aliases, #780)."""
+        explains the rejection (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(
             await self._http.post(f"/v1/records/{record_id}/reject", json=body)
