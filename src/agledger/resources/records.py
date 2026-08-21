@@ -46,6 +46,11 @@ def _build_list_params(
     return params
 
 
+def _page_params(limit: int | None, offset: int | None, cursor: str | None) -> dict[str, Any]:
+    """Paging params for a listing that takes all three, dropping the unset ones."""
+    return {k: v for k, v in (("limit", limit), ("offset", offset), ("cursor", cursor)) if v is not None}
+
+
 class RecordsResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -324,10 +329,16 @@ class RecordsResource:
         body = {"reason": reason} if reason else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/revision", json=body))
 
-    def get_chain(self, record_id: str) -> list[RecordRow]:
-        """Get the full delegation chain for a Record."""
-        raw = self._http.get_page(f"/v1/records/{record_id}/chain")
-        return [RecordRow.model_validate(m) for m in raw.get("data", [])]
+    def get_chain(self, record_id: str, *, max_pages: int = 100) -> list[RecordRow]:
+        """Get the full delegation chain for a Record.
+
+        Walks every page rather than returning the first: the endpoint caps a
+        page at 1000 rows, so a longer chain came back truncated with nothing
+        on the result saying so."""
+        return [
+            RecordRow.model_validate(m)
+            for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)
+        ]
 
     def get_graph(self, record_id: str) -> dict[str, Any]:
         """Get the delegation graph for a Record."""
@@ -361,9 +372,18 @@ class RecordsResource:
             self._http.post(f"/v1/records/{record_id}/accept-counter", json={})
         )
 
-    def get_sub_records(self, record_id: str) -> Page[RecordRow]:
-        """Get direct sub-Records of a Record."""
-        raw = self._http.get_page(f"/v1/records/{record_id}/sub-records")
+    def get_sub_records(
+        self,
+        record_id: str,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[RecordRow]:
+        """Get direct sub-Records of a Record. Page by replaying ``next_cursor``
+        as ``cursor``; the listing takes writes, so ``offset`` can skip rows."""
+        params = _page_params(limit, offset, cursor)
+        raw = self._http.get_page(f"/v1/records/{record_id}/sub-records", params=params or None)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
         return Page[RecordRow].model_validate(raw)
 
@@ -753,9 +773,11 @@ class AsyncRecordsResource:
             await self._http.post(f"/v1/records/{record_id}/revision", json=body)
         )
 
-    async def get_chain(self, record_id: str) -> list[RecordRow]:
-        raw = await self._http.get_page(f"/v1/records/{record_id}/chain")
-        return [RecordRow.model_validate(m) for m in raw.get("data", [])]
+    async def get_chain(self, record_id: str, *, max_pages: int = 100) -> list[RecordRow]:
+        return [
+            RecordRow.model_validate(m)
+            async for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)
+        ]
 
     async def get_graph(self, record_id: str) -> dict[str, Any]:
         return await self._http.get(f"/v1/records/{record_id}/graph")
@@ -785,8 +807,16 @@ class AsyncRecordsResource:
             await self._http.post(f"/v1/records/{record_id}/accept-counter", json={})
         )
 
-    async def get_sub_records(self, record_id: str) -> Page[RecordRow]:
-        raw = await self._http.get_page(f"/v1/records/{record_id}/sub-records")
+    async def get_sub_records(
+        self,
+        record_id: str,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[RecordRow]:
+        params = _page_params(limit, offset, cursor)
+        raw = await self._http.get_page(f"/v1/records/{record_id}/sub-records", params=params or None)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
         return Page[RecordRow].model_validate(raw)
 

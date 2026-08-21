@@ -1,7 +1,7 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.4.0",
-  "schemaCount": 11,
+  "apiVersion": "1.5.0",
+  "schemaCount": 14,
   "schemas": {
     "Completion": [
       "agentId",
@@ -125,6 +125,15 @@
       "validationErrors",
       "version"
     ],
+    "FieldMappingRule": [
+      "criteriaPath",
+      "evidencePath",
+      "expression",
+      "maxTolerance",
+      "ruleId",
+      "toleranceField",
+      "valueType"
+    ],
     "NextStepAction": [
       "action",
       "afterThis",
@@ -134,6 +143,13 @@
       "workflowLabel",
       "workflowStep",
       "workflowTotal"
+    ],
+    "PaginatedResponse": [
+      "hasMore",
+      "nextCursor",
+      "nextSteps",
+      "recordRead",
+      "total"
     ],
     "RateLimitError": [
       "allowedActions",
@@ -200,6 +216,11 @@
       "validTransitions",
       "validationErrors",
       "version"
+    ],
+    "RecordReadCompletion": [
+      "leafHash",
+      "leafIndex",
+      "signedCheckpointRef"
     ],
     "RecordRow": [
       "acceptanceRespondedAt",
