@@ -59,8 +59,8 @@ def fips_host_refusing_at_load(monkeypatch: pytest.MonkeyPatch) -> None:
     was built against OpenSSL, so both have to be covered. This variant is the
     one that bypasses a gate placed after key resolution.
     """
-    import cryptography.hazmat.primitives.serialization as serialization
     from cryptography.exceptions import UnsupportedAlgorithm
+    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
 
     real_load = serialization.load_der_public_key
@@ -212,9 +212,7 @@ def test_an_attacker_controlled_alg_mismatch_still_returns_false(
     import base64
 
     from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-
-    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives.asymmetric import ec, ed25519
 
     # A host where ES256 is also unavailable, so the assert would fire if it
     # ran. FIPS does not produce this, which is why the ordering bug was

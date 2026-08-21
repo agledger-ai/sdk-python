@@ -50,24 +50,21 @@ from agledger.verify.verify_export import (
 )
 
 __all__ = [
-    # Per-record export verifier.
-    "verify_export",
-    "EntryVerificationResult",
-    "VerifyExportResult",
     "BrokenAt",
-    "SignatureCoverage",
-    "KeyProvenance",
-    "KeySource",
-    # Full-vault dump verifier.
-    "verify_dump",
-    "load_dump",
     "Dump",
     "DumpLoadError",
-    "VerifyReport",
-    "VaultChainsReport",
-    "TenantAdminReadsReport",
+    "EntryVerificationResult",
     "Failure",
-    # Shared taxonomy.
     "FailureCode",
+    "KeyProvenance",
+    "KeySource",
+    "SignatureCoverage",
+    "TenantAdminReadsReport",
+    "VaultChainsReport",
+    "VerifyExportResult",
+    "VerifyReport",
+    "load_dump",
     "suggestion",
+    "verify_dump",
+    "verify_export",
 ]

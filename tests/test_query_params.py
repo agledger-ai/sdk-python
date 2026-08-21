@@ -8,7 +8,7 @@ swallowed the ``criteria`` filter. These pin the bracket notation the API
 documents, plus the datetime and pruning rules around it.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import unquote
 
 import httpx
@@ -51,7 +51,7 @@ def test_datetime_is_iso_8601_not_str():
     # The typed methods declare `str` for date params, so this covers the
     # untyped paths: `client.request()` and any mapping passed straight through.
     # `str(datetime)` uses a space separator, which the date-time params reject.
-    when = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+    when = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     out = _query_params({"from": when, "metadata": {"at": when}})
     assert out["from"] == "2026-01-02T03:04:05+00:00"
     assert out["metadata[at]"] == "2026-01-02T03:04:05+00:00"

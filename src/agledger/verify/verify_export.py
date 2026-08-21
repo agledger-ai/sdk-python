@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Mapping, Sequence, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel
 
@@ -1329,7 +1330,7 @@ def _parse_instant(value: str) -> datetime | None:
     ``None`` on any parse failure: the caller reads that as "skip" (fail-open),
     matching the TS ``Number.isNaN(Date.parse(...))`` no-op."""
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except (ValueError, AttributeError):
         return None
 

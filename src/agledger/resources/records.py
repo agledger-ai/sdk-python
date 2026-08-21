@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.record_lifecycle import get_valid_transitions
@@ -25,26 +26,26 @@ def _build_list_params(
     limit: int | None, cursor: str | None,
 ) -> dict[str, Any]:
     """Assemble the query params for GET /v1/records, mapping snake_case to the wire names."""
-    params: dict[str, Any] = {}
-    for key, value in (
-        ("orgId", org_id),
-        ("status", status),
-        ("type", type),
-        ("performerAgentId", performer_agent_id),
-        ("role", role),
-        ("from", from_),
-        ("to", to),
-        ("hasDispute", has_dispute),
-        ("disputeStatus", dispute_status),
-        ("imported", imported),
-        ("source", source),
-        ("actionable", actionable),
-        ("limit", limit),
-        ("cursor", cursor),
-    ):
-        if value is not None:
-            params[key] = value
-    return params
+    return {
+        key: value
+        for key, value in (
+            ("orgId", org_id),
+            ("status", status),
+            ("type", type),
+            ("performerAgentId", performer_agent_id),
+            ("role", role),
+            ("from", from_),
+            ("to", to),
+            ("hasDispute", has_dispute),
+            ("disputeStatus", dispute_status),
+            ("imported", imported),
+            ("source", source),
+            ("actionable", actionable),
+            ("limit", limit),
+            ("cursor", cursor),
+        )
+        if value is not None
+    }
 
 
 def _page_params(limit: int | None, offset: int | None, cursor: str | None) -> dict[str, Any]:

@@ -9,11 +9,11 @@ import os
 import random
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
-from typing import Any, AsyncIterator, Iterator, cast
+from typing import Any, cast
 
 import httpx
 
@@ -22,8 +22,8 @@ from agledger._errors import (
     APIError,
     APITimeoutError,
     AuthenticationError,
-    ConfigurationError,
     BadRequestError,
+    ConfigurationError,
     ConflictError,
     NotFoundError,
     PaginationLimitError,

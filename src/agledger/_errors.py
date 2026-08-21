@@ -11,7 +11,6 @@ from typing import Any
 class AgledgerError(Exception):
     """Base error for all SDK errors."""
 
-    pass
 
 
 class ConfigurationError(AgledgerError):
@@ -23,7 +22,6 @@ class ConfigurationError(AgledgerError):
     ``ConfigurationError``.
     """
 
-    pass
 
 
 class APIError(AgledgerError):
@@ -230,13 +228,11 @@ class RateLimitError(APIError):
 class APIConnectionError(AgledgerError):
     """Network connectivity error."""
 
-    pass
 
 
 class APITimeoutError(APIConnectionError):
     """Request timed out."""
 
-    pass
 
 
 class PaginationLimitError(AgledgerError):

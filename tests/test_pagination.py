@@ -6,7 +6,6 @@ import respx
 
 from agledger import AgledgerClient, PaginationLimitError, RecordRow
 
-
 RECORD_1 = {
     "id": "rec-1", "orgId": "org-1", "performerAgentId": None, "principalAgentId": "agt-1",
     "type": "notarize-generic-v1", "contractVersion": "1", "platform": "test",
@@ -112,13 +111,13 @@ def test_default_ceiling_raises_rather_than_returning_a_prefix():
     )
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
 
-    seen: list[RecordRow] = []
+    seen = 0
     with pytest.raises(PaginationLimitError) as excinfo:
-        for record in client.records.list_all(org_id="ent-1"):
-            seen.append(record)
+        for _record in client.records.list_all(org_id="ent-1"):
+            seen += 1
 
     # The rows it did yield are valid: the error says they are not all of them.
-    assert len(seen) == 100
+    assert seen == 100
     err = excinfo.value
     assert err.path == "/v1/records"
     assert err.pages_read == 100

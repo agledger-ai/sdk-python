@@ -381,7 +381,7 @@ class RecordRow(BaseModel):
     """Optional grouping ID for related Records."""
     requested_by: str | None = Field(None, alias="requestedBy")
     """Free-form identifier of the human or upstream system that asked for the work."""
-    references: list["EntityReference"] | None = None
+    references: list[EntityReference] | None = None
     """External references attached to this Record (present on single-Record fetch only)."""
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after Record mutations."""
@@ -419,7 +419,7 @@ class RecordRow(BaseModel):
     """Co-signature state, or None when co-sign is not configured."""
     counter_signature: str | None = Field(None, alias="counterSignature")
     """Hex Ed25519 counter-signature from the most recent successful co-sign, or None."""
-    settlement_signal: "SettlementSignalSummary | None" = Field(None, alias="settlementSignal")
+    settlement_signal: SettlementSignalSummary | None = Field(None, alias="settlementSignal")
     """Settlement Signal projected onto the Record, or None until a terminal verdict produces one."""
     federation_status: Literal["pending", "delivered", "partial", "failed"] | None = Field(
         None, alias="federationStatus"
@@ -429,7 +429,7 @@ class RecordRow(BaseModel):
     """Peer Server IDs this Record has been shared to via federation."""
     share: bool | None = None
     """Whether this Record participates in revenue share, or None when not configured."""
-    integrity: "RecordIntegrity | None" = None
+    integrity: RecordIntegrity | None = None
     """Tamper-evidence result, present only when read with ``integrity=True``."""
 
 
@@ -517,7 +517,7 @@ class Completion(BaseModel):
     """Denormalized gate verdict on the parent Record: ``accept``, ``reject``, or None until the gate evaluates."""
     last_verdict_reason: str | None = Field(None, alias="lastVerdictReason")
     """Reason attached to the most recent verdict, or None."""
-    settlement_signal: "CompletionSettlementSignal | None" = Field(
+    settlement_signal: CompletionSettlementSignal | None = Field(
         None, alias="settlementSignal"
     )
     """The auto-gate's settle/hold/reject decision, surfaced inline so the caller learns the

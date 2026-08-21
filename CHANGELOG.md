@@ -4,6 +4,16 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **`__enter__` and `__aenter__` return `Self`.** A subclass used as a context manager now keeps its own type inside the `with` block instead of widening to `AgledgerClient`.
+
+- **The lint rule set is written out rather than inherited from ruff's default.** ruff 0.16 widened that default from 58 rules to several hundred, so 0.15.21 and 0.16.2 disagreed about what "lint" meant on identical source with identical config: a dev-dependency bump inside a caret range could redefine the gate. The selection is now explicit and was measured against this codebase before being enabled, and `pyproject.toml` records why `BLE001`, `PYI051`, `TRY003`, `PLR0913` and `D` are deliberately out (each fights a decision this SDK has already made; `PYI051` in particular would flag the `Literal[...] | str` unions that exist so a value from a newer Server parses instead of raising). The tree is clean under both ruff versions.
+
+- Internal tidy-ups from the widened rule set: `collections.abc` imports for `Iterator`/`Mapping`/`Sequence`, `X | Y` annotations, sorted `__all__` (same exports, verified), and a redundant `"Z"` replacement dropped ahead of `datetime.fromisoformat`, which has handled it natively since 3.11, the project's floor.
+
 ## [1.9.0] - 2026-08-21
 
 ### Fixed (enum members that could never have worked)

@@ -54,7 +54,7 @@ dev = [
     # Pinned so CI matches the gate the SDK was validated against. Ruff stable
     # adds lint rules and pyright tightens inference across releases; an
     # unpinned floor would let a tool bump turn CI red without a code change.
-    "ruff==0.15.21",
+    "ruff==0.16.2",
     "pyright==1.1.411",
 ]
 
@@ -78,10 +78,54 @@ pythonpath = ["src"]
 target-version = "py311"
 
 [tool.ruff.lint]
-# Default rule set (E4/E7/E9 + F). E701 is intentionally disabled: the codebase
-# uses the `if cond: stmt` one-liner style deliberately throughout (matches the
-# `if x is not None: body[...] = x` body-builder pattern), not an oversight.
+# The rule set is written out rather than inherited, because ruff's default is
+# not stable across releases: 0.16 widened it from 58 rules to several hundred,
+# so `ruff==0.15.21` and `ruff==0.16.2` disagreed about what "lint" means on
+# identical source with identical config. A dependency bump inside a caret range
+# should not be able to redefine the gate. Everything below was measured against
+# this codebase before being turned on.
+select = [
+    "E4", "E7", "E9", "F",  # the historical baseline
+    "I",                     # import sorting
+    "UP",                    # pyupgrade; target-version is py311
+    "RUF",                   # ruff-specific, incl. unsorted __all__
+    "PIE",                   # unnecessary pass / duplicate class fields
+    "ISC",                   # implicit string concat; catches a missing comma
+    "PERF",                  # comprehension and loop rewrites
+    "FURB",                  # modernizations
+    "PYI034",                # __enter__ / __aenter__ should return Self
+    "PLR0402",               # `import x.y as y` -> `from x import y`
+]
+
+# E701: the codebase uses the `if cond: stmt` one-liner deliberately throughout
+# (it is the `if x is not None: body[...] = x` body-builder pattern), 235 times.
 ignore = ["E701"]
+
+# Deliberately NOT selected, each because it fights a decision this SDK has
+# already made. Recorded here so the next person weighing them does not have to
+# re-derive the answer:
+#
+#   BLE001  15 hits, every one a fail-closed boundary over untrusted input
+#           (CBOR/base64/signature parsing, the FIPS capability probe, an error
+#           body from the Server). Catching broadly and degrading to "invalid"
+#           is the security property; narrowing it would let an unanticipated
+#           exception escape as something other than a verification failure.
+#   PYI051  53 hits, all `Literal[...] | str`. That union is deliberate: it
+#           names the values the API serves today while still parsing one added
+#           by a newer Server, instead of raising.
+#   TRY003  27 hits. Error messages here are long on purpose; every response and
+#           exception is meant to carry the next action.
+#   PLR0913 40 hits. Resource methods take the API's filters as keyword
+#           parameters by design; that is the DX, not an accident.
+#   D       800 hits. A docstring-style decision, not a lint one, and not one to
+#           make inside a dependency bump.
+
+[tool.ruff.lint.isort]
+# Keep aliased imports from one module in one statement. Without this, isort
+# splits `from x import (A as _A, B as _B)` into a separate statement per name,
+# which is legal and reads badly, and did exactly that to the `cryptography`
+# imports in the verifier.
+combine-as-imports = true
 
 [tool.pyright]
 # Strict-gate the shipped library only. Tests are exercised by pytest, not the

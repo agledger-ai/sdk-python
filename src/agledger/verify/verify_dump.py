@@ -35,6 +35,7 @@ from agledger.verify.types import (
     VerifyReport,
     WitnessCosignedCheckpoint,
 )
+
 # The shared verification core lives in verify_export: the per-entry chain walk
 # (verify_entry), the key registry (KeyCache / RegisteredKey), and the
 # merkle_root / verify_cose_sign1 primitives. Reused here verbatim: the dump
@@ -43,9 +44,9 @@ from agledger.verify.verify_export import (
     KeyCache,
     RegisteredKey,
     as_mapping,
-    verify_entry,
     merkle_root,
     verify_cose_sign1,
+    verify_entry,
 )
 
 

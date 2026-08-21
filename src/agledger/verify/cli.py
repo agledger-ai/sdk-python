@@ -20,7 +20,8 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from agledger.verify.failures import suggestion
 from agledger.verify.loader import DumpLoadError, load_dump
@@ -90,11 +91,11 @@ def _format_dump_text(report: VerifyReport) -> str:
     lines.append(
         f"  witness cosigned : {len(report.org_admin_reads.witness_cosigned_checkpoints)}"
     )
-    for w in report.org_admin_reads.witness_cosigned_checkpoints:
-        lines.append(
-            f"    checkpoint={w.checkpoint_id} witnessKeyId={w.witness_key_id} "
-            f"(signature recorded, not verified)"
-        )
+    lines.extend(
+        f"    checkpoint={w.checkpoint_id} witnessKeyId={w.witness_key_id} "
+        f"(signature recorded, not verified)"
+        for w in report.org_admin_reads.witness_cosigned_checkpoints
+    )
     lines.append(f"  failures         : {len(report.org_admin_reads.failures)}")
     for f in report.org_admin_reads.failures:
         lines.append(f"    [{f.code}] {f.message}")

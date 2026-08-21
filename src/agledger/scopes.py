@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-
 ApiKeyRole = Literal["admin", "agent", "platform"]
 
 
