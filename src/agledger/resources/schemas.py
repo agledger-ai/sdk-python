@@ -173,7 +173,13 @@ class SchemasResource:
     def update_version(
         self, type: str, version: int, params: dict[str, Any], *, publisher: str | None = None
     ) -> dict[str, Any]:
-        """Update a schema version (e.g., deprecate or change compatibility mode)."""
+        """Change a schema version's compatibility mode, which is all this route updates.
+
+        The body takes ``compatibilityMode`` and nothing else (it declares
+        ``additionalProperties: false``), and the values are lowercase:
+        ``none``, ``backward``, ``forward``, ``full``. There is no deprecate
+        here; disabling a Type is :meth:`disable`.
+        """
         return self._http.patch(
             f"/v1/schemas/{type}/versions/{version}", json=params, params=_scope(publisher)
         )

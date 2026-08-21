@@ -358,5 +358,346 @@
       "signingAlg",
       "url"
     ]
-  }
+  },
+  "enumCount": 26,
+  "enums": {
+    "ComplianceRecordType": {
+      "values": [
+        "affected_persons",
+        "fundamental_rights_impact_assessment",
+        "input_data_quality",
+        "workplace_notification"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/compliance-records/get/responses/200/content/application/json/schema/allOf/1/properties/data/items/properties/recordType"
+      ]
+    },
+    "ConstraintInheritanceMode": {
+      "values": [
+        "advisory",
+        "enforced",
+        "none"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/constraintInheritance"
+      ]
+    },
+    "DisputeGrounds": {
+      "values": [
+        "equivalent_item",
+        "fraudulent_completion",
+        "other",
+        "pricing_dispute",
+        "quality_issue",
+        "record_ambiguity",
+        "verdict_disagreement"
+      ],
+      "specSites": [
+        "paths//federation/v1/disputes/post/requestBody/content/application/json/schema/properties/grounds"
+      ]
+    },
+    "DisputeProtocolAction": {
+      "values": [
+        "escalated",
+        "opened",
+        "resolved",
+        "withdrawn"
+      ],
+      "specSites": [
+        "paths//federation/v1/disputes/post/requestBody/content/application/json/schema/properties/action"
+      ]
+    },
+    "DisputeStatus": {
+      "values": [
+        "ESCALATED",
+        "EVIDENCE_WINDOW",
+        "RESOLVED",
+        "TIER_2_REVIEW",
+        "TIER_3_ARBITRATION",
+        "WITHDRAWN"
+      ],
+      "specSites": [
+        "components/schemas/DisputeResponse/properties/status"
+      ]
+    },
+    "EuAiActDomain": {
+      "values": [
+        "biometrics",
+        "critical_infrastructure",
+        "education",
+        "employment",
+        "essential_services",
+        "justice",
+        "law_enforcement",
+        "migration"
+      ],
+      "specSites": [
+        "paths//federation/v1/state-transitions/post/requestBody/content/application/json/schema/properties/euAiActDomain"
+      ]
+    },
+    "EuAiActRiskTier": {
+      "values": [
+        "high",
+        "limited",
+        "minimal",
+        "unacceptable"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/ai-impact-assessment/get/responses/200/content/application/json/schema/properties/riskLevel"
+      ]
+    },
+    "EvidenceType": {
+      "values": [
+        "communication",
+        "document",
+        "external_lookup",
+        "other",
+        "screenshot"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/dispute/evidence/post/requestBody/content/application/json/schema/properties/evidenceType"
+      ]
+    },
+    "FederationSettlementSignal": {
+      "values": [
+        "HOLD",
+        "RELEASE",
+        "SETTLE"
+      ],
+      "specSites": [
+        "components/schemas/Completion/properties/settlementSignal/properties/recommendation"
+      ]
+    },
+    "FederationVerdict": {
+      "values": [
+        "accept",
+        "reject"
+      ],
+      "specSites": [
+        "components/schemas/Completion/properties/settlementSignal/properties/outcome"
+      ]
+    },
+    "GateMode": {
+      "values": [
+        "auto",
+        "principal"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/gateMode"
+      ]
+    },
+    "LicenseTier": {
+      "values": [
+        "developer",
+        "enterprise"
+      ],
+      "specSites": [
+        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/tier"
+      ]
+    },
+    "OperatingMode": {
+      "values": [
+        "cleartext",
+        "encrypted"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/operatingMode"
+      ]
+    },
+    "RecordStatus": {
+      "values": [
+        "ACTIVE",
+        "CANCELLED",
+        "CREATED",
+        "DISPUTED",
+        "EXPIRED",
+        "FAILED",
+        "FULFILLED",
+        "PENDING_ARBITRATION",
+        "PROCESSING",
+        "PROPOSED",
+        "RECORDED",
+        "REJECTED",
+        "REMEDIATED",
+        "REVISION_REQUESTED"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/status"
+      ]
+    },
+    "RecordTransitionAction": {
+      "values": [
+        "activate",
+        "cancel",
+        "propose",
+        "register"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/nextActions/items"
+      ]
+    },
+    "SchemaCompatibilityMode": {
+      "values": [
+        "backward",
+        "forward",
+        "full",
+        "none"
+      ],
+      "specSites": [
+        "paths//v1/schemas/import/post/requestBody/content/application/json/schema/properties/manifest/properties/compatibility"
+      ]
+    },
+    "SchemaFieldMappingValueType": {
+      "values": [
+        "boolean",
+        "datetime",
+        "denomination",
+        "expression",
+        "number",
+        "string"
+      ],
+      "specSites": [
+        "paths//v1/schemas/post/requestBody/content/application/json/schema/properties/fieldMappings/items/properties/valueType"
+      ]
+    },
+    "SchemaVersionStatus": {
+      "values": [
+        "ACTIVE",
+        "DISABLED"
+      ],
+      "specSites": [
+        "paths//v1/schemas/get/responses/200/content/application/json/schema/allOf/1/properties/data/items/properties/status"
+      ]
+    },
+    "SettlementSignal": {
+      "values": [
+        "HOLD",
+        "RELEASE",
+        "SETTLE"
+      ],
+      "specSites": [
+        "components/schemas/Completion/properties/settlementSignal/properties/recommendation"
+      ]
+    },
+    "StructuralValidation": {
+      "values": [
+        "ACCEPTED",
+        "INVALID",
+        "WARNING"
+      ],
+      "specSites": [
+        "components/schemas/Completion/properties/structuralValidation"
+      ]
+    },
+    "TrustedIssuerAppliesTo": {
+      "values": [
+        "admin",
+        "agent",
+        "any",
+        "principal"
+      ],
+      "specSites": [
+        "paths//v1/admin/trusted-issuers/get/parameters/0/schema"
+      ]
+    },
+    "VaultCheckpointChain": {
+      "values": [
+        "admin",
+        "record",
+        "schema"
+      ],
+      "specSites": [
+        "paths//v1/audit-vault/checkpoints/get/responses/200/content/application/json/schema/properties/data/items/properties/chain"
+      ]
+    },
+    "VaultScanState": {
+      "values": [
+        "active",
+        "cancelled",
+        "completed",
+        "created",
+        "failed",
+        "retry"
+      ],
+      "specSites": [
+        "paths//v1/admin/vault/scan/{jobId}/get/responses/200/content/application/json/schema/properties/state"
+      ]
+    },
+    "Verdict": {
+      "values": [
+        "accept",
+        "reject"
+      ],
+      "specSites": [
+        "components/schemas/Completion/properties/settlementSignal/properties/outcome"
+      ]
+    },
+    "WebhookEventType": {
+      "values": [
+        "*",
+        "agent.reference_added",
+        "cascading.gate.complete",
+        "dispute.escalated",
+        "dispute.evidence_window_closed",
+        "dispute.opened",
+        "dispute.resolved",
+        "dispute.withdrawn",
+        "federation.dispute",
+        "federation.record.state_changed",
+        "federation.settlement.signal",
+        "record.activated",
+        "record.ai_impact_assessment_filed",
+        "record.cancelled",
+        "record.completion_invalid",
+        "record.completion_submitted",
+        "record.compliance_attestation_filed",
+        "record.created",
+        "record.delegated",
+        "record.expired",
+        "record.failed",
+        "record.federation_activated",
+        "record.federation_cancelled",
+        "record.federation_expired",
+        "record.federation_failed",
+        "record.federation_fulfilled",
+        "record.federation_proposal_rejected",
+        "record.federation_recorded",
+        "record.federation_remediated",
+        "record.fulfilled",
+        "record.gate_complete",
+        "record.gate_held",
+        "record.proposal_accepted",
+        "record.proposal_counter_proposed",
+        "record.proposal_rejected",
+        "record.proposed",
+        "record.recorded",
+        "record.reference_added",
+        "record.registered",
+        "record.released",
+        "record.revision_requested",
+        "record.settled",
+        "signal.emitted",
+        "signal.received"
+      ],
+      "specSites": [
+        "paths//v1/webhooks/post/requestBody/content/application/json/schema/properties/eventTypes/items",
+        "paths//v1/events/get/parameters/2/schema"
+      ]
+    },
+    "WebhookSigningAlg": {
+      "values": [
+        "ecdsa-p256-sha256",
+        "ed25519",
+        "hmac"
+      ],
+      "specSites": [
+        "components/schemas/WebhookSubscription/properties/signingAlg"
+      ]
+    }
+  },
+  "enumsUnpinned": [
+    "AcceptanceStatus",
+    "RecordType",
+    "RevocationReason"
+  ]
 }

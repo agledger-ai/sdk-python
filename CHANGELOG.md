@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.9.0] - 2026-08-21
 
+### Fixed (enum members that could never have worked)
+
+- **`DisputeStatus` dropped `OPENED` and `TIER_1_REVIEW`.** Neither exists anywhere in the API. The type reaches three strict-enum query params (`GET /v1/records`, `GET /v1/records/search`, `GET /v1/disputes`), so either value was a guaranteed 400 from a documented parameter. The full set is `EVIDENCE_WINDOW`, `TIER_2_REVIEW`, `ESCALATED`, `TIER_3_ARBITRATION`, `RESOLVED`, `WITHDRAWN`. `RecordRow` carried its own copy of the member list, which is how the two declarations drifted apart; it now uses the named type. Reported by agledger-testbed against the 1.9.0 candidate (F-981).
+
+- **The `dispute_status` request parameters name their values.** Seven signatures across `records` took a bare `str`, so nothing at the call site said what was valid. They take `DisputeStatus | str` now, which keeps a value from a newer Server working.
+
+- **`schemas.update_version()`'s docstring no longer says "deprecate".** That route updates `compatibilityMode` and nothing else (the body declares `additionalProperties: false`), and its values are lowercase. Disabling a Type is `schemas.disable()`.
+
+### Added
+
+- **An enum-member parity guard** (`tests/test_enum_parity.py`), the mirror of the TypeScript SDK's, sharing its snapshot. Route parity and field-name parity had never looked inside a `Literal`, which is why the `DisputeStatus` drift survived. Every named `Literal` is now either checked against the API enum it mirrors or listed with the reason it has none, so neither can go unguarded silently.
+
 ### Changed
 
 - **An auto-paginating walk that hits the page ceiling now raises `PaginationLimitError` instead of returning a prefix.** `paginate` stopped at 100 pages and returned, so nothing distinguished "walked the whole listing" from "hit the ceiling". It was worse here than in the TypeScript SDK: `records.list_all()` accepted neither `limit` nor `max_pages`, so the bound was unreachable from the public method and the quiet stop landed at 5000 rows. The ceiling is a runaway guard, not a result, and this release makes it say so. A bound you pass yourself is an intentional stop and still ends the walk quietly. `compliance.stream_all` had the same shape and gets the same treatment, where the stakes are higher: a SIEM feed that stops early and says nothing reads as a quiet window with no events in it. Reported by agledger-testbed against the 1.9.0 candidate (agents#120).

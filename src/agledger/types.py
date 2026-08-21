@@ -409,17 +409,7 @@ class RecordRow(BaseModel):
     """True when an open dispute exists against this Record."""
     dispute_id: str | None = Field(None, alias="disputeId")
     """ID of the open/most-recent dispute, or None."""
-    dispute_status: (
-        Literal[
-            "EVIDENCE_WINDOW",
-            "TIER_2_REVIEW",
-            "ESCALATED",
-            "TIER_3_ARBITRATION",
-            "RESOLVED",
-            "WITHDRAWN",
-        ]
-        | None
-    ) = Field(None, alias="disputeStatus")
+    dispute_status: DisputeStatus | str | None = Field(None, alias="disputeStatus")
     """Lifecycle status of the dispute, or None when none."""
     co_sign_required: bool | None = Field(None, alias="coSignRequired")
     """Whether a co-signature is required before settlement, or None when not configured."""
@@ -558,9 +548,19 @@ class GateEvaluationResult(BaseModel):
 
 
 DisputeStatus = Literal[
-    "OPENED", "TIER_1_REVIEW", "EVIDENCE_WINDOW", "TIER_2_REVIEW",
-    "ESCALATED", "TIER_3_ARBITRATION", "RESOLVED", "WITHDRAWN",
+    "EVIDENCE_WINDOW", "TIER_2_REVIEW", "ESCALATED",
+    "TIER_3_ARBITRATION", "RESOLVED", "WITHDRAWN",
 ]
+"""Lifecycle status of a dispute.
+
+This is the full set the Server serves, and the set every dispute-status filter
+validates against. ``OPENED`` and ``TIER_1_REVIEW`` were listed here and exist
+nowhere in the API: the three query params that take this type declare a strict
+enum, so either value is a guaranteed 400.
+
+Models widen this to ``DisputeStatus | str`` where the value is read off a
+response, so a status added by a newer Server parses rather than raising.
+"""
 
 
 class Dispute(BaseModel):
