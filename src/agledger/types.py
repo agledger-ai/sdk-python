@@ -1067,6 +1067,10 @@ class Page(BaseModel, Generic[T]):
     has_more: bool = Field(alias="hasMore")
     next_cursor: str | None = Field(None, alias="nextCursor")
     total: int | None = None
+    # The two siblings the list envelope names alongside the rows. They arrived
+    # as untyped extras before the Server gave the envelope a name.
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
 
 
 class HealthResponse(BaseModel):
@@ -1074,6 +1078,11 @@ class HealthResponse(BaseModel):
 
     status: str
     version: str | None = None
+    #: Deprecated. ``GET /health`` declares only ``status``, ``version`` and
+    #: ``timestamp``, and the Server strips what its response schema does not
+    #: declare, so these two never arrive. Kept so callers keep working.
+    #: Process uptime and database state are on ``admin.get_system_health()``,
+    #: where ``database`` is an object, not a string.
     uptime: float | None = None
     database: str | None = None
     timestamp: str

@@ -153,8 +153,17 @@ def _build_error(response: httpx.Response) -> APIError:
         kwargs["missing_scopes"] = missing
         kwargs["key_scopes"] = details.get("keyScopes")
     elif cls is RateLimitError:
+        # The header is the primary source, but a 429 body also carries
+        # `retryAfterSeconds`, and a proxy that strips headers used to leave
+        # retry_after None with the answer sitting in the body unread.
         retry_after = response.headers.get("retry-after")
-        kwargs["retry_after"] = float(retry_after) if retry_after else None
+        body_seconds = body.get("retryAfterSeconds")
+        if retry_after:
+            kwargs["retry_after"] = float(retry_after)
+        elif isinstance(body_seconds, (int, float)) and not isinstance(body_seconds, bool):
+            kwargs["retry_after"] = float(body_seconds)
+        else:
+            kwargs["retry_after"] = None
 
     if cls is APIError:
         return cls(status, **kwargs)

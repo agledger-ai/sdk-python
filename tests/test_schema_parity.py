@@ -37,6 +37,8 @@ from agledger.types import (
     DisputeEvidence,
     EntityReference,
     NextStep,
+    Page,
+    RecordReadCompletion,
     RecordRow,
     ReputationScore,
     Webhook,
@@ -64,6 +66,10 @@ ALIASES: dict[str, type[BaseModel]] = {
     "ReputationScore": ReputationScore,
     "EntityReference": EntityReference,
     "NextStepAction": NextStep,
+    # v1.5.0 promoted these to named components; they were inline before, so the
+    # snapshot never held them and nothing checked them.
+    "PaginatedResponse": Page,
+    "RecordReadCompletion": RecordReadCompletion,
 }
 
 # Snapshot components the Python SDK deliberately does NOT model with a typed
@@ -75,6 +81,10 @@ EXCLUDED_COMPONENTS: set[str] = {
     "WebhookDelivery",  # returned as Page[dict]; no typed model (see ALIASES note)
     "ErrorResponse",    # error envelope, surfaced via the exception hierarchy, not a data model
     "RateLimitError",   # ditto: error shape, not a response model
+    # Gate rules ride through as plain dicts on the schema resource; Python
+    # models no rule shape, so there is nothing to field-check. TS models it as
+    # SchemaFieldMapping. Move this into ALIASES if a typed model ever lands.
+    "FieldMappingRule",
 }
 
 # SDK-only fields that are intentional, not drift. Keyed by API component name.
@@ -82,6 +92,9 @@ EXCLUDED_COMPONENTS: set[str] = {
 ALLOWED_SDK_ONLY: dict[str, set[str]] = {
     # recentHistory is hydrated from the separate reputation-history endpoint.
     "ReputationScore": {"recentHistory"},
+    # `data` is the SDK's own field: the API declares the envelope without it
+    # and each route intersects its own `data` array on top.
+    "PaginatedResponse": {"data"},
 }
 
 

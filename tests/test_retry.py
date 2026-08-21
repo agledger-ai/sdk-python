@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from agledger import AgledgerClient
-from agledger._errors import APIConnectionError, APITimeoutError, APIError
+from agledger._errors import APIConnectionError, APITimeoutError, APIError, RateLimitError
 
 
 RECORD_JSON = {
@@ -149,3 +149,31 @@ def test_default_retry_aligns_with_ts_sdk():
     assert DEFAULT_MAX_RETRIES == 3
     assert MAX_BACKOFF == 30.0
     assert _RETRYABLE_STATUSES == {429, 500, 502, 503, 504}
+
+
+@respx.mock
+def test_retry_after_falls_back_to_the_429_body():
+    """A 429 body carries `retryAfterSeconds`. Reading only the header left
+    retry_after None behind a proxy that strips it, with the answer in the body."""
+    respx.get("https://agledger.example.com/v1/records/rec-123").mock(
+        return_value=httpx.Response(429, json={"message": "Rate limited", "retryAfterSeconds": 7})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
+    with pytest.raises(RateLimitError) as excinfo:
+        client.records.get("rec-123")
+    assert excinfo.value.retry_after == 7.0
+
+
+@respx.mock
+def test_retry_after_header_wins_over_the_body():
+    respx.get("https://agledger.example.com/v1/records/rec-123").mock(
+        return_value=httpx.Response(
+            429,
+            json={"message": "Rate limited", "retryAfterSeconds": 7},
+            headers={"retry-after": "3"},
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
+    with pytest.raises(RateLimitError) as excinfo:
+        client.records.get("rec-123")
+    assert excinfo.value.retry_after == 3.0

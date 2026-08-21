@@ -22,6 +22,18 @@ Each of these was reachable from a typed, documented method and failed on every 
 
 - **`ConformanceResponse.capabilities` was typed `dict[str, bool]`, which rejects every real response.** `capabilities.signingAlgorithms` is a list. Nothing caught it because no method returned the model (see below).
 
+### Fixed (paging, reconciled against API v1.5.0)
+
+- **`records.get_chain()` walks every page.** It returned the first page's rows under a docstring calling it the full delegation chain. A page caps at 1000 rows, so a longer chain came back truncated with nothing on the result saying so. `max_pages` caps the walk.
+
+- **`records.get_sub_records()` takes paging params.** It sent none, so the `nextCursor` on the page it returned could not be spent through the method.
+
+- **`RateLimitError.retry_after` reads the 429 body.** It came from the `retry-after` header alone, so a proxy that strips headers left it `None` with `retryAfterSeconds` sitting in the body unread. The header still wins where both are present.
+
+- **`Page` carries `next_steps` and `record_read`.** The list envelope names both; they arrived as untyped extras before. `record_read` is the org-admin cross-party read receipt.
+
+- **`HealthResponse.uptime` and `.database` are documented as never served.** `GET /health` declares `status`, `version` and `timestamp`, and the Server strips what its response schema does not declare. Kept so callers keep working. Process uptime and database state come from `admin.get_system_health()`, where `database` is an object, not a string.
+
 ### Added (API drift this release tracks)
 
 - **`RecordRow.supersedes_record_id` and `RecordRow.superseded_by_count`.** Supersession answers "which record is current" on an append-only ledger. `supersedes_record_id` is create-only, immutable, and inside the create-time signature, so an offline verifier reconstructs the same lineage the API reports. A count above 1 is a fork, not an error.

@@ -70,3 +70,32 @@ def test_list_all_api_keys_replays_owner_with_cursor():
     second = route.calls[1].request.url
     assert second.params["ownerId"] == "org-1"
     assert second.params["cursor"] == "b2Zmc2V0OjE="
+
+
+@respx.mock
+def test_get_chain_walks_every_page():
+    """A chain page caps at 1000 rows. Returning page one dropped the rest of a
+    longer chain with nothing on the result saying it was partial."""
+    route = respx.get("https://agledger.example.com/v1/records/rec-1/chain")
+    route.side_effect = [
+        httpx.Response(200, json={"data": [RECORD_1], "total": 2, "hasMore": True, "nextCursor": "cur-2"}),
+        httpx.Response(200, json={"data": [RECORD_2], "total": 2, "hasMore": False}),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    chain = client.records.get_chain("rec-1")
+    assert [m.id for m in chain] == ["rec-1", "rec-2"]
+    assert len(route.calls) == 2
+    assert "cursor=cur-2" in str(route.calls[1].request.url)
+
+
+@respx.mock
+def test_get_sub_records_spends_the_cursor():
+    route = respx.get("https://agledger.example.com/v1/records/rec-1/sub-records").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_2], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    page = client.records.get_sub_records("rec-1", cursor="cur-9", limit=25)
+    assert [m.id for m in page.data] == ["rec-2"]
+    url = str(route.calls[0].request.url)
+    assert "cursor=cur-9" in url
+    assert "limit=25" in url
