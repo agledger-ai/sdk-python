@@ -33,14 +33,20 @@ _KAT_MESSAGE = b"AGLedger verifier runtime known-answer test"
 _ALGORITHM_KATS: dict[str, tuple[str, str]] = {
     "Ed25519": (
         "MCowBQYDK2VwAyEAjChcTn8MOj5h5PpKz/+MvHfomativmvfmC1zV5Sczfo=",
-        "iinDVfJ5uwoE4aWjLhunX340+yPlu4l2S8RFG+IfXqzWoiIXYL/ND7+ouGVzAnejozCE"
-        "rkL9GneR1sc3vY1sAg==",
+        (
+            "iinDVfJ5uwoE4aWjLhunX340+yPlu4l2S8RFG+IfXqzWoiIXYL/ND7+ouGVzAnejozCE"
+            "rkL9GneR1sc3vY1sAg=="
+        ),
     ),
     "ES256": (
-        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEyJ40hViXjp41rIWYdbJT9bUHWVjYWps"
-        "OLKdc4F1L+c4reEK7WmCx1fI4sl0okBN/lNvhZT+0HZ44aUw5HKmFA==",
-        "eQ8fKfXT5GuBUz7gueqcq9hTmzrJlSuaoF/ukCPtKJsxqrynVgIREn/XMPKbdSHp7wMy"
-        "FOEAgmbVfoMDnR5x/Q==",
+        (
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEyJ40hViXjp41rIWYdbJT9bUHWVjYWps"
+            "OLKdc4F1L+c4reEK7WmCx1fI4sl0okBN/lNvhZT+0HZ44aUw5HKmFA=="
+        ),
+        (
+            "eQ8fKfXT5GuBUz7gueqcq9hTmzrJlSuaoF/ukCPtKJsxqrynVgIREn/XMPKbdSHp7wMy"
+            "FOEAgmbVfoMDnR5x/Q=="
+        ),
     ),
 }
 
@@ -70,8 +76,9 @@ def looks_like_ed25519_key(raw: bytes) -> bool:
 
 
 def _run_kat(alg_name: str) -> bool:
-    from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, SECP256R1
     from cryptography.hazmat.primitives.asymmetric.ec import (
+        ECDSA,
+        SECP256R1,
         EllipticCurvePublicKey as _EC,
     )
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (

@@ -8,7 +8,6 @@ import respx
 
 from agledger import AgledgerClient, AsyncAgledgerClient, AuditStreamResult
 
-
 EVENTS = [
     {"type": "record.created", "timestamp": "2026-01-01T00:00:00Z", "id": "evt-1"},
     {"type": "record.fulfilled", "timestamp": "2026-01-01T01:00:00Z", "id": "evt-2"},

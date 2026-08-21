@@ -1,7 +1,9 @@
 """Gate resource."""
 
 from __future__ import annotations
+
 from typing import Any
+
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import GateEvaluationResult, GateStatus
 

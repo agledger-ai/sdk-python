@@ -11,7 +11,8 @@ import hmac
 import json
 import re
 import time
-from typing import TYPE_CHECKING, Any, Mapping, Sequence, Union, cast
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
 from agledger._errors import (
     SignatureAlgorithmUnavailableError,
@@ -64,7 +65,7 @@ def _parse_header(header: str) -> dict[str, Any] | None:
 def verify_signature(
     raw_body: str,
     header: str,
-    secrets: Union[str, list[str]],
+    secrets: str | list[str],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> bool:
     """Verify a webhook signature. Supports key rotation via list of secrets."""
@@ -92,7 +93,7 @@ def verify_signature(
 def construct_event(
     raw_body: str,
     header: str,
-    secrets: Union[str, list[str]],
+    secrets: str | list[str],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
     """Verify signature and parse the webhook payload in one step.
@@ -157,7 +158,7 @@ def _content_digest(raw_body: str) -> str:
     return f"sha-256=:{digest}:"
 
 
-def _load_public_key(base64_key: str) -> "Ed25519PublicKey | EllipticCurvePublicKey":
+def _load_public_key(base64_key: str) -> Ed25519PublicKey | EllipticCurvePublicKey:
     """Build a public key object from base64 (raw 32-byte Ed25519 or SPKI DER,
     which also carries P-256). Raises ``ValueError`` for any other key type so
     verification fails closed."""
@@ -202,8 +203,8 @@ def _extract_key_fields(item: object) -> tuple[str | None, str | None]:
 
 
 def _resolve_public_key(
-    key: Union[str, Sequence[object]], keyid: str | None
-) -> "Ed25519PublicKey | EllipticCurvePublicKey | None":
+    key: str | Sequence[object], keyid: str | None
+) -> Ed25519PublicKey | EllipticCurvePublicKey | None:
     """Resolve a base64 public key from a single string or a verification-keys list."""
     if isinstance(key, str):
         return _load_public_key(key)
@@ -218,7 +219,7 @@ def _resolve_public_key(
 def verify_rfc9421(
     headers: Mapping[str, Any],
     raw_body: str,
-    key: Union[str, Sequence[Any]],
+    key: str | Sequence[Any],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> bool:
     """Verify an RFC 9421 webhook delivery (ed25519 or ecdsa-p256-sha256), the
@@ -344,7 +345,7 @@ def _assert_runtime_can_compute(alg_name: str) -> None:
 
 
 def _verify_rfc9421_signature(
-    public_key: "Ed25519PublicKey | EllipticCurvePublicKey",
+    public_key: Ed25519PublicKey | EllipticCurvePublicKey,
     signature: bytes,
     base: bytes,
     declared_alg: str | None,
@@ -400,7 +401,7 @@ def _verify_rfc9421_signature(
 def construct_event_rfc9421(
     headers: Mapping[str, Any],
     raw_body: str,
-    key: Union[str, Sequence[Any]],
+    key: str | Sequence[Any],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
     """Verify an RFC 9421 delivery and parse the payload in one step.

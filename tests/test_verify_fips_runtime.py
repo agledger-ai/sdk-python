@@ -67,8 +67,8 @@ def _refuse_ed25519_load(monkeypatch: pytest.MonkeyPatch) -> None:
     ``load_der_public_key`` is bound at import time in the verifier and looked
     up at call time in the probe, so both bindings are patched.
     """
-    import cryptography.hazmat.primitives.serialization as serialization
     from cryptography.exceptions import UnsupportedAlgorithm
+    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
     real = serialization.load_der_public_key

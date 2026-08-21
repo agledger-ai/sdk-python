@@ -2,11 +2,11 @@
 
 import json
 
-import agledger
 import httpx
 import pytest
 import respx
 
+import agledger
 from agledger import (
     AgledgerClient,
     AgledgerError,
@@ -16,7 +16,6 @@ from agledger import (
     ConfigurationError,
     RecordRow,
 )
-
 
 RECORD_JSON = {
     "id": "rec-123",

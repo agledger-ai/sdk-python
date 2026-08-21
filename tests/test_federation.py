@@ -5,7 +5,6 @@ import respx
 
 from agledger import AgledgerClient
 
-
 BASE = "https://agledger.example.com"
 
 

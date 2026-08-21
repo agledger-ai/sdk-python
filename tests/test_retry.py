@@ -5,8 +5,12 @@ import pytest
 import respx
 
 from agledger import AgledgerClient
-from agledger._errors import APIConnectionError, APITimeoutError, APIError, RateLimitError
-
+from agledger._errors import (
+    APIConnectionError,
+    APIError,
+    APITimeoutError,
+    RateLimitError,
+)
 
 RECORD_JSON = {
     "id": "rec-123", "orgId": "org-1", "performerAgentId": None, "principalAgentId": "agt-1",
@@ -144,7 +148,7 @@ def test_no_retry_on_408():
 
 def test_default_retry_aligns_with_ts_sdk():
     """Defaults match TS SDK: 3 retries, 30s ceiling."""
-    from agledger._http import DEFAULT_MAX_RETRIES, MAX_BACKOFF, _RETRYABLE_STATUSES
+    from agledger._http import _RETRYABLE_STATUSES, DEFAULT_MAX_RETRIES, MAX_BACKOFF
 
     assert DEFAULT_MAX_RETRIES == 3
     assert MAX_BACKOFF == 30.0

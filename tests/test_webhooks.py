@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import time
+
 import pytest
 
 from agledger import SignatureVerificationError
@@ -14,7 +15,6 @@ from agledger.webhooks import (
     verify_rfc9421,
     verify_signature,
 )
-
 
 SECRET = "whsec_test_secret_key"
 BODY = json.dumps({"type": "record.created", "data": {"id": "rec-123"}, "timestamp": "2026-04-27T00:00:00Z", "id": "evt-1"})
@@ -252,7 +252,10 @@ def _sign_es256(private_key, *, raw_body=RFC_BODY, idempotency_key=IDK, key_id=E
 @pytest.fixture
 def es256_keypair():
     from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1, generate_private_key
+    from cryptography.hazmat.primitives.asymmetric.ec import (
+        SECP256R1,
+        generate_private_key,
+    )
 
     priv = generate_private_key(SECP256R1())
     spki = base64.b64encode(
@@ -309,7 +312,9 @@ def test_rfc9421_ed25519_alg_contradicting_ed_key(keypair):
 
 def test_rfc9421_unsupported_key_type_fails_closed(es256_keypair):
     from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key as rsa_generate
+    from cryptography.hazmat.primitives.asymmetric.rsa import (
+        generate_private_key as rsa_generate,
+    )
 
     priv, _spki, _keys = es256_keypair
     rsa_pub = rsa_generate(public_exponent=65537, key_size=2048).public_key()

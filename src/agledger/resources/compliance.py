@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
 
 from agledger._errors import PaginationLimitError
 from agledger._http import DEFAULT_MAX_PAGES, AsyncHttpClient, HttpClient

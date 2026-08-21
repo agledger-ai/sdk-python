@@ -19,11 +19,11 @@ from agledger.webhooks.verify import (
 # and making people reach into another module for the except clause is how
 # documented examples end up not running.
 __all__ = [
-    "verify_signature",
+    "SignatureAlgorithmUnavailableError",
+    "SignatureVerificationError",
     "construct_event",
+    "construct_event_rfc9421",
     "sign_payload",
     "verify_rfc9421",
-    "construct_event_rfc9421",
-    "SignatureVerificationError",
-    "SignatureAlgorithmUnavailableError",
+    "verify_signature",
 ]

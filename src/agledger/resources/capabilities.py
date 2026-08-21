@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import AgentCapabilities
 
