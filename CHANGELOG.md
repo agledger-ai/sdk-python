@@ -4,7 +4,13 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.9.0] - 2026-08-18
+## [1.9.0] - 2026-08-21
+
+### Changed
+
+- **An auto-paginating walk that hits the page ceiling now raises `PaginationLimitError` instead of returning a prefix.** `paginate` stopped at 100 pages and returned, so nothing distinguished "walked the whole listing" from "hit the ceiling". It was worse here than in the TypeScript SDK: `records.list_all()` accepted neither `limit` nor `max_pages`, so the bound was unreachable from the public method and the quiet stop landed at 5000 rows. The ceiling is a runaway guard, not a result, and this release makes it say so. A bound you pass yourself is an intentional stop and still ends the walk quietly. `compliance.stream_all` had the same shape and gets the same treatment, where the stakes are higher: a SIEM feed that stops early and says nothing reads as a quiet window with no events in it. Reported by agledger-testbed against the 1.9.0 candidate (agents#120).
+
+- **`max_pages` is reachable from every walker, and `limit` from the ones whose route takes it.** `records.list_all()` gains both, `events.list_all()` gains both, `completions.list_all()` and `admin.list_all_api_keys()` gain `max_pages`. `records.get_chain()` and `compliance.stream_all()` took `max_pages: int = 100`, which is an explicit bound as far as the guard is concerned, so on those two the default is now `None` and the guard applies: a chain long enough to exhaust it raises rather than truncating, which is the same defect `get_chain` was fixed for elsewhere in this release.
 
 ### Added
 

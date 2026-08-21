@@ -239,6 +239,36 @@ class APITimeoutError(APIConnectionError):
     pass
 
 
+class PaginationLimitError(AgledgerError):
+    """An auto-paginating walk stopped at the default page ceiling with pages
+    still available, so the rows it yielded are a prefix of the listing rather
+    than all of it.
+
+    The ceiling is a runaway guard, not a result. Raising is what separates it
+    from the intentional stop: pass ``max_pages`` explicitly and the walk ends
+    quietly at your bound, because you asked for one.
+
+    Recover by raising ``limit`` so the same rows arrive in fewer pages, by
+    passing a ``max_pages`` large enough for the listing, or by narrowing the
+    filters.
+    """
+
+    def __init__(self, path: str, pages_read: int, items_yielded: int, max_pages: int) -> None:
+        super().__init__(
+            f"Pagination of {path} stopped at the {max_pages}-page ceiling after "
+            f"{items_yielded} item(s), and the listing has more. Raise 'limit' to fit "
+            f"the walk in fewer pages, or pass 'max_pages' to lift the ceiling."
+        )
+        self.path = path
+        """Path being walked."""
+        self.pages_read = pages_read
+        """Pages fetched before stopping: equal to the ceiling that stopped it."""
+        self.items_yielded = items_yielded
+        """Items yielded before stopping. All are valid; they are just not all of them."""
+        self.max_pages = max_pages
+        """Ceiling that was hit."""
+
+
 class SignatureVerificationError(Exception):
     """Raised when webhook signature verification fails."""
 

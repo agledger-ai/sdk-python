@@ -26,6 +26,7 @@ from agledger._errors import (
     BadRequestError,
     ConflictError,
     NotFoundError,
+    PaginationLimitError,
     PermissionDeniedError,
     RateLimitError,
     UnprocessableError,
@@ -39,6 +40,9 @@ from agledger._errors import (
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_RETRIES = 3
 MAX_BACKOFF = 30.0
+# Runaway guard on an unbounded auto-paginating walk. Hitting it is an error,
+# not a stopping point: see HttpClient.paginate.
+DEFAULT_MAX_PAGES = 100
 # Single source of truth for the SDK version: the installed package metadata
 # (pyproject `version`). Used in the User-Agent header and re-exported as
 # `agledger.__version__`, so neither can drift from the published distribution.
@@ -495,17 +499,35 @@ class HttpClient:
             return {"data": [raw], "hasMore": False}
         return {"data": [], "hasMore": False}
 
-    def paginate(self, path: str, *, params: dict[str, Any] | None = None, max_pages: int = 100) -> Iterator[dict[str, Any]]:
+    def paginate(
+        self, path: str, *, params: dict[str, Any] | None = None, max_pages: int | None = None
+    ) -> Iterator[dict[str, Any]]:
+        """Walk every page of a listing, yielding rows.
+
+        Unbounded, the walk runs to the end of the listing behind
+        :data:`DEFAULT_MAX_PAGES` as a runaway guard, and hitting that guard
+        raises :class:`PaginationLimitError` rather than returning a prefix that
+        looks like the whole listing. Pass ``max_pages`` to stop early on
+        purpose: that bound is yours, so the walk ends at it quietly.
+        """
+        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
         p = dict(params or {})
-        for _ in range(max_pages):
+        pages_read = 0
+        yielded = 0
+        for _ in range(ceiling):
             page = self.get_page(path, params=p)
-            yield from page.get("data", [])
+            pages_read += 1
+            rows = page.get("data", [])
+            yield from rows
+            yielded += len(rows)
             if not page.get("hasMore"):
-                break
+                return
             cursor = page.get("nextCursor") or page.get("next_cursor")
             if not cursor:
-                break
+                return
             p["cursor"] = cursor
+        if max_pages is None:
+            raise PaginationLimitError(path, pages_read, yielded, ceiling)
 
 
 class AsyncHttpClient:
@@ -763,15 +785,33 @@ class AsyncHttpClient:
             return {"data": [raw], "hasMore": False}
         return {"data": [], "hasMore": False}
 
-    async def paginate(self, path: str, *, params: dict[str, Any] | None = None, max_pages: int = 100) -> AsyncIterator[dict[str, Any]]:
+    async def paginate(
+        self, path: str, *, params: dict[str, Any] | None = None, max_pages: int | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Walk every page of a listing, yielding rows.
+
+        Unbounded, the walk runs to the end of the listing behind
+        :data:`DEFAULT_MAX_PAGES` as a runaway guard, and hitting that guard
+        raises :class:`PaginationLimitError` rather than returning a prefix that
+        looks like the whole listing. Pass ``max_pages`` to stop early on
+        purpose: that bound is yours, so the walk ends at it quietly.
+        """
+        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
         p = dict(params or {})
-        for _ in range(max_pages):
+        pages_read = 0
+        yielded = 0
+        for _ in range(ceiling):
             page = await self.get_page(path, params=p)
-            for item in page.get("data", []):
+            pages_read += 1
+            rows = page.get("data", [])
+            for item in rows:
                 yield item
+            yielded += len(rows)
             if not page.get("hasMore"):
-                break
+                return
             cursor = page.get("nextCursor") or page.get("next_cursor")
             if not cursor:
-                break
+                return
             p["cursor"] = cursor
+        if max_pages is None:
+            raise PaginationLimitError(path, pages_read, yielded, ceiling)

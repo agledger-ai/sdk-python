@@ -194,6 +194,8 @@ class RecordsResource:
         imported: bool | None = None,
         source: str | None = None,
         actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
     ) -> Iterator[RecordRow]:
         """Auto-paginate through all Records.
 
@@ -201,12 +203,17 @@ class RecordsResource:
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``limit`` sets the page size, so a large listing costs fewer round trips.
+        Unbounded, the walk runs to the end of the listing and raises
+        :class:`PaginationLimitError` if it hits the runaway guard behind it;
+        pass ``max_pages`` to take a bounded prefix on purpose.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, actionable, None, None,
+            has_dispute, dispute_status, imported, source, actionable, limit, None,
         )
-        for item in self._http.paginate("/v1/records", params=params):
+        for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield RecordRow.model_validate(item)
 
     def search(
@@ -329,12 +336,14 @@ class RecordsResource:
         body = {"reason": reason} if reason else {}
         return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/revision", json=body))
 
-    def get_chain(self, record_id: str, *, max_pages: int = 100) -> list[RecordRow]:
+    def get_chain(self, record_id: str, *, max_pages: int | None = None) -> list[RecordRow]:
         """Get the full delegation chain for a Record.
 
         Walks every page rather than returning the first: the endpoint caps a
         page at 1000 rows, so a longer chain came back truncated with nothing
-        on the result saying so."""
+        on the result saying so. A chain long enough to exhaust the runaway
+        guard raises :class:`PaginationLimitError` for the same reason; pass
+        ``max_pages`` to lift it, or to take a bounded prefix on purpose."""
         return [
             RecordRow.model_validate(m)
             for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)
@@ -635,6 +644,8 @@ class AsyncRecordsResource:
         imported: bool | None = None,
         source: str | None = None,
         actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
     ) -> AsyncIterator[RecordRow]:
         """Auto-paginate through all Records.
 
@@ -642,12 +653,17 @@ class AsyncRecordsResource:
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``limit`` sets the page size, so a large listing costs fewer round trips.
+        Unbounded, the walk runs to the end of the listing and raises
+        :class:`PaginationLimitError` if it hits the runaway guard behind it;
+        pass ``max_pages`` to take a bounded prefix on purpose.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
-            has_dispute, dispute_status, imported, source, actionable, None, None,
+            has_dispute, dispute_status, imported, source, actionable, limit, None,
         )
-        async for item in self._http.paginate("/v1/records", params=params):
+        async for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield RecordRow.model_validate(item)
 
     async def search(
@@ -773,7 +789,7 @@ class AsyncRecordsResource:
             await self._http.post(f"/v1/records/{record_id}/revision", json=body)
         )
 
-    async def get_chain(self, record_id: str, *, max_pages: int = 100) -> list[RecordRow]:
+    async def get_chain(self, record_id: str, *, max_pages: int | None = None) -> list[RecordRow]:
         return [
             RecordRow.model_validate(m)
             async for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)

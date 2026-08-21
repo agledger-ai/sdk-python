@@ -377,6 +377,7 @@ class AdminResource:
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
+        max_pages: int | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Auto-paginate through all API keys.
 
@@ -384,11 +385,16 @@ class AdminResource:
         requires: it carries the owner it was minted under, and replaying it
         without the matching ``ownerId`` is a 400 rather than a silent slide
         into the install-wide listing at the same offset.
+
+        Raises :class:`PaginationLimitError` if the walk hits the runaway guard
+        rather than returning a prefix, because a key audit that stops early and
+        says nothing under-reports exactly like the first-page read this method
+        exists to replace. Pass ``max_pages`` to bound it yourself.
         """
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
         )
-        yield from self._http.paginate("/v1/admin/api-keys", params=params)
+        yield from self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages)
 
     def create_api_key(
         self,
@@ -802,14 +808,15 @@ class AsyncAdminResource:
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
+        max_pages: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Auto-paginate through all API keys, resending the filters with each
         cursor. See the sync counterpart for why the single-owner cursor needs
-        them."""
+        them, and why the runaway guard raises."""
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
         )
-        async for item in self._http.paginate("/v1/admin/api-keys", params=params):
+        async for item in self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages):
             yield item
 
     async def create_api_key(

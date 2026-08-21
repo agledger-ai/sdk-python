@@ -1,9 +1,10 @@
 """Tests for auto-pagination."""
 
 import httpx
+import pytest
 import respx
 
-from agledger import AgledgerClient, RecordRow
+from agledger import AgledgerClient, PaginationLimitError, RecordRow
 
 
 RECORD_1 = {
@@ -99,3 +100,69 @@ def test_get_sub_records_spends_the_cursor():
     url = str(route.calls[0].request.url)
     assert "cursor=cur-9" in url
     assert "limit=25" in url
+
+
+@respx.mock
+def test_default_ceiling_raises_rather_than_returning_a_prefix():
+    """The 100-page guard is a runaway guard, not a result. A walk that stops
+    there has yielded a prefix, and returning it silently is indistinguishable
+    from having read the whole listing."""
+    respx.get("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_1], "hasMore": True, "nextCursor": "cur-n"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+
+    seen: list[RecordRow] = []
+    with pytest.raises(PaginationLimitError) as excinfo:
+        for record in client.records.list_all(org_id="ent-1"):
+            seen.append(record)
+
+    # The rows it did yield are valid: the error says they are not all of them.
+    assert len(seen) == 100
+    err = excinfo.value
+    assert err.path == "/v1/records"
+    assert err.pages_read == 100
+    assert err.items_yielded == 100
+    assert err.max_pages == 100
+
+
+@respx.mock
+def test_explicit_max_pages_stops_quietly():
+    """A bound the caller set is an intentional stop, so it does not raise."""
+    respx.get("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_1], "hasMore": True, "nextCursor": "cur-n"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    records = list(client.records.list_all(org_id="ent-1", max_pages=3))
+    assert len(records) == 3
+
+
+@respx.mock
+def test_list_all_sends_the_page_size():
+    """`limit` was unreachable from list_all, so the only way to walk a large
+    listing was 100 pages of whatever the server chose."""
+    route = respx.get("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_1], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    list(client.records.list_all(org_id="ent-1", limit=250))
+    assert "limit=250" in str(route.calls[0].request.url)
+
+
+@respx.mock
+def test_get_chain_raises_on_a_chain_longer_than_the_guard():
+    respx.get("https://agledger.example.com/v1/records/rec-1/chain").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_1], "hasMore": True, "nextCursor": "cur-n"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    with pytest.raises(PaginationLimitError):
+        client.records.get_chain("rec-1")
+
+
+@respx.mock
+def test_get_chain_honours_an_explicit_bound():
+    respx.get("https://agledger.example.com/v1/records/rec-1/chain").mock(
+        return_value=httpx.Response(200, json={"data": [RECORD_1], "hasMore": True, "nextCursor": "cur-n"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    assert len(client.records.get_chain("rec-1", max_pages=2)) == 2

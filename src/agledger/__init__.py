@@ -12,6 +12,7 @@ from agledger._errors import (
     BadRequestError,
     ConflictError,
     NotFoundError,
+    PaginationLimitError,
     PermissionDeniedError,
     RateLimitError,
     SignatureAlgorithmUnavailableError,
@@ -110,6 +111,7 @@ __all__ = [
     "ConflictError",
     "APIConnectionError",
     "APITimeoutError",
+    "PaginationLimitError",
     "SignatureAlgorithmUnavailableError",
     "SignatureVerificationError",
     # Scopes

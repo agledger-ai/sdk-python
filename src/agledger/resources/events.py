@@ -21,9 +21,18 @@ class EventsResource:
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
         return Page[Event].model_validate(raw)
 
-    def list_all(self, *, since: str, order: str = "desc") -> Iterator[Event]:
-        """Auto-paginating iterator. Yields individual events across all pages."""
-        for item in self._http.paginate("/v1/events", params={"since": since, "order": order}):
+    def list_all(
+        self, *, since: str, order: str = "desc", limit: int | None = None, max_pages: int | None = None
+    ) -> Iterator[Event]:
+        """Auto-paginating iterator. Yields individual events across all pages.
+
+        ``limit`` sets the page size. Unbounded, the walk raises
+        :class:`PaginationLimitError` if it hits the runaway guard rather than
+        returning a prefix; pass ``max_pages`` to bound it yourself."""
+        params: dict[str, Any] = {"since": since, "order": order}
+        if limit is not None:
+            params["limit"] = limit
+        for item in self._http.paginate("/v1/events", params=params, max_pages=max_pages):
             yield Event.model_validate(item)
 
 
@@ -39,6 +48,11 @@ class AsyncEventsResource:
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
         return Page[Event].model_validate(raw)
 
-    async def list_all(self, *, since: str, order: str = "desc") -> AsyncIterator[Event]:
-        async for item in self._http.paginate("/v1/events", params={"since": since, "order": order}):
+    async def list_all(
+        self, *, since: str, order: str = "desc", limit: int | None = None, max_pages: int | None = None
+    ) -> AsyncIterator[Event]:
+        params: dict[str, Any] = {"since": since, "order": order}
+        if limit is not None:
+            params["limit"] = limit
+        async for item in self._http.paginate("/v1/events", params=params, max_pages=max_pages):
             yield Event.model_validate(item)
