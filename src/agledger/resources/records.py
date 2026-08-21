@@ -160,6 +160,11 @@ class RecordsResource:
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
         action awaits the caller's structural side. Agent keys only.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
@@ -185,7 +190,13 @@ class RecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
     ) -> Iterator[RecordRow]:
-        """Auto-paginate through all Records."""
+        """Auto-paginate through all Records.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
+        """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, None, None,
@@ -229,7 +240,18 @@ class RecordsResource:
         offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
-        """Search Records with advanced filters."""
+        """Search Records with advanced filters.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
+
+        There is deliberately no ``principal_agent_id``: no record endpoint accepts
+        one, and the search querystring rejects unknown properties, so offering it
+        produced a 400. On an admin or platform key the replacement for it is
+        ``performer_agent_id``, not ``role``.
+        """
         params: dict[str, Any] = {}
         if org_id is not None: params["orgId"] = org_id
         if status is not None: params["status"] = status
@@ -564,6 +586,11 @@ class AsyncRecordsResource:
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
         action awaits the caller's structural side. Agent keys only.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
@@ -589,7 +616,13 @@ class AsyncRecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
     ) -> AsyncIterator[RecordRow]:
-        """Auto-paginate through all Records."""
+        """Auto-paginate through all Records.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
+        """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, None, None,
@@ -633,7 +666,18 @@ class AsyncRecordsResource:
         offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[RecordRow]:
-        """Search Records with advanced filters."""
+        """Search Records with advanced filters.
+
+        ``role='performer'`` / ``role='principal'`` narrows the calling agent's
+        auto-scope to one side of the Record. Agent keys only: admin and platform
+        keys get a 400. On those keys the equivalent narrowing is
+        ``performer_agent_id``.
+
+        There is deliberately no ``principal_agent_id``: no record endpoint accepts
+        one, and the search querystring rejects unknown properties, so offering it
+        produced a 400. On an admin or platform key the replacement for it is
+        ``performer_agent_id``, not ``role``.
+        """
         params: dict[str, Any] = {}
         if org_id is not None: params["orgId"] = org_id
         if status is not None: params["status"] = status
