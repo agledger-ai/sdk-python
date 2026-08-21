@@ -10,7 +10,8 @@ import asyncio
 import time
 from typing import Any, AsyncIterator, Iterator
 
-from agledger._http import AsyncHttpClient, HttpClient
+from agledger._errors import PaginationLimitError
+from agledger._http import DEFAULT_MAX_PAGES, AsyncHttpClient, HttpClient
 from agledger.types import (
     AiImpactAssessment,
     AuditStreamResult,
@@ -162,17 +163,30 @@ class ComplianceResource:
         since: str,
         limit: int | None = None,
         format: str = "ocsf",
-        max_pages: int = 100,
+        max_pages: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Auto-paginating iterator for SIEM streaming."""
+        """Auto-paginating iterator for SIEM streaming.
+
+        Unbounded, hitting the runaway guard raises
+        :class:`PaginationLimitError`: a SIEM feed that stops early and says
+        nothing reads as a quiet window with no events in it. Pass ``max_pages``
+        to take a bounded slice on purpose.
+        """
+        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
         current_since = since
-        for _ in range(max_pages):
+        pages_read = 0
+        yielded = 0
+        for _ in range(ceiling):
             result = self.stream(since=current_since, limit=limit, format=format)
+            pages_read += 1
             yield from result.events
+            yielded += len(result.events)
             if not result.has_more or not result.cursor:
                 return
             idx = result.cursor.rfind("_")
             current_since = result.cursor[:idx] if idx > 0 else result.cursor
+        if max_pages is None:
+            raise PaginationLimitError("/v1/siem/stream", pages_read, yielded, ceiling)
 
 
 class AsyncComplianceResource:
@@ -297,14 +311,22 @@ class AsyncComplianceResource:
         since: str,
         limit: int | None = None,
         format: str = "ocsf",
-        max_pages: int = 100,
+        max_pages: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        """See the sync counterpart for why the runaway guard raises."""
+        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
         current_since = since
-        for _ in range(max_pages):
+        pages_read = 0
+        yielded = 0
+        for _ in range(ceiling):
             result = await self.stream(since=current_since, limit=limit, format=format)
+            pages_read += 1
             for event in result.events:
                 yield event
+            yielded += len(result.events)
             if not result.has_more or not result.cursor:
                 return
             idx = result.cursor.rfind("_")
             current_since = result.cursor[:idx] if idx > 0 else result.cursor
+        if max_pages is None:
+            raise PaginationLimitError("/v1/siem/stream", pages_read, yielded, ceiling)

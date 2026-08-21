@@ -45,8 +45,12 @@ class CompletionsResource:
         raw["data"] = [Completion.model_validate(r) for r in raw.get("data", [])]
         return Page[Completion].model_validate(raw)
 
-    def list_all(self, record_id: str) -> Iterator[Completion]:
-        for item in self._http.paginate(f"/v1/records/{record_id}/completions"):
+    def list_all(self, record_id: str, *, max_pages: int | None = None) -> Iterator[Completion]:
+        """Auto-paginate through every Completion on a Record.
+
+        Raises :class:`PaginationLimitError` if the walk hits the runaway guard
+        rather than returning a prefix; pass ``max_pages`` to bound it yourself."""
+        for item in self._http.paginate(f"/v1/records/{record_id}/completions", max_pages=max_pages):
             yield Completion.model_validate(item)
 
 
@@ -85,6 +89,6 @@ class AsyncCompletionsResource:
         raw["data"] = [Completion.model_validate(r) for r in raw.get("data", [])]
         return Page[Completion].model_validate(raw)
 
-    async def list_all(self, record_id: str) -> AsyncIterator[Completion]:
-        async for item in self._http.paginate(f"/v1/records/{record_id}/completions"):
+    async def list_all(self, record_id: str, *, max_pages: int | None = None) -> AsyncIterator[Completion]:
+        async for item in self._http.paginate(f"/v1/records/{record_id}/completions", max_pages=max_pages):
             yield Completion.model_validate(item)
