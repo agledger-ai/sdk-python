@@ -646,11 +646,8 @@ WebhookEventType = (
         # Settlement & disputes
         "signal.emitted",
         "signal.received",
-        "record.settled",
-        "record.released",
         "dispute.opened",
         "dispute.escalated",
-        "dispute.evidence_window_closed",
         "dispute.resolved",
         "dispute.withdrawn",
         # Federation
@@ -673,6 +670,73 @@ WebhookEventType = (
     ]
     | str
 )
+"""Exactly the set of event types ``webhooks.create()`` can subscribe to: the
+``POST /v1/webhooks`` ``eventTypes`` enum plus the ``"*"`` wildcard.
+
+``record.settled`` (deprecated alias of ``record.fulfilled``),
+``record.released`` and ``dispute.evidence_window_closed`` are NOT here: they
+are persisted-event/replay surface only, queryable through :data:`EventType`
+but rejected 400 by ``POST /v1/webhooks``. Settlement outcomes reach webhooks
+via ``signal.emitted``/``signal.received``, not per-variant types."""
+
+EventType = Literal[
+    # Record lifecycle
+    "record.created",
+    "record.recorded",
+    "record.registered",
+    "record.activated",
+    "record.completion_submitted",
+    "record.completion_invalid",
+    "record.gate_complete",
+    "record.gate_held",
+    "record.fulfilled",
+    "record.failed",
+    "record.expired",
+    "record.cancelled",
+    # Agent-to-agent
+    "record.proposed",
+    "record.proposal_accepted",
+    "record.proposal_rejected",
+    "record.proposal_counter_proposed",
+    "record.delegated",
+    "record.revision_requested",
+    # Cascading gate
+    "cascading.gate.complete",
+    # EU AI Act compliance filings
+    "record.ai_impact_assessment_filed",
+    "record.compliance_attestation_filed",
+    # Settlement & disputes
+    "signal.emitted",
+    "signal.received",
+    "record.settled",
+    "record.released",
+    "dispute.opened",
+    "dispute.escalated",
+    "dispute.evidence_window_closed",
+    "dispute.resolved",
+    "dispute.withdrawn",
+    # Federation
+    "federation.record.state_changed",
+    "federation.settlement.signal",
+    "federation.dispute",
+    # Federation-projected lifecycle
+    "record.federation_activated",
+    "record.federation_fulfilled",
+    "record.federation_failed",
+    "record.federation_remediated",
+    "record.federation_recorded",
+    "record.federation_cancelled",
+    "record.federation_expired",
+    "record.federation_proposal_rejected",
+    # Entity references
+    "record.reference_added",
+    "agent.reference_added",
+]
+"""The full ``GET /v1/events`` ``eventType`` query enum: a deliberate superset
+of :data:`WebhookEventType`. Types queryable here but not subscribable there
+(``record.released``, ``record.settled``, ``dispute.evidence_window_closed``)
+are persisted-event/replay surface only. No ``"*"``: that is a subscription
+wildcard, not a queryable event type."""
 
 
 class Webhook(BaseModel):
