@@ -359,7 +359,7 @@
       "url"
     ]
   },
-  "enumCount": 26,
+  "enumCount": 27,
   "enums": {
     "ComplianceRecordType": {
       "values": [
@@ -444,6 +444,56 @@
       ],
       "specSites": [
         "paths//v1/records/{recordId}/ai-impact-assessment/get/responses/200/content/application/json/schema/properties/riskLevel"
+      ]
+    },
+    "EventType": {
+      "values": [
+        "agent.reference_added",
+        "cascading.gate.complete",
+        "dispute.escalated",
+        "dispute.evidence_window_closed",
+        "dispute.opened",
+        "dispute.resolved",
+        "dispute.withdrawn",
+        "federation.dispute",
+        "federation.record.state_changed",
+        "federation.settlement.signal",
+        "record.activated",
+        "record.ai_impact_assessment_filed",
+        "record.cancelled",
+        "record.completion_invalid",
+        "record.completion_submitted",
+        "record.compliance_attestation_filed",
+        "record.created",
+        "record.delegated",
+        "record.expired",
+        "record.failed",
+        "record.federation_activated",
+        "record.federation_cancelled",
+        "record.federation_expired",
+        "record.federation_failed",
+        "record.federation_fulfilled",
+        "record.federation_proposal_rejected",
+        "record.federation_recorded",
+        "record.federation_remediated",
+        "record.fulfilled",
+        "record.gate_complete",
+        "record.gate_held",
+        "record.proposal_accepted",
+        "record.proposal_counter_proposed",
+        "record.proposal_rejected",
+        "record.proposed",
+        "record.recorded",
+        "record.reference_added",
+        "record.registered",
+        "record.released",
+        "record.revision_requested",
+        "record.settled",
+        "signal.emitted",
+        "signal.received"
+      ],
+      "specSites": [
+        "paths//v1/events/get/parameters/eventType/schema"
       ]
     },
     "EvidenceType": {
@@ -638,7 +688,6 @@
         "agent.reference_added",
         "cascading.gate.complete",
         "dispute.escalated",
-        "dispute.evidence_window_closed",
         "dispute.opened",
         "dispute.resolved",
         "dispute.withdrawn",
@@ -673,15 +722,12 @@
         "record.recorded",
         "record.reference_added",
         "record.registered",
-        "record.released",
         "record.revision_requested",
-        "record.settled",
         "signal.emitted",
         "signal.received"
       ],
       "specSites": [
-        "paths//v1/webhooks/post/requestBody/content/application/json/schema/properties/eventTypes/items",
-        "paths//v1/events/get/parameters/2/schema"
+        "paths//v1/webhooks/post/requestBody/content/application/json/schema/properties/eventTypes/items"
       ]
     },
     "WebhookSigningAlg": {
