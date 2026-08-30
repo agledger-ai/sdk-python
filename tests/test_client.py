@@ -608,6 +608,55 @@ def test_events_list_all_sends_until():
 
 
 @respx.mock
+def test_events_list_sends_record_id_event_type_and_offset():
+    respx.get("https://agledger.example.com/v1/events").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.events.list(
+        since="2026-04-01T00:00:00Z",
+        record_id="rec-1",
+        event_type="record.created",
+        offset=20,
+    )
+
+    sent = respx.calls[0].request.url.params
+    assert sent["recordId"] == "rec-1"
+    assert sent["eventType"] == "record.created"
+    assert sent["offset"] == "20"
+
+
+@respx.mock
+def test_events_list_does_not_send_a_default_order():
+    """The spec default is `asc`; sending `desc` unasked silently reversed it."""
+    respx.get("https://agledger.example.com/v1/events").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.events.list(since="2026-04-01T00:00:00Z")
+
+    assert "order" not in respx.calls[0].request.url.params
+
+
+@respx.mock
+def test_events_list_all_sends_record_id_and_event_type():
+    respx.get("https://agledger.example.com/v1/events").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    list(
+        client.events.list_all(
+            since="2026-04-01T00:00:00Z", record_id="rec-1", event_type="record.created"
+        )
+    )
+
+    sent = respx.calls[0].request.url.params
+    assert sent["recordId"] == "rec-1"
+    assert sent["eventType"] == "record.created"
+    assert "order" not in sent
+
+
+@respx.mock
 def test_audit_org_reads_checkpoint_cosign():
     respx.post("https://agledger.example.com/v1/audit/org-reads/checkpoints/cp-1/cosign").mock(
         return_value=httpx.Response(200, json={
