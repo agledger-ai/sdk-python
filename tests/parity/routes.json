@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-08-21T04:05:49.517Z",
+  "generatedAt": "2026-08-30T18:22:56.502Z",
   "sourceKind": "local",
-  "apiVersion": "1.5.0",
-  "count": 193,
+  "apiVersion": "1.6.0",
+  "count": 194,
   "routes": [
     {
       "method": "DELETE",
-      "path": "/federation/v1/admin/peers/{hubId}",
+      "path": "/federation/v1/admin/peers/{peerHubId}",
       "operationId": "deleteRevokedPeerServer",
       "tag": "Federation Admin",
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [],
       "pathParams": [
-        "hubId"
+        "peerHubId"
       ],
       "responseCodes": [
         200,
@@ -281,14 +281,14 @@
     },
     {
       "method": "GET",
-      "path": "/federation/v1/admin/peers/{hubId}",
+      "path": "/federation/v1/admin/peers/{peerHubId}",
       "operationId": "getPeerDetail",
       "tag": "Federation Admin",
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [],
       "pathParams": [
-        "hubId"
+        "peerHubId"
       ],
       "responseCodes": [
         200,
@@ -1175,6 +1175,29 @@
     },
     {
       "method": "GET",
+      "path": "/v1/audit/org-reads",
+      "operationId": "listOrgAdminReads",
+      "tag": "Audit",
+      "requiredFields": [],
+      "bodyFields": [],
+      "queryFields": [
+        "cursor",
+        "limit",
+        "offset"
+      ],
+      "pathParams": [],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        414,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/v1/audit/org-reads/checkpoints",
       "operationId": "listOrgAdminReadsCheckpoints",
       "tag": "Audit",
@@ -1357,7 +1380,8 @@
         "offset",
         "order",
         "recordId",
-        "since"
+        "since",
+        "until"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -2233,6 +2257,7 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
+        "cursor",
         "format",
         "limit",
         "since"
@@ -2245,7 +2270,8 @@
         403,
         414,
         429,
-        500
+        500,
+        503
       ]
     },
     {
@@ -2717,14 +2743,14 @@
     },
     {
       "method": "POST",
-      "path": "/federation/v1/admin/peers/{hubId}/resync",
+      "path": "/federation/v1/admin/peers/{peerHubId}/resync",
       "operationId": "resyncPeer",
       "tag": "Federation Admin",
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [],
       "pathParams": [
-        "hubId"
+        "peerHubId"
       ],
       "responseCodes": [
         200,
@@ -2739,7 +2765,7 @@
     },
     {
       "method": "POST",
-      "path": "/federation/v1/admin/peers/{hubId}/revoke",
+      "path": "/federation/v1/admin/peers/{peerHubId}/revoke",
       "operationId": "revokePeerServer",
       "tag": "Federation Admin",
       "requiredFields": [],
@@ -2748,7 +2774,7 @@
       ],
       "queryFields": [],
       "pathParams": [
-        "hubId"
+        "peerHubId"
       ],
       "responseCodes": [
         200,
