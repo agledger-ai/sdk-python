@@ -509,8 +509,8 @@ def test_audit_org_reads_checkpoints_list_carries_the_sweep_posture():
     """An empty checkpoint listing is not evidence that nothing was logged.
 
     The sweep is time-driven, so ``checkpointing`` is what a caller reads before
-    reporting missing checkpoints. It is its own shape: no ``anchoringEnabled``,
-    which belongs to the vault checkpoint schedule.
+    reporting missing checkpoints. It is its own shape, distinct from
+    ``get_ops_summary()``'s platform-wide ``vault.anchoring`` block.
     """
     respx.get("https://agledger.example.com/v1/audit/org-reads/checkpoints").mock(
         return_value=httpx.Response(200, json={

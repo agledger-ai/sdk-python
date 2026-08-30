@@ -1111,8 +1111,11 @@ class OrgReadsCheckpointing(BaseModel):
     fresh install returns an empty listing however many qualifying reads it has
     logged.
 
-    Distinct from :class:`VaultCheckpoint`'s vault-anchoring schedule, which
-    carries an ``anchoringEnabled`` flag this object does not have."""
+    Distinct from ``admin.get_ops_summary()``'s ``vault.anchoring`` block, which
+    is platform-wide (not per-org) and reports the external-anchoring posture
+    (``enabled``, ``bucket``, ``workerEnabled``, ``reconciled``) this object
+    does not carry. :class:`VaultCheckpoint` is a checkpoint row, not a
+    schedule, and has neither."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
