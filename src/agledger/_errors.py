@@ -236,22 +236,37 @@ class APITimeoutError(APIConnectionError):
 
 
 class PaginationLimitError(AgledgerError):
-    """An auto-paginating walk stopped at the default page ceiling with pages
-    still available, so the rows it yielded are a prefix of the listing rather
-    than all of it.
+    """An auto-paginating walk stopped short of the listing without being asked
+    to, so the rows it yielded are a prefix rather than all of it.
 
-    The ceiling is a runaway guard, not a result. Raising is what separates it
-    from the intentional stop: pass ``max_pages`` explicitly and the walk ends
-    quietly at your bound, because you asked for one.
+    Usually the default page ceiling, with pages still available. The ceiling is
+    a runaway guard, not a result. Raising is what separates it from the
+    intentional stop: pass ``max_pages`` explicitly and the walk ends quietly at
+    your bound, because you asked for one.
 
     Recover by raising ``limit`` so the same rows arrive in fewer pages, by
     passing a ``max_pages`` large enough for the listing, or by narrowing the
     filters.
+
+    The same rule covers the other unrequested truncation: a page that carries
+    rows but no resume token leaves the walk with nowhere to go, and returning
+    quietly there would read as the end of the data. Pass ``message`` to say so
+    in those words; ``max_pages`` then describes the ceiling that was in force,
+    not the reason it stopped.
     """
 
-    def __init__(self, path: str, pages_read: int, items_yielded: int, max_pages: int) -> None:
+    def __init__(
+        self,
+        path: str,
+        pages_read: int,
+        items_yielded: int,
+        max_pages: int,
+        *,
+        message: str | None = None,
+    ) -> None:
         super().__init__(
-            f"Pagination of {path} stopped at the {max_pages}-page ceiling after "
+            message
+            or f"Pagination of {path} stopped at the {max_pages}-page ceiling after "
             f"{items_yielded} item(s), and the listing has more. Raise 'limit' to fit "
             f"the walk in fewer pages, or pass 'max_pages' to lift the ceiling."
         )

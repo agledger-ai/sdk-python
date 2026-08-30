@@ -23,6 +23,14 @@ from agledger.types import (
     Page,
 )
 
+_NO_CURSOR_MESSAGE = (
+    "The SIEM stream returned events but no X-AGLedger-Stream-Cursor, so the walk "
+    "cannot resume and stopped after {yielded} event(s) with the feed still open. "
+    "Returning here would read as the end of the audit trail. A page with rows "
+    "always carries a resume position, so retry the same request; if the header "
+    "stays absent, bound the walk with 'max_pages' to take a prefix on purpose."
+)
+
 
 class ComplianceResource:
     def __init__(self, http: HttpClient) -> None:
@@ -139,53 +147,91 @@ class ComplianceResource:
     def stream(
         self,
         *,
-        since: str,
+        since: str | None = None,
+        cursor: str | None = None,
         limit: int | None = None,
         format: str = "ocsf",
     ) -> AuditStreamResult:
         """Pull audit events as NDJSON for SIEM ingestion. Requires audit:read scope.
 
         Route mounted at ``/v1/siem/stream``.
+
+        ``since`` starts a walk and ``cursor`` continues one, and they are
+        mutually exclusive: pass one or the other, never both. ``cursor`` is the
+        previous page's :attr:`AuditStreamResult.cursor`, sent back verbatim.
+
+        Do not poll by advancing ``since`` to the newest event time ingested.
+        Rows written in one transaction all carry the same ``created_at``, so a
+        time-only boundary cannot address a position inside that group and every
+        row sharing the newest instant is skipped. The cursor carries the row id
+        alongside the instant and steps through them.
         """
-        params: dict[str, Any] = {"since": since, "format": format}
+        if since is not None and cursor is not None:
+            raise ValueError(
+                "stream() takes 'since' or 'cursor', not both: 'since' starts a walk and "
+                "'cursor' continues one. Pass the previous page's cursor verbatim to "
+                "resume, and drop 'since'."
+            )
+        params: dict[str, Any] = {"format": format}
+        if since is not None:
+            params["since"] = since
+        if cursor is not None:
+            params["cursor"] = cursor
         if limit is not None:
             params["limit"] = limit
         result = self._http.get_ndjson("/v1/siem/stream", params=params)
-        effective_limit = limit if limit is not None else 100
         return AuditStreamResult.model_validate({
             "events": result["data"],
             "cursor": result.get("cursor"),
-            "hasMore": len(result["data"]) >= effective_limit,
+            "hasMore": len(result["data"]) > 0,
+            "holdbackSeconds": result.get("holdbackSeconds"),
         })
 
     def stream_all(
         self,
         *,
-        since: str,
+        since: str | None = None,
+        cursor: str | None = None,
         limit: int | None = None,
         format: str = "ocsf",
         max_pages: int | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Auto-paginating iterator for SIEM streaming.
 
+        Every page after the first resumes from the previous page's cursor,
+        verbatim. Nothing is ever derived from it: splitting a cursor to
+        reconstruct a ``since`` drops every row that shares the newest
+        ``created_at``, which is every other row written in the same
+        transaction.
+
         Unbounded, hitting the runaway guard raises
         :class:`PaginationLimitError`: a SIEM feed that stops early and says
         nothing reads as a quiet window with no events in it. Pass ``max_pages``
-        to take a bounded slice on purpose.
+        to take a bounded slice on purpose. A page that carries events but no
+        cursor raises for the same reason: the walk cannot advance, and that is
+        a truncation the caller did not ask for.
         """
         ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
-        current_since = since
+        next_since = since
+        next_cursor = cursor
         pages_read = 0
         yielded = 0
         for _ in range(ceiling):
-            result = self.stream(since=current_since, limit=limit, format=format)
+            result = self.stream(
+                since=next_since, cursor=next_cursor, limit=limit, format=format
+            )
             pages_read += 1
             yield from result.events
             yielded += len(result.events)
-            if not result.has_more or not result.cursor:
+            if not result.events:
                 return
-            idx = result.cursor.rfind("_")
-            current_since = result.cursor[:idx] if idx > 0 else result.cursor
+            if not result.cursor:
+                raise PaginationLimitError(
+                    "/v1/siem/stream", pages_read, yielded, ceiling,
+                    message=_NO_CURSOR_MESSAGE.format(yielded=yielded),
+                )
+            next_since = None
+            next_cursor = result.cursor
         if max_pages is None:
             raise PaginationLimitError("/v1/siem/stream", pages_read, yielded, ceiling)
 
@@ -291,43 +337,65 @@ class AsyncComplianceResource:
     async def stream(
         self,
         *,
-        since: str,
+        since: str | None = None,
+        cursor: str | None = None,
         limit: int | None = None,
         format: str = "ocsf",
     ) -> AuditStreamResult:
-        params: dict[str, Any] = {"since": since, "format": format}
+        """See the sync counterpart: ``since`` and ``cursor`` are mutually exclusive."""
+        if since is not None and cursor is not None:
+            raise ValueError(
+                "stream() takes 'since' or 'cursor', not both: 'since' starts a walk and "
+                "'cursor' continues one. Pass the previous page's cursor verbatim to "
+                "resume, and drop 'since'."
+            )
+        params: dict[str, Any] = {"format": format}
+        if since is not None:
+            params["since"] = since
+        if cursor is not None:
+            params["cursor"] = cursor
         if limit is not None:
             params["limit"] = limit
         result = await self._http.get_ndjson("/v1/siem/stream", params=params)
-        effective_limit = limit if limit is not None else 100
         return AuditStreamResult.model_validate({
             "events": result["data"],
             "cursor": result.get("cursor"),
-            "hasMore": len(result["data"]) >= effective_limit,
+            "hasMore": len(result["data"]) > 0,
+            "holdbackSeconds": result.get("holdbackSeconds"),
         })
 
     async def stream_all(
         self,
         *,
-        since: str,
+        since: str | None = None,
+        cursor: str | None = None,
         limit: int | None = None,
         format: str = "ocsf",
         max_pages: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """See the sync counterpart for why the runaway guard raises."""
+        """See the sync counterpart for why the cursor is sent back verbatim and
+        why the runaway guard raises."""
         ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
-        current_since = since
+        next_since = since
+        next_cursor = cursor
         pages_read = 0
         yielded = 0
         for _ in range(ceiling):
-            result = await self.stream(since=current_since, limit=limit, format=format)
+            result = await self.stream(
+                since=next_since, cursor=next_cursor, limit=limit, format=format
+            )
             pages_read += 1
             for event in result.events:
                 yield event
             yielded += len(result.events)
-            if not result.has_more or not result.cursor:
+            if not result.events:
                 return
-            idx = result.cursor.rfind("_")
-            current_since = result.cursor[:idx] if idx > 0 else result.cursor
+            if not result.cursor:
+                raise PaginationLimitError(
+                    "/v1/siem/stream", pages_read, yielded, ceiling,
+                    message=_NO_CURSOR_MESSAGE.format(yielded=yielded),
+                )
+            next_since = None
+            next_cursor = result.cursor
         if max_pages is None:
             raise PaginationLimitError("/v1/siem/stream", pages_read, yielded, ceiling)
