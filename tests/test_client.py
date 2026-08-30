@@ -657,6 +657,22 @@ def test_events_list_all_sends_record_id_and_event_type():
 
 
 @respx.mock
+def test_audit_org_reads_checkpoint_proof_sends_leaf_as_an_integer():
+    """`leaf` is an integer index in the spec, matching `OrgAdminRead.leaf_index`."""
+    respx.get("https://agledger.example.com/v1/audit/org-reads/checkpoints/cp-1/proof").mock(
+        return_value=httpx.Response(200, json={
+            "leafIndex": 3, "leafHash": "a" * 64, "treeSize": 10,
+            "rootHash": "b" * 64, "path": ["c" * 64],
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    proof = client.audit.org_reads_checkpoints.proof("cp-1", 3)
+
+    assert proof.leaf_index == 3
+    assert respx.calls[0].request.url.params["leaf"] == "3"
+
+
+@respx.mock
 def test_audit_org_reads_checkpoint_cosign():
     respx.post("https://agledger.example.com/v1/audit/org-reads/checkpoints/cp-1/cosign").mock(
         return_value=httpx.Response(200, json={
