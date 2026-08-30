@@ -6,7 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **The SIEM audit stream no longer drops events at a page boundary.** `compliance.stream_all()` paged by splitting the `X-AGLedger-Stream-Cursor` value at its last underscore and sending the timestamp half back as `since`. Audit rows written in one database transaction all carry the same `created_at`, and `since` is compared strictly after, so every row sharing the newest instant on a page was skipped and appeared on no later page. The loss was silent: the walk ran to the end and looked complete. Both the sync and the async walk now send the cursor back verbatim and derive nothing from it. If you wrote your own polling loop on top of `compliance.stream()`, check it for the same pattern: never split a cursor, and never rebuild a `since` from one.
+
+- **A stream page that carries events but no cursor raises instead of returning.** The walk cannot advance from there, and returning a prefix reads as the end of the audit trail. It raises `PaginationLimitError` with a message naming the cause. A bound you set yourself still ends the walk quietly.
+
+### Added
+
+- **`compliance.stream()` and `compliance.stream_all()` take `cursor`.** API 1.6.0 makes `since` optional and adds `cursor`: `since` starts a walk, `cursor` continues one, and they are mutually exclusive. Passing both raises `ValueError` rather than quietly dropping one.
+
+- **`AuditStreamResult.holdback_seconds`** carries `X-AGLedger-Stream-Holdback-Seconds`: the whole seconds by which a page stops short of now because a transaction that stamped rows has not committed. `0` means the page runs up to the present, `None` means the Server did not say. Read it before concluding that an empty page means nothing has happened.
+
+- **`audit.org_reads_checkpoints.list_reads()`** lists the read-transparency log leaves the signed checkpoints cover (`GET /v1/audit/org-reads`). Without it an empty checkpoint listing cannot be told apart from "no qualifying read has happened yet": an empty listing here means nothing was logged, while entries here with no checkpoint mean the sweep has not run over them. Rows carry `leaf_index` and `leaf_hash`, which `proof()` verifies against a checkpoint.
+
+- **`events.list()` and `events.list_all()` take `until`.** `since` is inclusive (at or after) and `until` is exclusive (strictly before), so the pair closes a window that replays identically, and consecutive windows compose without overlap when the next `since` equals the previous `until`.
+
+- **`FederationPeer`, `PeerHandshakeResult`, `OrgAdminRead`, `OrgReadsCheckpointing` and `OrgReadsCheckpointPage`** are exported from the package root.
+
 ### Changed
+
+- **`AuditStreamResult.has_more` reports whether the page produced rows.** It was `len(events) >= limit`, a guess that is wrong under holdback: the Server defers rows written by an open transaction, so a page below `limit` is not the end of the stream. On a cursor walk the only honest local signal is whether this page returned anything, and a zero-row page means this poll is exhausted.
+
+- **`audit.org_reads_checkpoints.list()` returns a typed page, not a dict.** The listing gained a required `checkpointing` block (`cron`, `interval_minutes`, `last_checkpoint_at`, `next_run_at`, `source`) alongside `data`, `has_more`, `next_cursor` and `total`. Read `checkpointing` before reporting missing checkpoints: the sweep is time-driven, so a fresh install returns an empty `data` however many qualifying reads it has logged. It is deliberately its own type rather than the vault checkpointing schedule, which carries an `anchoringEnabled` flag this object does not have. The method also takes `offset` and `cursor` now, so the `next_cursor` it returns can be spent. Callers subscripting the old dict need to read attributes instead.
+
+- **`federation_admin.get_peer()` returns `FederationPeer` and `list_peers()` returns `Page[FederationPeer]`.** Both returned untyped dicts. The peer row is modelled from what the endpoint serves: `peer_id`, `peer_hub_id`, `peer_url`, `status` and `created_at`, plus `agent_directory_hash`, `consecutive_delivery_failures`, `last_delivery_at`, `last_delivery_error` and `last_sync_at`. Note that `last_sync_at` is directory-sync state and not reachability, which is `last_delivery_at`. Callers subscripting the old dicts need to read attributes instead.
+
+- **`federation.peer_handshake()` returns `PeerHandshakeResult`.** The 201 requires `peer_hub_id` and `status` alongside `peered`, `peer_id` and the two server public keys. `peer_hub_id` is the identifier every admin peer path takes; `peer_id` is the receiver-local row id and resolves nowhere.
+
+- **The federation peer methods name their parameter `peer_hub_id`, not `hub_id`.** `get_peer`, `revoke_peer`, `resync_peer` and `delete_peer` follow the API, which renamed the path parameter. The URL is unchanged, so a positional call is unaffected, but a call passing `hub_id=` by keyword needs the new name.
 
 - **`__enter__` and `__aenter__` return `Self`.** A subclass used as a context manager now keeps its own type inside the `with` block instead of widening to `AgledgerClient`.
 
