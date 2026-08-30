@@ -237,7 +237,14 @@ class AdminResource:
 
     def get_ops_summary(self) -> dict[str, Any]:
         """Get a consolidated operations snapshot (license, system, queues,
-        federation, vault, webhooks)."""
+        federation, vault, webhooks, partitions).
+
+        ``vault`` always carries ``signingKeys``, ``anchoring`` and
+        ``orgReadsCheckpoints`` (``cron``, ``lastCheckpointAt``,
+        ``workerScheduled``). The last of those is the platform-wide read
+        transparency sweep posture; per-org detail is
+        ``audit.org_reads_checkpoints.list().checkpointing``, which is a
+        different shape."""
         return self._http.get("/v1/admin/ops-summary")
 
     def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:
@@ -699,7 +706,14 @@ class AsyncAdminResource:
 
     async def get_ops_summary(self) -> dict[str, Any]:
         """Get a consolidated operations snapshot (license, system, queues,
-        federation, vault, webhooks)."""
+        federation, vault, webhooks, partitions).
+
+        ``vault`` always carries ``signingKeys``, ``anchoring`` and
+        ``orgReadsCheckpoints`` (``cron``, ``lastCheckpointAt``,
+        ``workerScheduled``). The last of those is the platform-wide read
+        transparency sweep posture; per-org detail is
+        ``audit.org_reads_checkpoints.list().checkpointing``, which is a
+        different shape."""
         return await self._http.get("/v1/admin/ops-summary")
 
     async def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:

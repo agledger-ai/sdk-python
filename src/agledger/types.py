@@ -977,7 +977,7 @@ class AuditStreamResult(BaseModel):
 class OrgReadsCheckpoint(BaseModel):
     """Org-admin reads checkpoint (SCITT-style signed tree head).
 
-    Wire fields per ``GET /v1/audit-vault/org-reads/checkpoint``: the timestamp
+    Wire fields per ``GET /v1/audit/org-reads/checkpoints``: the timestamp
     is ``checkpointAt`` (not ``createdAt``) and the signed envelope is
     ``coseSign1Base64`` (not ``sthBytes``/``signature``)."""
 

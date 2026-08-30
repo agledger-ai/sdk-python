@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger.types import PeerHandshakeResult
 
 
 def _state_transition_body(
@@ -64,9 +65,15 @@ class FederationResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def peer_handshake(self, **params: Any) -> dict[str, Any]:
-        """Establish a peer relationship via single-use peering token."""
-        return self._http.post("/federation/v1/peer", json=params)
+    def peer_handshake(self, **params: Any) -> PeerHandshakeResult:
+        """Establish a peer relationship via single-use peering token.
+
+        The ``peer_hub_id`` on the result is the identifier every
+        ``/federation/v1/admin/peers/{peerHubId}`` path takes; ``peer_id`` is
+        the receiver-local row id and resolves nowhere."""
+        return PeerHandshakeResult.model_validate(
+            self._http.post("/federation/v1/peer", json=params)
+        )
 
     def sync_agent_directory(self, **params: Any) -> dict[str, Any]:
         """Synchronize agent directory with a peer."""
@@ -146,8 +153,10 @@ class AsyncFederationResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def peer_handshake(self, **params: Any) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/peer", json=params)
+    async def peer_handshake(self, **params: Any) -> PeerHandshakeResult:
+        return PeerHandshakeResult.model_validate(
+            await self._http.post("/federation/v1/peer", json=params)
+        )
 
     async def sync_agent_directory(self, **params: Any) -> dict[str, Any]:
         return await self._http.post("/federation/v1/peer/agent-sync", json=params)
