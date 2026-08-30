@@ -277,6 +277,18 @@ def test_stream_rejects_since_and_cursor_together():
 
 
 @respx.mock
+def test_stream_rejects_neither_since_nor_cursor():
+    respx.get("https://agledger.example.com/v1/siem/stream").mock(
+        return_value=httpx.Response(200, text="", headers={"content-type": "application/x-ndjson"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+
+    with pytest.raises(ValueError, match="requires 'since' or 'cursor'"):
+        client.compliance.stream()
+    assert not respx.calls
+
+
+@respx.mock
 @pytest.mark.anyio
 async def test_async_stream_all_keeps_rows_that_share_one_created_at():
     respx.get("https://agledger.example.com/v1/siem/stream").mock(
@@ -326,6 +338,20 @@ async def test_async_stream_rejects_since_and_cursor_together():
             await client.compliance.stream(
                 since="2026-03-04T00:00:00Z", cursor=CURSOR_AFTER_B
             )
+    assert not respx.calls
+
+
+@respx.mock
+@pytest.mark.anyio
+async def test_async_stream_rejects_neither_since_nor_cursor():
+    respx.get("https://agledger.example.com/v1/siem/stream").mock(
+        return_value=httpx.Response(200, text="", headers={"content-type": "application/x-ndjson"})
+    )
+    async with AsyncAgledgerClient(
+        base_url="https://agledger.example.com", api_key="test-key"
+    ) as client:
+        with pytest.raises(ValueError, match="requires 'since' or 'cursor'"):
+            await client.compliance.stream()
     assert not respx.calls
 
 
