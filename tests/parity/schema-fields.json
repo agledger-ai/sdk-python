@@ -515,7 +515,7 @@
         "suspended"
       ],
       "specSites": [
-        "paths//federation/v1/admin/peers/get/parameters/0/schema",
+        "paths//federation/v1/admin/peers/get/parameters/status/schema",
         "paths//federation/v1/admin/peers/get/responses/200/content/application/json/schema/allOf/1/properties/data/items/properties/status",
         "paths//federation/v1/admin/peers/{peerHubId}/get/responses/200/content/application/json/schema/properties/status"
       ]
