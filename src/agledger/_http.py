@@ -101,6 +101,24 @@ _ERROR_MAP: dict[int, type[APIError]] = {
 }
 
 
+def _parse_holdback_seconds(headers: httpx.Headers) -> int | None:
+    """Seconds by which a SIEM stream page stops short of now.
+
+    ``X-AGLedger-Stream-Holdback-Seconds`` rides every 200, including an empty
+    one, and a non-zero value is why an empty page is not evidence that nothing
+    has happened. Absent (a pre-1.6.0 Server) is reported as ``None`` rather
+    than 0, because "no holdback" and "the Server did not say" are different
+    answers for a caller deciding whether to keep polling.
+    """
+    raw = headers.get("x-agledger-stream-holdback-seconds")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def resolve_api_key(api_key: str | None) -> str:
     """Resolve API key from argument or AGLEDGER_API_KEY env var."""
     key = api_key or os.environ.get("AGLEDGER_API_KEY")
@@ -442,7 +460,10 @@ class HttpClient:
         raise last_error or APIError(500, message="Max retries exceeded")
 
     def get_ndjson(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
-        """Fetch an NDJSON endpoint. Returns {"data": [...], "cursor": "..."}."""
+        """Fetch an NDJSON endpoint.
+
+        Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
+        """
         url = f"{self._base_url}{path}"
         headers = _base_headers(self._api_key, "GET")
         headers["Accept"] = "application/x-ndjson"
@@ -472,7 +493,11 @@ class HttpClient:
                 lines = [line for line in text.split("\n") if line.strip()]
                 data = [_json.loads(line) for line in lines]
                 cursor = response.headers.get("x-agledger-stream-cursor")
-                return {"data": data, "cursor": cursor}
+                return {
+                    "data": data,
+                    "cursor": cursor,
+                    "holdbackSeconds": _parse_holdback_seconds(response.headers),
+                }
 
             except httpx.ConnectError as e:
                 last_error = APIConnectionError(str(e))
@@ -728,7 +753,10 @@ class AsyncHttpClient:
         raise last_error or APIError(500, message="Max retries exceeded")
 
     async def get_ndjson(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
-        """Fetch an NDJSON endpoint. Returns {"data": [...], "cursor": "..."}."""
+        """Fetch an NDJSON endpoint.
+
+        Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
+        """
         url = f"{self._base_url}{path}"
         headers = _base_headers(self._api_key, "GET")
         headers["Accept"] = "application/x-ndjson"
@@ -758,7 +786,11 @@ class AsyncHttpClient:
                 lines = [line for line in text.split("\n") if line.strip()]
                 data = [_json.loads(line) for line in lines]
                 cursor = response.headers.get("x-agledger-stream-cursor")
-                return {"data": data, "cursor": cursor}
+                return {
+                    "data": data,
+                    "cursor": cursor,
+                    "holdbackSeconds": _parse_holdback_seconds(response.headers),
+                }
 
             except httpx.ConnectError as e:
                 last_error = APIConnectionError(str(e))

@@ -948,11 +948,30 @@ class RecordAuditExport(BaseModel):
 
 
 class AuditStreamResult(BaseModel):
+    """One page of ``GET /v1/siem/stream``."""
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     events: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
     cursor: str | None = None
+    """Resume position after the last row on this page, from the
+    ``X-AGLedger-Stream-Cursor`` header, as ``<RFC 3339 instant>_<uuid>``. Send
+    it back verbatim as ``cursor=`` to get the next page. ``None`` when the page
+    is empty. Never split it: the row id half is what addresses a position
+    inside a group of rows sharing one ``created_at``, and feeding the instant
+    half back as ``since`` skips every other row in that group."""
     has_more: bool = Field(False, alias="hasMore")
+    """Whether this page produced rows. On a cursor walk that is the only honest
+    local signal: a short page is not the end of the stream (the Server holds
+    rows back while a transaction that stamped them is still open), so page size
+    says nothing. A zero-row page means this poll is exhausted; read
+    ``holdback_seconds`` before concluding nothing has happened."""
+    holdback_seconds: int | None = Field(None, alias="holdbackSeconds")
+    """Whole seconds by which this page stops short of now, from the
+    ``X-AGLedger-Stream-Holdback-Seconds`` header. ``0`` means the page runs up
+    to the present. A large value means an empty page is not evidence that
+    nothing has happened: keep the same cursor and keep polling. ``None`` when
+    the header is absent."""
 
 
 class OrgReadsCheckpoint(BaseModel):
@@ -991,6 +1010,58 @@ class OrgReadsInclusionProof(BaseModel):
     tree_size: int | None = Field(None, alias="treeSize")
     root_hash: str = Field(alias="rootHash")
     path: list[str]
+
+
+class OrgAdminRead(BaseModel):
+    """One leaf of the org read-transparency log, from
+    ``GET /v1/audit/org-reads``.
+
+    These rows are what the signed checkpoints cover, and listing them is how an
+    empty checkpoint list is told apart from "no qualifying reads have happened
+    yet": no rows here means nothing was logged, whereas rows here with no
+    checkpoint mean the sweep has not run over them yet."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    id: str
+    org_id: str = Field(alias="orgId")
+    record_id: str = Field(alias="recordId")
+    caller_key_id: str = Field(alias="callerKeyId")
+    """API key that performed the read."""
+    read_at: str = Field(alias="readAt")
+    read_context: str = Field(alias="readContext")
+    """``interactive``, ``scheduled-job``, or ``export-batch:<uuid>``."""
+    filter_applied: str = Field(alias="filterApplied")
+    export_batch_id: str | None = Field(alias="exportBatchId")
+    leaf_hash: str = Field(alias="leafHash")
+    """sha256 hex of the row's COSE_Sign1 bytes: the Merkle leaf the checkpoints
+    cover. Verify it with
+    ``org_reads_checkpoints.proof(checkpoint_id, str(leaf_index))``."""
+    leaf_index: int = Field(alias="leafIndex")
+
+
+class OrgReadsCheckpointing(BaseModel):
+    """Checkpoint sweep posture, served alongside the checkpoint listing.
+
+    Read it before reporting missing checkpoints: the sweep is time-driven, so a
+    fresh install returns an empty listing however many qualifying reads it has
+    logged.
+
+    Distinct from :class:`VaultCheckpoint`'s vault-anchoring schedule, which
+    carries an ``anchoringEnabled`` flag this object does not have."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    cron: str
+    """Cron the sweep runs on (UTC). Fixed cadence; there is no env knob."""
+    interval_minutes: int | None = Field(alias="intervalMinutes")
+    last_checkpoint_at: str | None = Field(alias="lastCheckpointAt")
+    """Newest checkpoint in the caller's org; ``None`` until the first sweep
+    lands one."""
+    next_run_at: str | None = Field(alias="nextRunAt")
+    source: Literal["worker", "config"] | str
+    """``worker`` when read from the schedule the worker registered; ``config``
+    when the API process fell back to its own defaults."""
 
 
 class ReputationScore(BaseModel):
@@ -1071,6 +1142,13 @@ class Page(BaseModel, Generic[T]):
     # as untyped extras before the Server gave the envelope a name.
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+
+
+class OrgReadsCheckpointPage(Page[OrgReadsCheckpoint]):
+    """``GET /v1/audit/org-reads/checkpoints``: a page of checkpoints plus the
+    sweep posture that explains an empty one."""
+
+    checkpointing: OrgReadsCheckpointing
 
 
 class HealthResponse(BaseModel):
@@ -1287,3 +1365,60 @@ class VerificationKeysResponse(BaseModel):
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")
     """Template for the canonical signature-input string (v0.25.x)."""
+
+
+class FederationPeer(BaseModel):
+    """A peered Server, as served by ``GET /federation/v1/admin/peers`` and
+    ``GET /federation/v1/admin/peers/{peerHubId}``.
+
+    Federation is peer to peer: there is no hub, and ``peerHubId`` is only the
+    name the identity field kept."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    peer_id: str = Field(alias="peerId")
+    """Receiver-local row id of the registration. No admin path takes it."""
+    peer_hub_id: str = Field(alias="peerHubId")
+    """The peer identity every ``/federation/v1/admin/peers/{peerHubId}`` path
+    takes, in canonical lowercase. Not ``peer_id``, which resolves nowhere."""
+    peer_url: str = Field(alias="peerUrl")
+    status: Literal["active", "suspended", "revoked"] | str
+    created_at: str = Field(alias="createdAt")
+    agent_directory_hash: str | None = Field(None, alias="agentDirectoryHash")
+    """Digest of the agent directory this peer last pushed. ``None`` until the
+    peer has pushed one."""
+    consecutive_delivery_failures: int | None = Field(None, alias="consecutiveDeliveryFailures")
+    """Failed delivery attempts since the last success, reset to 0 on a 2xx. Not
+    purely a reachability count: a peer that answers and rejects the payload
+    counts here too, because the message did not get through either way.
+    ``last_delivery_error`` says which."""
+    last_delivery_at: str | None = Field(None, alias="lastDeliveryAt")
+    """When an outbound message last reached this peer with a 2xx. ``None``
+    means nothing has been delivered yet, not that the peer is unreachable."""
+    last_delivery_error: str | None = Field(None, alias="lastDeliveryError")
+    """Why the most recent delivery attempt failed, cleared on the next
+    success."""
+    last_sync_at: str | None = Field(None, alias="lastSyncAt")
+    """When this peer last pushed its agent directory. Directory-sync state, NOT
+    reachability: V1 federation has no pull protocol, so a peer taking delivery
+    after delivery never moves it. Read ``last_delivery_at`` instead."""
+
+
+class PeerHandshakeResult(BaseModel):
+    """201 from ``POST /federation/v1/peer``: the registration this Server filed
+    for the caller, and the keys the caller verifies it with."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    peered: Literal[True]
+    """Always true; a refusal is a thrown 4xx, never a ``False`` here."""
+    peer_id: str = Field(alias="peerId")
+    """Receiver-local row id of the registration. No admin path takes it."""
+    peer_hub_id: str = Field(alias="peerHubId")
+    """The identity the registration is filed under, in canonical lowercase, and
+    the one every ``/federation/v1/admin/peers/{peerHubId}`` path takes."""
+    status: str
+    """Peer status as created (``active``)."""
+    server_signing_public_key: str = Field(alias="serverSigningPublicKey")
+    server_encryption_public_key: str = Field(alias="serverEncryptionPublicKey")
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
