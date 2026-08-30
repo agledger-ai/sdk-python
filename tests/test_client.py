@@ -505,6 +505,109 @@ def test_audit_org_reads_checkpoint_get():
 
 
 @respx.mock
+def test_audit_org_reads_checkpoints_list_carries_the_sweep_posture():
+    """An empty checkpoint listing is not evidence that nothing was logged.
+
+    The sweep is time-driven, so ``checkpointing`` is what a caller reads before
+    reporting missing checkpoints. It is its own shape: no ``anchoringEnabled``,
+    which belongs to the vault checkpoint schedule.
+    """
+    respx.get("https://agledger.example.com/v1/audit/org-reads/checkpoints").mock(
+        return_value=httpx.Response(200, json={
+            "checkpointing": {
+                "cron": "0 */6 * * *",
+                "intervalMinutes": 360,
+                "nextRunAt": "2026-04-27T06:00:00Z",
+                "lastCheckpointAt": None,
+                "source": "worker",
+            },
+            "data": [],
+            "total": 0,
+            "nextCursor": None,
+            "hasMore": False,
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    page = client.audit.org_reads_checkpoints.list(limit=10)
+
+    assert page.checkpointing.cron == "0 */6 * * *"
+    assert page.checkpointing.interval_minutes == 360
+    assert page.checkpointing.last_checkpoint_at is None
+    assert page.checkpointing.source == "worker"
+    assert not hasattr(page.checkpointing, "anchoring_enabled")
+    assert page.data == []
+    assert page.has_more is False
+    assert page.next_cursor is None
+    assert page.total == 0
+
+
+def test_org_reads_checkpointing_takes_a_source_the_sdk_does_not_name():
+    """The union is forward-compatible: a newer Server value parses, not raises."""
+    from agledger import OrgReadsCheckpointing
+
+    posture = OrgReadsCheckpointing.model_validate({
+        "cron": "0 */6 * * *", "intervalMinutes": None, "nextRunAt": None,
+        "lastCheckpointAt": None, "source": "some-future-source",
+    })
+    assert posture.source == "some-future-source"
+
+
+@respx.mock
+def test_audit_org_reads_list_reads():
+    respx.get("https://agledger.example.com/v1/audit/org-reads").mock(
+        return_value=httpx.Response(200, json={
+            "data": [{
+                "id": "read-1", "orgId": "org-1", "leafIndex": 0,
+                "leafHash": "a" * 64, "recordId": "rec-1", "callerKeyId": "agl_adm_x",
+                "filterApplied": "recordId=rec-1", "readContext": "interactive",
+                "exportBatchId": None, "readAt": "2026-04-27T00:00:00Z",
+            }],
+            "total": 1,
+            "nextCursor": None,
+            "hasMore": False,
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    page = client.audit.org_reads_checkpoints.list_reads(limit=50, offset=0)
+
+    leaf = page.data[0]
+    assert leaf.leaf_index == 0
+    assert leaf.leaf_hash == "a" * 64
+    assert leaf.caller_key_id == "agl_adm_x"
+    assert leaf.read_context == "interactive"
+    assert leaf.export_batch_id is None
+    assert page.total == 1
+
+    sent = respx.calls[0].request.url.params
+    assert sent["limit"] == "50"
+    assert sent["offset"] == "0"
+
+
+@respx.mock
+def test_events_list_sends_until():
+    respx.get("https://agledger.example.com/v1/events").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.events.list(since="2026-04-01T00:00:00Z", until="2026-04-02T00:00:00Z")
+
+    sent = respx.calls[0].request.url.params
+    assert sent["since"] == "2026-04-01T00:00:00Z"
+    assert sent["until"] == "2026-04-02T00:00:00Z"
+
+
+@respx.mock
+def test_events_list_all_sends_until():
+    respx.get("https://agledger.example.com/v1/events").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    list(client.events.list_all(since="2026-04-01T00:00:00Z", until="2026-04-02T00:00:00Z"))
+
+    assert respx.calls[0].request.url.params["until"] == "2026-04-02T00:00:00Z"
+
+
+@respx.mock
 def test_audit_org_reads_checkpoint_cosign():
     respx.post("https://agledger.example.com/v1/audit/org-reads/checkpoints/cp-1/cosign").mock(
         return_value=httpx.Response(200, json={

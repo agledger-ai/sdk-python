@@ -12,7 +12,17 @@ class TestFederationResource:
     @respx.mock
     def test_peer_handshake(self):
         respx.post(f"{BASE}/federation/v1/peer").mock(
-            return_value=httpx.Response(201, json={"established": True})
+            return_value=httpx.Response(
+                201,
+                json={
+                    "peered": True,
+                    "peerId": "11111111-1111-4111-8111-111111111111",
+                    "peerHubId": "hub-x",
+                    "status": "active",
+                    "serverSigningPublicKey": "ed25519-pk",
+                    "serverEncryptionPublicKey": "x25519-pk",
+                },
+            )
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation.peer_handshake(
@@ -22,7 +32,13 @@ class TestFederationResource:
                 peeringToken="tok-abc",
                 agentDirectory=[],
             )
-        assert result["established"] is True
+        assert result.peered is True
+        # peer_hub_id is the identifier the admin peer paths take; peer_id is
+        # the receiver-local row id and resolves nowhere.
+        assert result.peer_hub_id == "hub-x"
+        assert result.peer_id == "11111111-1111-4111-8111-111111111111"
+        assert result.status == "active"
+        assert result.next_steps is None
 
     @respx.mock
     def test_sync_agent_directory(self):
@@ -153,11 +169,63 @@ class TestFederationAdminResource:
     @respx.mock
     def test_list_peers(self):
         respx.get(f"{BASE}/federation/v1/admin/peers").mock(
-            return_value=httpx.Response(200, json={"data": []})
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "peerId": "22222222-2222-4222-8222-222222222222",
+                            "peerHubId": "hub-x",
+                            "peerUrl": "https://peer.example.com",
+                            "status": "active",
+                            "createdAt": "2026-03-01T00:00:00Z",
+                            "agentDirectoryHash": None,
+                            "consecutiveDeliveryFailures": 0,
+                            "lastDeliveryAt": None,
+                            "lastDeliveryError": None,
+                            "lastSyncAt": None,
+                        }
+                    ],
+                    "hasMore": False,
+                    "nextCursor": None,
+                    "total": 1,
+                },
+            )
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.list_peers(status="active")
-        assert "data" in result
+        peer = result.data[0]
+        assert peer.peer_hub_id == "hub-x"
+        assert peer.peer_url == "https://peer.example.com"
+        assert peer.status == "active"
+        assert peer.consecutive_delivery_failures == 0
+        assert result.has_more is False
+
+    @respx.mock
+    def test_get_peer(self):
+        respx.get(f"{BASE}/federation/v1/admin/peers/hub-x").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "peerId": "22222222-2222-4222-8222-222222222222",
+                    "peerHubId": "hub-x",
+                    "peerUrl": "https://peer.example.com",
+                    "status": "suspended",
+                    "createdAt": "2026-03-01T00:00:00Z",
+                    "lastDeliveryAt": "2026-03-02T00:00:00Z",
+                    "lastDeliveryError": "503 from peer",
+                    "consecutiveDeliveryFailures": 3,
+                },
+            )
+        )
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
+            peer = client.federation_admin.get_peer(peer_hub_id="hub-x")
+        assert peer.status == "suspended"
+        # Reachability is lastDeliveryAt, not lastSyncAt, which only moves when
+        # the peer pushes its agent directory.
+        assert peer.last_delivery_at == "2026-03-02T00:00:00Z"
+        assert peer.last_sync_at is None
+        assert peer.consecutive_delivery_failures == 3
 
     @respx.mock
     def test_revoke_peer(self):

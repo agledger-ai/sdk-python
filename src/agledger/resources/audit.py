@@ -5,22 +5,69 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import OrgReadsCheckpoint, OrgReadsInclusionProof, VaultCheckpoint
+from agledger.types import (
+    OrgAdminRead,
+    OrgReadsCheckpoint,
+    OrgReadsCheckpointPage,
+    OrgReadsInclusionProof,
+    Page,
+    VaultCheckpoint,
+)
 
 
 class OrgReadsCheckpointsResource:
-    """Org-admin reads checkpoint surface: SCITT-style signed tree heads
-    (``/v1/audit/org-reads/checkpoints/*``). Each cross-party admin read is
-    logged into a per-org Merkle log and periodically anchored."""
+    """Org-admin reads surface: SCITT-style signed tree heads
+    (``/v1/audit/org-reads/checkpoints``) over the read-transparency log
+    (``/v1/audit/org-reads``). Each cross-party admin read is logged into a
+    per-org Merkle log and periodically anchored."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def list(self, *, limit: int | None = None) -> dict[str, Any]:
-        """List recent signed checkpoints for the calling org."""
+    def list(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> OrgReadsCheckpointPage:
+        """List recent signed checkpoints for the calling org.
+
+        Read ``checkpointing`` before reporting missing checkpoints: the sweep
+        is time-driven, so a fresh install returns an empty ``data`` however
+        many qualifying reads it has logged. ``list_reads()`` tells the two
+        apart by listing the leaves themselves.
+        """
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
-        return self._http.get("/v1/audit/org-reads/checkpoints", params=params)
+        if offset is not None: params["offset"] = offset
+        if cursor is not None: params["cursor"] = cursor
+        return OrgReadsCheckpointPage.model_validate(
+            self._http.get("/v1/audit/org-reads/checkpoints", params=params)
+        )
+
+    def list_reads(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[OrgAdminRead]:
+        """List the read-transparency log leaves the checkpoints cover, oldest
+        first in ``leaf_index`` order (``GET /v1/audit/org-reads``).
+
+        This is what separates "the sweep has not run yet" from "no qualifying
+        read has happened": an empty checkpoint listing says nothing on its own,
+        and an empty listing here means nothing was logged. Verify one leaf with
+        ``proof(checkpoint_id, str(leaf_index))``.
+        """
+        params: dict[str, Any] = {}
+        if limit is not None: params["limit"] = limit
+        if offset is not None: params["offset"] = offset
+        if cursor is not None: params["cursor"] = cursor
+        return Page[OrgAdminRead].model_validate(
+            self._http.get_page("/v1/audit/org-reads", params=params)
+        )
 
     def get(self, checkpoint_id: str) -> OrgReadsCheckpoint:
         """Get a single checkpoint by ID."""
@@ -58,10 +105,36 @@ class AsyncOrgReadsCheckpointsResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def list(self, *, limit: int | None = None) -> dict[str, Any]:
+    async def list(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> OrgReadsCheckpointPage:
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
-        return await self._http.get("/v1/audit/org-reads/checkpoints", params=params)
+        if offset is not None: params["offset"] = offset
+        if cursor is not None: params["cursor"] = cursor
+        return OrgReadsCheckpointPage.model_validate(
+            await self._http.get("/v1/audit/org-reads/checkpoints", params=params)
+        )
+
+    async def list_reads(
+        self,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[OrgAdminRead]:
+        """See the sync counterpart: the leaves the checkpoints cover."""
+        params: dict[str, Any] = {}
+        if limit is not None: params["limit"] = limit
+        if offset is not None: params["offset"] = offset
+        if cursor is not None: params["cursor"] = cursor
+        return Page[OrgAdminRead].model_validate(
+            await self._http.get_page("/v1/audit/org-reads", params=params)
+        )
 
     async def get(self, checkpoint_id: str) -> OrgReadsCheckpoint:
         return OrgReadsCheckpoint.model_validate(
