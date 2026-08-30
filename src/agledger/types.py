@@ -1100,7 +1100,7 @@ class OrgAdminRead(BaseModel):
     leaf_hash: str = Field(alias="leafHash")
     """sha256 hex of the row's COSE_Sign1 bytes: the Merkle leaf the checkpoints
     cover. Verify it with
-    ``org_reads_checkpoints.proof(checkpoint_id, str(leaf_index))``."""
+    ``org_reads_checkpoints.proof(checkpoint_id, leaf_index)``."""
     leaf_index: int = Field(alias="leafIndex")
 
 

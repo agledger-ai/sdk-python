@@ -59,7 +59,7 @@ class OrgReadsCheckpointsResource:
         This is what separates "the sweep has not run yet" from "no qualifying
         read has happened": an empty checkpoint listing says nothing on its own,
         and an empty listing here means nothing was logged. Verify one leaf with
-        ``proof(checkpoint_id, str(leaf_index))``.
+        ``proof(checkpoint_id, leaf_index)``.
         """
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
@@ -91,7 +91,7 @@ class OrgReadsCheckpointsResource:
             )
         )
 
-    def proof(self, checkpoint_id: str, leaf: str) -> OrgReadsInclusionProof:
+    def proof(self, checkpoint_id: str, leaf: int) -> OrgReadsInclusionProof:
         """Get the inclusion proof for a leaf within this checkpoint."""
         return OrgReadsInclusionProof.model_validate(
             self._http.get(
@@ -155,7 +155,7 @@ class AsyncOrgReadsCheckpointsResource:
             )
         )
 
-    async def proof(self, checkpoint_id: str, leaf: str) -> OrgReadsInclusionProof:
+    async def proof(self, checkpoint_id: str, leaf: int) -> OrgReadsInclusionProof:
         return OrgReadsInclusionProof.model_validate(
             await self._http.get(
                 f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/proof",
