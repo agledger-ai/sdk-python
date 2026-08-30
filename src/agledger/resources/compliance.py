@@ -172,6 +172,12 @@ class ComplianceResource:
                 "'cursor' continues one. Pass the previous page's cursor verbatim to "
                 "resume, and drop 'since'."
             )
+        if since is None and cursor is None:
+            raise ValueError(
+                "stream() requires 'since' or 'cursor': 'since' starts a walk and 'cursor' "
+                "continues one. Pass 'since' to start a new walk, or the previous page's "
+                "cursor verbatim to resume one."
+            )
         params: dict[str, Any] = {"format": format}
         if since is not None:
             params["since"] = since
@@ -342,12 +348,19 @@ class AsyncComplianceResource:
         limit: int | None = None,
         format: str = "ocsf",
     ) -> AuditStreamResult:
-        """See the sync counterpart: ``since`` and ``cursor`` are mutually exclusive."""
+        """See the sync counterpart: ``since`` and ``cursor`` are mutually exclusive,
+        and one of them is required."""
         if since is not None and cursor is not None:
             raise ValueError(
                 "stream() takes 'since' or 'cursor', not both: 'since' starts a walk and "
                 "'cursor' continues one. Pass the previous page's cursor verbatim to "
                 "resume, and drop 'since'."
+            )
+        if since is None and cursor is None:
+            raise ValueError(
+                "stream() requires 'since' or 'cursor': 'since' starts a walk and 'cursor' "
+                "continues one. Pass 'since' to start a new walk, or the previous page's "
+                "cursor verbatim to resume one."
             )
         params: dict[str, Any] = {"format": format}
         if since is not None:
