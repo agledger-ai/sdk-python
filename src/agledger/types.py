@@ -1104,6 +1104,15 @@ class OrgAdminRead(BaseModel):
     leaf_index: int = Field(alias="leafIndex")
 
 
+OrgReadsCheckpointingSource = Literal["worker", "config"] | str
+"""``OrgReadsCheckpointing.source``: ``worker`` when read from the schedule
+the worker registered, ``config`` when the API process fell back to its own
+defaults. A named module-level alias so the enum-parity guard
+(``tests/test_enum_parity.py``) can see and pin it. The ``| str`` still
+protects a caller against a value a newer Server adds before this SDK names
+it."""
+
+
 class OrgReadsCheckpointing(BaseModel):
     """Checkpoint sweep posture, served alongside the checkpoint listing.
 
@@ -1126,7 +1135,7 @@ class OrgReadsCheckpointing(BaseModel):
     """Newest checkpoint in the caller's org; ``None`` until the first sweep
     lands one."""
     next_run_at: str | None = Field(alias="nextRunAt")
-    source: Literal["worker", "config"] | str
+    source: OrgReadsCheckpointingSource
     """``worker`` when read from the schedule the worker registered; ``config``
     when the API process fell back to its own defaults."""
 
@@ -1434,6 +1443,14 @@ class VerificationKeysResponse(BaseModel):
     """Template for the canonical signature-input string (v0.25.x)."""
 
 
+FederationPeerStatus = Literal["active", "suspended", "revoked"] | str
+"""``FederationPeer.status``. Pinned to a closed three-value enum at every spec
+site that serves it. A named module-level alias so the enum-parity guard
+(``tests/test_enum_parity.py``) can see and pin it. The ``| str`` still
+protects a caller against a value a newer Server adds before this SDK names
+it."""
+
+
 class FederationPeer(BaseModel):
     """A peered Server, as served by ``GET /federation/v1/admin/peers`` and
     ``GET /federation/v1/admin/peers/{peerHubId}``.
@@ -1449,7 +1466,7 @@ class FederationPeer(BaseModel):
     """The peer identity every ``/federation/v1/admin/peers/{peerHubId}`` path
     takes, in canonical lowercase. Not ``peer_id``, which resolves nowhere."""
     peer_url: str = Field(alias="peerUrl")
-    status: Literal["active", "suspended", "revoked"] | str
+    status: FederationPeerStatus
     created_at: str = Field(alias="createdAt")
     agent_directory_hash: str | None = Field(None, alias="agentDirectoryHash")
     """Digest of the agent directory this peer last pushed. ``None`` until the
