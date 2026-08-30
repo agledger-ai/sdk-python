@@ -359,7 +359,7 @@
       "url"
     ]
   },
-  "enumCount": 27,
+  "enumCount": 29,
   "enums": {
     "ComplianceRecordType": {
       "values": [
@@ -508,6 +508,18 @@
         "paths//v1/records/{recordId}/dispute/evidence/post/requestBody/content/application/json/schema/properties/evidenceType"
       ]
     },
+    "FederationPeerStatus": {
+      "values": [
+        "active",
+        "revoked",
+        "suspended"
+      ],
+      "specSites": [
+        "paths//federation/v1/admin/peers/get/parameters/0/schema",
+        "paths//federation/v1/admin/peers/get/responses/200/content/application/json/schema/allOf/1/properties/data/items/properties/status",
+        "paths//federation/v1/admin/peers/{peerHubId}/get/responses/200/content/application/json/schema/properties/status"
+      ]
+    },
     "FederationSettlementSignal": {
       "values": [
         "HOLD",
@@ -552,6 +564,15 @@
       ],
       "specSites": [
         "components/schemas/RecordRow/properties/operatingMode"
+      ]
+    },
+    "OrgReadsCheckpointingSource": {
+      "values": [
+        "config",
+        "worker"
+      ],
+      "specSites": [
+        "paths//v1/audit/org-reads/checkpoints/get/responses/200/content/application/json/schema/properties/checkpointing/properties/source"
       ]
     },
     "RecordStatus": {
