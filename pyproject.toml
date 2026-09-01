@@ -54,7 +54,7 @@ dev = [
     # Pinned so CI matches the gate the SDK was validated against. Ruff stable
     # adds lint rules and pyright tightens inference across releases; an
     # unpinned floor would let a tool bump turn CI red without a code change.
-    "ruff==0.16.2",
+    "ruff==0.16.4",
     "pyright==1.1.411",
 ]
 
@@ -80,7 +80,7 @@ target-version = "py311"
 [tool.ruff.lint]
 # The rule set is written out rather than inherited, because ruff's default is
 # not stable across releases: 0.16 widened it from 58 rules to several hundred,
-# so `ruff==0.15.21` and `ruff==0.16.2` disagreed about what "lint" means on
+# so `ruff==0.15.21` and `ruff==0.16.4` disagreed about what "lint" means on
 # identical source with identical config. A dependency bump inside a caret range
 # should not be able to redefine the gate. Everything below was measured against
 # this codebase before being turned on.
