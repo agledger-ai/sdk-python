@@ -4,6 +4,50 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] - 2026-09-08
+
+Reconciled against the API build that follows 1.6.0, which replaced agent reputation with agent drift.
+
+### Removed (routes and a scope the Server no longer accepts)
+
+- **`client.reputation` is gone; `client.drift` replaces it.** The reputation routes (`GET /v1/agents/{id}/reputation` and its per-type sibling) no longer exist, so every method on the old resource 404s. Drift answers a different question: what the agent did in the current window, the same counts for the window before it, and the difference. There is no score, no weighting and no threshold. An acceptance rate that moves from 0.8 to 1.0 is as much of a change as one that moves to 0.6, and both are for whoever watches the agent to look into. The `ReputationScore` model is removed with it.
+
+- **`Scopes.REPUTATION_READ` is now `Scopes.DRIFT_READ`** (`"drift:read"`). The old string is not a scope the Server knows, so a key minted with it is refused. Both profiles that carried it carry the new one.
+
+- **`Scopes.DISPUTES_MANAGE` is removed.** `"disputes:manage"` has never been an API scope at any tag: the Server refuses a key create that names it. It was in the SDK and on the `admin-standard` profile, so a caller building a custom scope list from these constants got a key that would not mint.
+
+- **`federation.contribute_reputation()` and `federation.get_agent_reputation()` are removed.** `POST /federation/v1/reputation/contribute` and `GET /federation/v1/agents/{id}/reputation` are gone from the federation protocol.
+
+- **`admin.create_agent()` no longer takes `name`, and `display_name` is now required.** The route body is `additionalProperties: false`, so sending `name` is a 400 rather than an ignored field. An agent has one name, unique within its org, and that is `display_name`.
+
+### Added
+
+- **`client.drift`, sync and async.** `get_agent(agent_id, window=..., type=...)` returns `AgentDrift`: the two windows, an `overall` series, and one series per type the agent touched in either window. `list_fleet(window=..., limit=..., cursor=...)` returns `FleetDriftPage`, one roll-up row per agent in the caller's org, with the window the page was computed over sitting beside the rows rather than on each one. `list_all_fleet(...)` walks that listing and resends `window` with every cursor, which the cursor requires: the query parameters are bound into the token, so every page of a walk is computed over the same window and the rows stay comparable. `get_agent_history(agent_id, ...)` returns `Page[AgentHistoryEntry]`, the per-record feed behind the counts, filtered by `type`, `outcome`, `from_` and `to`. `from_` carries the trailing underscore only in Python, where `from` is a keyword; it goes out as `from`.
+
+- **New models exported from the package root:** `AgentDrift`, `AgentHistoryEntry`, `DriftWindow`, `DriftBucket`, `DriftChange`, `DriftSeries`, `DriftTypeSeries`, `FleetDriftRow` and `FleetDriftPage`. `acceptance_rate` is null when the window holds no verdict and `median_completion_ms` is null when it holds no completion, and `change` is null wherever either side is, so a quiet week parses rather than raising. `change` carries no `accepted` or `rejected`: the pair is summarized by `acceptance_rate`.
+
+- **`admin.reactivate_org()` and `admin.reactivate_agent()`**, both taking an optional `reason`. Idempotent: an already-active account comes back with `wasDeactivated: false` rather than an error, because an operator running it twice during an incident wants the account on either way. Reactivation does not restore the API keys deactivation revoked; mint replacements. Platform key only, and a provisioning-managed row refuses with 409.
+
+- **`admin.list_api_keys()` and `admin.list_all_api_keys()` take `expires_before` and `never_expires`.** `expires_before` is the rotation queue, and it does not match a key with no expiry, so the never-expires inventory is a separate question and `never_expires` is how to ask it. An install adopting a key lifetime cap needs both: the cap bounds what is minted from then on, not what already exists.
+
+- **`admin.create_agent()` takes `oidc_iss` and `oidc_sub`.** Set together, they bind the agent to an external identity, and `POST /v1/auth/oidc/cert` then resolves this agent from a token carrying that issuer and subject, so the IdP needs to know nothing about AGLedger. `oidc_sub` is the subject claim verbatim as the IdP issues it, unique per org and issuer.
+
+- **`agents.update()` takes `agent_card_url`, `oidc_iss` and `oidc_sub`, and `AgentProfile` reads back `oidc_iss` and `oidc_sub`.** Null is a legal value for these three and for `owner_ref` and `org_unit`: passing `None` explicitly sends JSON null and clears the field, while leaving the keyword off omits the key and leaves the stored value alone. They are different requests and this release keeps them that way. Set `oidc_iss` and `oidc_sub` together; a half-set pair is refused.
+
+- **The trusted-issuer create and update take `auto_provision_agents`, `auto_provision_scope_profile` and `auto_provision_max_agents`.** With auto-provisioning on, the first token exchange from a subject the Server has never seen creates the agent under the issuer's org instead of refusing the exchange. The scope profile is also the ceiling for every cert minted from that issuer: the mapped `scopes` claim intersects it and can never widen past it. A `None` in this builder means "leave alone" and is dropped, as it always has; to send the literal null that clears the profile, use `client.request()`.
+
+- **`AgentClass` and `AutoProvisionScopeProfile`** are exported named types, both pinned by the enum-member parity guard rather than written inline where nothing checks them.
+
+- **`audit_vault_empty`** is a `chain_integrity_reason` member. The record exists but its chain holds no entries, which is every entry gone rather than a record that was never chained, since each creation path appends an entry in the same transaction as the record. It is reported instead of passing as a trivially valid chain.
+
+### Fixed
+
+- **The scope profiles now match what the Server grants.** They are a hand-mirror of the Server's table, nothing regenerates them, and every one of the seven had drifted. The agent profiles gained `audit:read` and `compliance:read`, which they need to read the audit trail of their own records; `agent-full` also gained `drift:read` for self-introspection. `admin-standard` no longer lists `admin:backfill` or `schemas:admin`: backfill is a platform-tier surface and `schemas:admin` is the schema-admin role marker that lives on `admin-schema`. `admin-iac` carries `schemas:write` rather than `schemas:admin`, which is what the whole own-org schema surface actually rides on. A test now pins each profile's exact scope set, since a check that a profile still exists passes on a profile granting the wrong thing.
+
+### Changed
+
+- **The `reputationScoring` conformance capability is `agentDrift`.** It reports whether the drift routes are wired on an install.
+
 ## [1.10.0] - 2026-08-30
 
 ### Fixed (three event types that could never have been subscribed to)

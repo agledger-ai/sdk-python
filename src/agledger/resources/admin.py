@@ -118,6 +118,8 @@ def _api_key_filters(
     role: str | None,
     is_active: bool | None,
     created_before: str | None,
+    expires_before: str | None,
+    never_expires: bool | None,
     limit: int | None,
     offset: int | None,
     cursor: str | None,
@@ -135,6 +137,8 @@ def _api_key_filters(
     if role is not None: params["role"] = role
     if is_active is not None: params["isActive"] = is_active
     if created_before is not None: params["createdBefore"] = created_before
+    if expires_before is not None: params["expiresBefore"] = expires_before
+    if never_expires is not None: params["neverExpires"] = never_expires
     if limit is not None: params["limit"] = limit
     if offset is not None: params["offset"] = offset
     if cursor is not None: params["cursor"] = cursor
@@ -142,7 +146,20 @@ def _api_key_filters(
 
 
 def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
-    """Map snake_case trusted-issuer kwargs to the camelCase wire body."""
+    """Map snake_case trusted-issuer kwargs to the camelCase wire body.
+
+    A ``None`` value means "leave this field alone" and is dropped, so an
+    unpassed keyword and an explicitly passed ``None`` are the same request.
+    Two fields (``allowedAlgs`` and ``autoProvisionScopeProfile``) also accept a
+    literal null on the wire, which clears them, and this builder cannot express
+    that. Send the null through the raw request escape hatch::
+
+        client.request(
+            "PATCH",
+            f"/v1/admin/trusted-issuers/{issuer_id}",
+            json={"autoProvisionScopeProfile": None},
+        )
+    """
     mapping = {
         "org_id": "orgId",
         "issuer_url": "issuerUrl",
@@ -153,6 +170,9 @@ def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
         "claim_mapping": "claimMapping",
         "allowed_algs": "allowedAlgs",
         "max_credential_ttl_seconds": "maxCredentialTtlSeconds",
+        "auto_provision_agents": "autoProvisionAgents",
+        "auto_provision_scope_profile": "autoProvisionScopeProfile",
+        "auto_provision_max_agents": "autoProvisionMaxAgents",
         "label": "label",
         "enabled": "enabled",
     }
@@ -182,10 +202,21 @@ class AdminTrustedIssuersResource:
         claim_mapping: dict[str, str] | None = None,
         allowed_algs: list[str] | None = None,
         max_credential_ttl_seconds: int | None = None,
+        auto_provision_agents: bool | None = None,
+        auto_provision_scope_profile: str | None = None,
+        auto_provision_max_agents: int | None = None,
         label: str | None = None,
         enabled: bool | None = None,
     ) -> dict[str, Any]:
-        """Register a trusted OIDC issuer."""
+        """Register a trusted OIDC issuer.
+
+        ``auto_provision_agents`` lets the first token exchange from a subject
+        this Server has never seen create the agent under this row's org, and
+        needs ``org_id`` and ``auto_provision_scope_profile`` set with it. The
+        profile is also the scope ceiling for every cert minted from the issuer,
+        so clearing the flag stops new agents without lifting the ceiling off
+        the ones already created. ``auto_provision_max_agents`` caps how many
+        this issuer may create (default 1000)."""
         body = _trusted_issuer_body(
             {
                 "issuer_url": issuer_url,
@@ -197,6 +228,9 @@ class AdminTrustedIssuersResource:
                 "claim_mapping": claim_mapping,
                 "allowed_algs": allowed_algs,
                 "max_credential_ttl_seconds": max_credential_ttl_seconds,
+                "auto_provision_agents": auto_provision_agents,
+                "auto_provision_scope_profile": auto_provision_scope_profile,
+                "auto_provision_max_agents": auto_provision_max_agents,
                 "label": label,
                 "enabled": enabled,
             }
@@ -294,15 +328,27 @@ class AdminResource:
         self,
         *,
         org_id: str,
-        name: str | None = None,
-        display_name: str | None = None,
+        display_name: str,
         agent_card_url: str | None = None,
+        oidc_iss: str | None = None,
+        oidc_sub: str | None = None,
     ) -> dict[str, Any]:
-        """Create a new agent."""
-        body: dict[str, Any] = {"orgId": org_id}
-        if name is not None: body["name"] = name
-        if display_name is not None: body["displayName"] = display_name
+        """Create a new agent.
+
+        ``display_name`` is the agent's name and is unique within the org; the
+        route is ``additionalProperties: false`` and no longer accepts a
+        separate ``name``, so passing one is a 400 rather than an ignored field.
+
+        Set ``oidc_iss`` and ``oidc_sub`` together to bind the agent to an
+        external identity: with both set, ``POST /v1/auth/oidc/cert`` resolves
+        this agent from a token carrying that issuer and subject, so the IdP
+        needs to know nothing about AGLedger. ``oidc_sub`` is the subject claim
+        verbatim as the IdP issues it, and is unique per (org, issuer).
+        """
+        body: dict[str, Any] = {"orgId": org_id, "displayName": display_name}
         if agent_card_url is not None: body["agentCardUrl"] = agent_card_url
+        if oidc_iss is not None: body["oidcIss"] = oidc_iss
+        if oidc_sub is not None: body["oidcSub"] = oidc_sub
         return self._http.post("/v1/admin/agents", json=body)
 
     def set_capabilities(self, agent_id: str, *, contract_types: list[str]) -> dict[str, Any]:
@@ -345,6 +391,42 @@ class AdminResource:
             body["reason"] = reason
         return self._http.post(f"/v1/admin/agents/{agent_id}/deactivate", json=body)
 
+    def reactivate_org(
+        self,
+        org_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Reactivate a deactivated org.
+
+        Idempotent: an already-active org comes back with
+        ``wasDeactivated: false`` rather than an error, so an operator running
+        it twice during an incident gets the account on either way.
+        Reactivation does NOT restore the API keys deactivation revoked; mint
+        replacements. Platform key only, and a provisioning-managed org refuses
+        with 409: remove it from the YAML and reload instead."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return self._http.post(f"/v1/admin/orgs/{org_id}/reactivate", json=body)
+
+    def reactivate_agent(
+        self,
+        agent_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Reactivate a deactivated agent.
+
+        Idempotent: an already-active agent comes back with
+        ``wasDeactivated: false`` rather than an error. Reactivation does NOT
+        restore the API keys deactivation revoked; mint replacements. Platform
+        key only, and a provisioning-managed agent refuses with 409."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return self._http.post(f"/v1/admin/agents/{agent_id}/reactivate", json=body)
+
     # --- API keys ---
 
     def list_api_keys(
@@ -356,6 +438,8 @@ class AdminResource:
         role: str | None = None,
         is_active: bool | None = None,
         created_before: str | None = None,
+        expires_before: str | None = None,
+        never_expires: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -368,7 +452,8 @@ class AdminResource:
         on a large install. Use :meth:`list_all_api_keys`.
         """
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+            owner_id, org_id, owner_type, role, is_active, created_before,
+            expires_before, never_expires, limit, offset, cursor
         )
         return self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -381,6 +466,8 @@ class AdminResource:
         role: str | None = None,
         is_active: bool | None = None,
         created_before: str | None = None,
+        expires_before: str | None = None,
+        never_expires: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -399,7 +486,8 @@ class AdminResource:
         exists to replace. Pass ``max_pages`` to bound it yourself.
         """
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+            owner_id, org_id, owner_type, role, is_active, created_before,
+            expires_before, never_expires, limit, offset, cursor
         )
         yield from self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages)
 
@@ -653,10 +741,21 @@ class AsyncAdminTrustedIssuersResource:
         claim_mapping: dict[str, str] | None = None,
         allowed_algs: list[str] | None = None,
         max_credential_ttl_seconds: int | None = None,
+        auto_provision_agents: bool | None = None,
+        auto_provision_scope_profile: str | None = None,
+        auto_provision_max_agents: int | None = None,
         label: str | None = None,
         enabled: bool | None = None,
     ) -> dict[str, Any]:
-        """Register a trusted OIDC issuer."""
+        """Register a trusted OIDC issuer.
+
+        ``auto_provision_agents`` lets the first token exchange from a subject
+        this Server has never seen create the agent under this row's org, and
+        needs ``org_id`` and ``auto_provision_scope_profile`` set with it. The
+        profile is also the scope ceiling for every cert minted from the issuer,
+        so clearing the flag stops new agents without lifting the ceiling off
+        the ones already created. ``auto_provision_max_agents`` caps how many
+        this issuer may create (default 1000)."""
         body = _trusted_issuer_body(
             {
                 "issuer_url": issuer_url,
@@ -668,6 +767,9 @@ class AsyncAdminTrustedIssuersResource:
                 "claim_mapping": claim_mapping,
                 "allowed_algs": allowed_algs,
                 "max_credential_ttl_seconds": max_credential_ttl_seconds,
+                "auto_provision_agents": auto_provision_agents,
+                "auto_provision_scope_profile": auto_provision_scope_profile,
+                "auto_provision_max_agents": auto_provision_max_agents,
                 "label": label,
                 "enabled": enabled,
             }
@@ -749,14 +851,15 @@ class AsyncAdminResource:
         self,
         *,
         org_id: str,
-        name: str | None = None,
-        display_name: str | None = None,
+        display_name: str,
         agent_card_url: str | None = None,
+        oidc_iss: str | None = None,
+        oidc_sub: str | None = None,
     ) -> dict[str, Any]:
-        body: dict[str, Any] = {"orgId": org_id}
-        if name is not None: body["name"] = name
-        if display_name is not None: body["displayName"] = display_name
+        body: dict[str, Any] = {"orgId": org_id, "displayName": display_name}
         if agent_card_url is not None: body["agentCardUrl"] = agent_card_url
+        if oidc_iss is not None: body["oidcIss"] = oidc_iss
+        if oidc_sub is not None: body["oidcSub"] = oidc_sub
         return await self._http.post("/v1/admin/agents", json=body)
 
     async def set_capabilities(self, agent_id: str, *, contract_types: list[str]) -> dict[str, Any]:
@@ -790,6 +893,42 @@ class AsyncAdminResource:
             body["reason"] = reason
         return await self._http.post(f"/v1/admin/agents/{agent_id}/deactivate", json=body)
 
+    async def reactivate_org(
+        self,
+        org_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Reactivate a deactivated org.
+
+        Idempotent: an already-active org comes back with
+        ``wasDeactivated: false`` rather than an error, so an operator running
+        it twice during an incident gets the account on either way.
+        Reactivation does NOT restore the API keys deactivation revoked; mint
+        replacements. Platform key only, and a provisioning-managed org refuses
+        with 409: remove it from the YAML and reload instead."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return await self._http.post(f"/v1/admin/orgs/{org_id}/reactivate", json=body)
+
+    async def reactivate_agent(
+        self,
+        agent_id: str,
+        *,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Reactivate a deactivated agent.
+
+        Idempotent: an already-active agent comes back with
+        ``wasDeactivated: false`` rather than an error. Reactivation does NOT
+        restore the API keys deactivation revoked; mint replacements. Platform
+        key only, and a provisioning-managed agent refuses with 409."""
+        body: dict[str, Any] = {}
+        if reason is not None:
+            body["reason"] = reason
+        return await self._http.post(f"/v1/admin/agents/{agent_id}/reactivate", json=body)
+
     async def list_api_keys(
         self,
         *,
@@ -799,6 +938,8 @@ class AsyncAdminResource:
         role: str | None = None,
         is_active: bool | None = None,
         created_before: str | None = None,
+        expires_before: str | None = None,
+        never_expires: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -806,7 +947,8 @@ class AsyncAdminResource:
         """List API keys: one owner's when ``owner_id`` is set, otherwise every
         key on the install. See the sync counterpart for the truncation note."""
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+            owner_id, org_id, owner_type, role, is_active, created_before,
+            expires_before, never_expires, limit, offset, cursor
         )
         return await self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -819,6 +961,8 @@ class AsyncAdminResource:
         role: str | None = None,
         is_active: bool | None = None,
         created_before: str | None = None,
+        expires_before: str | None = None,
+        never_expires: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -828,7 +972,8 @@ class AsyncAdminResource:
         cursor. See the sync counterpart for why the single-owner cursor needs
         them, and why the runaway guard raises."""
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before, limit, offset, cursor
+            owner_id, org_id, owner_type, role, is_active, created_before,
+            expires_before, never_expires, limit, offset, cursor
         )
         async for item in self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages):
             yield item

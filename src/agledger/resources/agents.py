@@ -7,7 +7,24 @@ from typing import Any
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import AgentDirectoryEntry, AgentProfile, Page
 
-_UPDATE_FIELDS = {"agent_class": "agentClass", "owner_ref": "ownerRef", "org_unit": "orgUnit", "description": "description"}
+# The fields PATCH /v1/agents/{id} accepts, snake_case to the camelCase wire
+# name. The route is additionalProperties: false, so anything not on this map is
+# a 400 rather than an ignored field.
+#
+# Membership is tested with `in params`, not truthiness, because null is a legal
+# value for agentCardUrl, ownerRef, orgUnit, oidcIss and oidcSub: it clears the
+# field. An explicitly passed None therefore sends JSON null; leaving the
+# keyword off omits the key and leaves the stored value alone. The two are
+# different requests and must stay that way.
+_UPDATE_FIELDS = {
+    "agent_class": "agentClass",
+    "owner_ref": "ownerRef",
+    "org_unit": "orgUnit",
+    "description": "description",
+    "agent_card_url": "agentCardUrl",
+    "oidc_iss": "oidcIss",
+    "oidc_sub": "oidcSub",
+}
 
 
 class AgentsResource:
@@ -37,7 +54,14 @@ class AgentsResource:
         return AgentProfile.model_validate(self._http.get(f"/v1/agents/{agent_id}"))
 
     def update(self, agent_id: str, **params: Any) -> dict[str, Any]:
-        """Update agent identity fields (agentClass, ownerRef, orgUnit, description)."""
+        """Update agent identity fields.
+
+        Takes ``agent_class``, ``owner_ref``, ``org_unit``, ``description``,
+        ``agent_card_url``, ``oidc_iss`` and ``oidc_sub``. Pass ``None``
+        explicitly to clear a field that accepts null (everything but
+        ``agent_class``); leave the keyword off to leave the stored value alone.
+        Set ``oidc_iss`` and ``oidc_sub`` together: a subject is unique only
+        within its issuer, and a half-set pair is refused."""
         body = {api_key: params[key] for key, api_key in _UPDATE_FIELDS.items() if key in params}
         return self._http.patch(f"/v1/agents/{agent_id}", json=body)
 
@@ -91,7 +115,14 @@ class AsyncAgentsResource:
         return AgentProfile.model_validate(await self._http.get(f"/v1/agents/{agent_id}"))
 
     async def update(self, agent_id: str, **params: Any) -> dict[str, Any]:
-        """Update agent identity fields (agentClass, ownerRef, orgUnit, description)."""
+        """Update agent identity fields.
+
+        Takes ``agent_class``, ``owner_ref``, ``org_unit``, ``description``,
+        ``agent_card_url``, ``oidc_iss`` and ``oidc_sub``. Pass ``None``
+        explicitly to clear a field that accepts null (everything but
+        ``agent_class``); leave the keyword off to leave the stored value alone.
+        Set ``oidc_iss`` and ``oidc_sub`` together: a subject is unique only
+        within its issuer, and a half-set pair is refused."""
         body = {api_key: params[key] for key, api_key in _UPDATE_FIELDS.items() if key in params}
         return await self._http.patch(f"/v1/agents/{agent_id}", json=body)
 

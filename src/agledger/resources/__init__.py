@@ -11,6 +11,7 @@ from agledger.resources.completions import AsyncCompletionsResource, Completions
 from agledger.resources.compliance import AsyncComplianceResource, ComplianceResource
 from agledger.resources.discovery import AsyncDiscoveryResource, DiscoveryResource
 from agledger.resources.disputes import AsyncDisputesResource, DisputesResource
+from agledger.resources.drift import AsyncDriftResource, DriftResource
 from agledger.resources.events import AsyncEventsResource, EventsResource
 from agledger.resources.federation import AsyncFederationResource, FederationResource
 from agledger.resources.federation_admin import (
@@ -22,7 +23,6 @@ from agledger.resources.health import AsyncHealthResource, HealthResource
 from agledger.resources.predicates import AsyncPredicatesResource, PredicatesResource
 from agledger.resources.records import AsyncRecordsResource, RecordsResource
 from agledger.resources.references import AsyncReferencesResource, ReferencesResource
-from agledger.resources.reputation import AsyncReputationResource, ReputationResource
 from agledger.resources.schemas import AsyncSchemasResource, SchemasResource
 from agledger.resources.scitt import AsyncScittResource, ScittResource
 from agledger.resources.verification_keys import (
@@ -45,6 +45,7 @@ __all__ = [
     "AsyncComplianceResource",
     "AsyncDiscoveryResource",
     "AsyncDisputesResource",
+    "AsyncDriftResource",
     "AsyncEventsResource",
     "AsyncFederationAdminResource",
     "AsyncFederationResource",
@@ -53,7 +54,6 @@ __all__ = [
     "AsyncPredicatesResource",
     "AsyncRecordsResource",
     "AsyncReferencesResource",
-    "AsyncReputationResource",
     "AsyncSchemasResource",
     "AsyncScittResource",
     "AsyncVerificationKeysResource",
@@ -65,6 +65,7 @@ __all__ = [
     "ComplianceResource",
     "DiscoveryResource",
     "DisputesResource",
+    "DriftResource",
     "EventsResource",
     "FederationAdminResource",
     "FederationResource",
@@ -73,7 +74,6 @@ __all__ = [
     "PredicatesResource",
     "RecordsResource",
     "ReferencesResource",
-    "ReputationResource",
     "SchemasResource",
     "ScittResource",
     "VerificationKeysResource",

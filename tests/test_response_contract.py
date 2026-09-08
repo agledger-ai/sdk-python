@@ -71,24 +71,61 @@ def test_events_list_parses_type_and_data():
 
 
 @respx.mock
-def test_reputation_get_by_type_tolerates_null_scores():
-    # A freshly-provisioned agent has null scores; confidenceLevel/formulaVersion
-    # are numbers, not strings. The old non-nullable str model crashed here.
-    respx.get(f"{BASE}/v1/agents/agt-1/reputation/notarize-generic-v1").mock(
+def test_drift_get_agent_tolerates_null_rates():
+    # A window that holds no verdict and no completion nulls acceptanceRate and
+    # medianCompletionMs on the bucket AND on the change, which is null wherever
+    # either side is. A non-nullable model would crash on a quiet week.
+    def bucket(records, completions, verdicts, accepted, rejected, rate, median):
+        return {
+            "from": "2026-09-01T00:00:00Z", "to": "2026-09-08T00:00:00Z",
+            "records": records, "completions": completions, "verdicts": verdicts,
+            "accepted": accepted, "rejected": rejected, "overturned": 0,
+            "acceptanceRate": rate, "medianCompletionMs": median,
+        }
+
+    respx.get(f"{BASE}/v1/agents/agt-1/drift").mock(
         return_value=httpx.Response(200, json={
-            "agentId": "agt-1", "type": "notarize-generic-v1",
-            "reliabilityScore": None, "accuracyScore": None,
-            "efficiencyScore": None, "compositeScore": None, "confidenceLevel": None,
-            "lifetimeRecords": 0, "lifetimeVerdicts": 0, "lifetimeAccepted": 0,
-            "lifetimeCompletions": 0, "reversals": 0,
-            "lastUpdatedAt": "2026-04-27T00:00:00Z", "formulaVersion": 3,
+            "agentId": "agt-1",
+            "window": {
+                "days": 7,
+                "currentFrom": "2026-09-01T00:00:00Z", "currentTo": "2026-09-08T00:00:00Z",
+                "baselineFrom": "2026-08-25T00:00:00Z", "baselineTo": "2026-09-01T00:00:00Z",
+            },
+            "overall": {
+                "current": bucket(4, 0, 0, 0, 0, None, None),
+                "baseline": bucket(2, 2, 2, 2, 0, 1.0, 4200),
+                "change": {
+                    "records": 2, "completions": -2, "verdicts": -2, "overturned": 0,
+                    "acceptanceRate": None, "medianCompletionMs": None,
+                },
+            },
+            "byType": [{
+                "type": "notarize-generic-v1",
+                "current": bucket(4, 0, 0, 0, 0, None, None),
+                "baseline": bucket(2, 2, 2, 2, 0, 1.0, 4200),
+                "change": {
+                    "records": 2, "completions": -2, "verdicts": -2, "overturned": 0,
+                    "acceptanceRate": None, "medianCompletionMs": None,
+                },
+            }],
         })
     )
-    score = _client().reputation.get_by_type("agt-1", "notarize-generic-v1")
-    assert score.reliability_score is None
-    assert score.confidence_level is None
-    assert score.formula_version == 3
-    assert score.lifetime_records == 0
+    drift = _client().drift.get_agent("agt-1")
+    assert drift.agent_id == "agt-1"
+    assert drift.window.days == 7
+    assert drift.window.baseline_from == "2026-08-25T00:00:00Z"
+    # `from` is a keyword, so the bucket edge reads back as from_.
+    assert drift.overall.current.from_ == "2026-09-01T00:00:00Z"
+    assert drift.overall.current.acceptance_rate is None
+    assert drift.overall.current.median_completion_ms is None
+    assert drift.overall.baseline.acceptance_rate == 1.0
+    # The change fields are reachable, including the two nulled ones.
+    assert drift.overall.change.records == 2
+    assert drift.overall.change.completions == -2
+    assert drift.overall.change.acceptance_rate is None
+    assert drift.overall.change.median_completion_ms is None
+    assert drift.by_type[0].type == "notarize-generic-v1"
+    assert drift.by_type[0].change.verdicts == -2
 
 
 @respx.mock

@@ -138,14 +138,6 @@ class FederationResource:
         """Submit a dispute-protocol message to a federated counterparty."""
         return self._http.post("/federation/v1/disputes", json=params)
 
-    def contribute_reputation(self, **params: Any) -> dict[str, Any]:
-        """Contribute reputation data for an agent to the federation."""
-        return self._http.post("/federation/v1/reputation/contribute", json=params)
-
-    def get_agent_reputation(self, agent_id: str) -> dict[str, Any]:
-        """Get an agent's federated reputation score."""
-        return self._http.get(f"/federation/v1/agents/{agent_id}/reputation")
-
 
 class AsyncFederationResource:
     """Async federation peer-facing operations."""
@@ -215,9 +207,3 @@ class AsyncFederationResource:
 
     async def submit_dispute_protocol(self, **params: Any) -> dict[str, Any]:
         return await self._http.post("/federation/v1/disputes", json=params)
-
-    async def contribute_reputation(self, **params: Any) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/reputation/contribute", json=params)
-
-    async def get_agent_reputation(self, agent_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/federation/v1/agents/{agent_id}/reputation")

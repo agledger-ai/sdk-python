@@ -31,6 +31,7 @@ from agledger.resources.completions import AsyncCompletionsResource, Completions
 from agledger.resources.compliance import AsyncComplianceResource, ComplianceResource
 from agledger.resources.discovery import AsyncDiscoveryResource, DiscoveryResource
 from agledger.resources.disputes import AsyncDisputesResource, DisputesResource
+from agledger.resources.drift import AsyncDriftResource, DriftResource
 from agledger.resources.events import AsyncEventsResource, EventsResource
 from agledger.resources.federation import AsyncFederationResource, FederationResource
 from agledger.resources.federation_admin import (
@@ -42,7 +43,6 @@ from agledger.resources.health import AsyncHealthResource, HealthResource
 from agledger.resources.predicates import AsyncPredicatesResource, PredicatesResource
 from agledger.resources.records import AsyncRecordsResource, RecordsResource
 from agledger.resources.references import AsyncReferencesResource, ReferencesResource
-from agledger.resources.reputation import AsyncReputationResource, ReputationResource
 from agledger.resources.schemas import AsyncSchemasResource, SchemasResource
 from agledger.resources.scitt import AsyncScittResource, ScittResource
 from agledger.resources.verification_keys import (
@@ -92,7 +92,7 @@ class AgledgerClient:
         self.gate: GateResource = GateResource(self._http)
         self.disputes: DisputesResource = DisputesResource(self._http)
         self.webhooks: WebhooksResource = WebhooksResource(self._http)
-        self.reputation: ReputationResource = ReputationResource(self._http)
+        self.drift: DriftResource = DriftResource(self._http)
         self.events: EventsResource = EventsResource(self._http)
         self.schemas: SchemasResource = SchemasResource(self._http)
         self.compliance: ComplianceResource = ComplianceResource(self._http)
@@ -189,7 +189,7 @@ class AsyncAgledgerClient:
         self.gate: AsyncGateResource = AsyncGateResource(self._http)
         self.disputes: AsyncDisputesResource = AsyncDisputesResource(self._http)
         self.webhooks: AsyncWebhooksResource = AsyncWebhooksResource(self._http)
-        self.reputation: AsyncReputationResource = AsyncReputationResource(self._http)
+        self.drift: AsyncDriftResource = AsyncDriftResource(self._http)
         self.events: AsyncEventsResource = AsyncEventsResource(self._http)
         self.schemas: AsyncSchemasResource = AsyncSchemasResource(self._http)
         self.compliance: AsyncComplianceResource = AsyncComplianceResource(self._http)
