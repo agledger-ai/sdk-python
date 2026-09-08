@@ -81,7 +81,7 @@ async with AsyncAgledgerClient(
 ## Resources
 
 `records`, `completions`, `gate`, `disputes`,
-`webhooks`, `reputation`, `events`, `schemas`, `compliance`, `health`, `admin`
+`webhooks`, `drift`, `events`, `schemas`, `compliance`, `health`, `admin`
 (with `admin.records` + `admin.vault` sub-resources), `a2a`, `agents`, `audit`
 (with `audit.org_reads_checkpoints` and `audit.vault_checkpoints`), `auth`,
 `capabilities`, `discovery`, `references`, `federation`, `federation_admin`,

@@ -361,7 +361,7 @@ def test_has_all_resources():
     resources = [
         "a2a", "admin", "agents", "audit", "auth", "capabilities", "compliance",
         "discovery", "disputes", "events", "federation", "federation_admin",
-        "health", "completions", "records", "references", "reputation",
+        "health", "completions", "records", "references", "drift",
         "schemas", "gate", "verification_keys", "webhooks",
     ]
     for r in resources:
@@ -400,15 +400,82 @@ def test_admin_create_org():
 
 @respx.mock
 def test_admin_create_agent():
-    response_json = {"id": "agt-1", "name": "My Agent", "orgId": "org-1"}
+    """``name`` is gone from the route body. It was a second identifier beside
+    ``displayName``, and the route is ``additionalProperties: false``, so a
+    client still sending it gets a 400 rather than an ignored field."""
+    response_json = {"id": "agt-1", "displayName": "My Agent", "orgId": "org-1"}
     respx.post("https://agledger.example.com/v1/admin/agents").mock(
         return_value=httpx.Response(200, json=response_json)
     )
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    result = client.admin.create_agent(name="My Agent", org_id="org-1")
+    result = client.admin.create_agent(org_id="org-1", display_name="My Agent")
     assert result["id"] == "agt-1"
     sent = json.loads(respx.calls[0].request.content)
-    assert sent["orgId"] == "org-1"
+    assert sent == {"orgId": "org-1", "displayName": "My Agent"}
+    assert "name" not in sent
+
+
+@respx.mock
+def test_admin_create_agent_binds_an_external_identity():
+    respx.post("https://agledger.example.com/v1/admin/agents").mock(
+        return_value=httpx.Response(200, json={"id": "agt-1"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.create_agent(
+        org_id="org-1",
+        display_name="K8s Runner",
+        agent_card_url="https://agents.example.com/card.json",
+        oidc_iss="https://token.actions.githubusercontent.com",
+        oidc_sub="system:serviceaccount:prod:runner",
+    )
+    sent = json.loads(respx.calls[0].request.content)
+    assert sent == {
+        "orgId": "org-1",
+        "displayName": "K8s Runner",
+        "agentCardUrl": "https://agents.example.com/card.json",
+        "oidcIss": "https://token.actions.githubusercontent.com",
+        "oidcSub": "system:serviceaccount:prod:runner",
+    }
+
+
+@respx.mock
+def test_admin_reactivate_agent():
+    respx.post("https://agledger.example.com/v1/admin/agents/agt-1/reactivate").mock(
+        return_value=httpx.Response(200, json={
+            "id": "agt-1", "accountType": "agent",
+            "wasDeactivated": True, "deactivatedAt": "2026-09-01T00:00:00Z",
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    result = client.admin.reactivate_agent("agt-1", reason="incident resolved")
+    assert result["wasDeactivated"] is True
+    assert json.loads(respx.calls[0].request.content) == {"reason": "incident resolved"}
+
+
+@respx.mock
+def test_admin_reactivate_org_omits_an_unset_reason():
+    respx.post("https://agledger.example.com/v1/admin/orgs/org-1/reactivate").mock(
+        return_value=httpx.Response(200, json={
+            "id": "org-1", "accountType": "org",
+            "wasDeactivated": False, "deactivatedAt": None,
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    result = client.admin.reactivate_org("org-1")
+    # Already active is a no-op, not an error: the operator wanted it on.
+    assert result["wasDeactivated"] is False
+    assert json.loads(respx.calls[0].request.content) == {}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_admin_reactivate_agent():
+    respx.post("https://agledger.example.com/v1/admin/agents/agt-1/reactivate").mock(
+        return_value=httpx.Response(200, json={"id": "agt-1", "wasDeactivated": True})
+    )
+    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
+        result = await client.admin.reactivate_agent("agt-1")
+    assert result["wasDeactivated"] is True
 
 
 @respx.mock
@@ -780,6 +847,42 @@ def test_admin_list_api_keys_sends_camel_case_filters():
 
 
 @respx.mock
+def test_admin_list_api_keys_sends_the_expiry_filters():
+    """The rotation queue (``expiresBefore``) and the never-expires inventory
+    are separate questions: a key with no expiry is NOT matched by
+    ``expires_before``, so an install adopting a lifetime cap has to ask for
+    both."""
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False, "total": 0})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.list_api_keys(expires_before="2026-10-01T00:00:00Z", never_expires=False)
+    assert dict(route.calls.last.request.url.params) == {
+        "expiresBefore": "2026-10-01T00:00:00Z",
+        "neverExpires": "false",
+    }
+
+
+@respx.mock
+def test_admin_list_all_api_keys_resends_the_expiry_filters():
+    route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
+        side_effect=[
+            httpx.Response(200, json={
+                "data": [{"id": "key-1"}], "hasMore": True, "nextCursor": "cur-1",
+            }),
+            httpx.Response(200, json={"data": [{"id": "key-2"}], "hasMore": False}),
+        ]
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    keys = list(client.admin.list_all_api_keys(never_expires=True))
+    assert [k["id"] for k in keys] == ["key-1", "key-2"]
+    assert dict(route.calls[1].request.url.params) == {
+        "neverExpires": "true",
+        "cursor": "cur-1",
+    }
+
+
+@respx.mock
 def test_admin_list_api_keys_omits_unset_filters():
     route = respx.get("https://agledger.example.com/v1/admin/api-keys").mock(
         return_value=httpx.Response(200, json={"data": [], "hasMore": False, "total": 0})
@@ -1044,3 +1147,95 @@ class TestBaseUrlRequired:
 
         assert agledger.ConfigurationError is ConfigurationError
         assert "ConfigurationError" in agledger.__all__
+
+
+# --- Agent identity + trusted issuers ---
+
+@respx.mock
+def test_agents_update_maps_the_oidc_fields():
+    route = respx.patch("https://agledger.example.com/v1/agents/agt-1").mock(
+        return_value=httpx.Response(200, json={"id": "agt-1"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.agents.update(
+        "agt-1",
+        agent_class="ephemeral",
+        agent_card_url="https://agents.example.com/card.json",
+        oidc_iss="https://token.actions.githubusercontent.com",
+        oidc_sub="system:serviceaccount:prod:runner",
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "agentClass": "ephemeral",
+        "agentCardUrl": "https://agents.example.com/card.json",
+        "oidcIss": "https://token.actions.githubusercontent.com",
+        "oidcSub": "system:serviceaccount:prod:runner",
+    }
+
+
+@respx.mock
+def test_agents_update_sends_an_explicit_none_as_json_null():
+    """Null clears these fields, so an explicitly passed None has to reach the
+    wire. Omitting the keyword omits the key and leaves the stored value alone:
+    the two are different requests."""
+    route = respx.patch("https://agledger.example.com/v1/agents/agt-1").mock(
+        return_value=httpx.Response(200, json={"id": "agt-1"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.agents.update("agt-1", oidc_iss=None, oidc_sub=None)
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {"oidcIss": None, "oidcSub": None}
+
+    client.agents.update("agt-1", description="just this")
+    assert json.loads(route.calls.last.request.content) == {"description": "just this"}
+
+
+@respx.mock
+def test_agents_get_reads_back_the_bound_identity():
+    respx.get("https://agledger.example.com/v1/agents/agt-1").mock(
+        return_value=httpx.Response(200, json={
+            "id": "agt-1", "orgId": "org-1", "displayName": "K8s Runner",
+            "agentClass": "ephemeral", "agentCardUrl": None,
+            "ownerRef": None, "orgUnit": None, "description": None,
+            "oidcIss": "https://token.actions.githubusercontent.com",
+            "oidcSub": "system:serviceaccount:prod:runner",
+            "references": [], "createdAt": "2026-09-01T00:00:00Z",
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    agent = client.agents.get("agt-1")
+    assert agent.oidc_iss == "https://token.actions.githubusercontent.com"
+    assert agent.oidc_sub == "system:serviceaccount:prod:runner"
+
+
+@respx.mock
+def test_admin_create_trusted_issuer_sends_the_auto_provision_fields():
+    route = respx.post("https://agledger.example.com/v1/admin/trusted-issuers").mock(
+        return_value=httpx.Response(201, json={"id": "ti-1"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.trusted_issuers.create(
+        issuer_url="https://token.actions.githubusercontent.com",
+        expected_audience="agledger",
+        org_id="org-1",
+        auto_provision_agents=True,
+        auto_provision_scope_profile="agent-performer-only",
+        auto_provision_max_agents=50,
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "issuerUrl": "https://token.actions.githubusercontent.com",
+        "expectedAudience": "agledger",
+        "orgId": "org-1",
+        "autoProvisionAgents": True,
+        "autoProvisionScopeProfile": "agent-performer-only",
+        "autoProvisionMaxAgents": 50,
+    }
+
+
+@respx.mock
+def test_admin_update_trusted_issuer_maps_the_auto_provision_fields():
+    route = respx.patch("https://agledger.example.com/v1/admin/trusted-issuers/ti-1").mock(
+        return_value=httpx.Response(200, json={"id": "ti-1"})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.admin.trusted_issuers.update("ti-1", auto_provision_agents=False)
+    assert json.loads(route.calls.last.request.content) == {"autoProvisionAgents": False}

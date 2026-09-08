@@ -1,7 +1,7 @@
 {
   "generatedFrom": "components.schemas",
   "apiVersion": "1.6.0",
-  "schemaCount": 14,
+  "schemaCount": 13,
   "schemas": {
     "Completion": [
       "agentId",
@@ -310,22 +310,6 @@
       "verdictChecks",
       "version"
     ],
-    "ReputationScore": [
-      "accuracyScore",
-      "agentId",
-      "compositeScore",
-      "confidenceLevel",
-      "efficiencyScore",
-      "formulaVersion",
-      "lastUpdatedAt",
-      "lifetimeAccepted",
-      "lifetimeCompletions",
-      "lifetimeRecords",
-      "lifetimeVerdicts",
-      "reliabilityScore",
-      "reversals",
-      "type"
-    ],
     "WebhookDelivery": [
       "attemptNumber",
       "createdAt",
@@ -359,8 +343,31 @@
       "url"
     ]
   },
-  "enumCount": 29,
+  "enumCount": 31,
   "enums": {
+    "AgentClass": {
+      "values": [
+        "ephemeral",
+        "personal",
+        "system",
+        "team"
+      ],
+      "specSites": [
+        "paths//v1/agents/{id}/patch/requestBody/content/application/json/schema/properties/agentClass",
+        "paths//v1/agents/{id}/get/responses/200/content/application/json/schema/properties/agentClass"
+      ]
+    },
+    "AutoProvisionScopeProfile": {
+      "values": [
+        "agent-full",
+        "agent-performer-only",
+        "agent-readonly"
+      ],
+      "specSites": [
+        "paths//v1/admin/trusted-issuers/post/requestBody/content/application/json/schema/properties/autoProvisionScopeProfile",
+        "paths//v1/admin/trusted-issuers/{id}/get/responses/200/content/application/json/schema/properties/autoProvisionScopeProfile"
+      ]
+    },
     "ComplianceRecordType": {
       "values": [
         "affected_persons",

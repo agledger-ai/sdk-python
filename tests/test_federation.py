@@ -133,27 +133,6 @@ class TestFederationResource:
             client.federation.submit_dispute_protocol(recordId="rec-1", reason="mismatch")
         assert route.called
 
-    @respx.mock
-    def test_contribute_reputation(self):
-        route = respx.post(f"{BASE}/federation/v1/reputation/contribute").mock(
-            return_value=httpx.Response(200, json={"contributed": True})
-        )
-        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            client.federation.contribute_reputation(
-                agentId="a-1", type="notarize-generic-v1", period="2026-Q2",
-                totalRecords=10, totalVerified=9, totalPassed=9,
-            )
-        assert route.called
-
-    @respx.mock
-    def test_get_agent_reputation(self):
-        respx.get(f"{BASE}/federation/v1/agents/a-1/reputation").mock(
-            return_value=httpx.Response(200, json={"agentId": "a-1", "score": 95})
-        )
-        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            result = client.federation.get_agent_reputation("a-1")
-        assert result["score"] == 95
-
 
 class TestFederationAdminResource:
     @respx.mock

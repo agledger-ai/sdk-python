@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-30T18:22:56.502Z",
+  "generatedAt": "2026-09-08T22:12:57.196Z",
   "sourceKind": "local",
   "apiVersion": "1.6.0",
   "count": 194,
@@ -303,29 +303,6 @@
     },
     {
       "method": "GET",
-      "path": "/federation/v1/agents/{agentId}/reputation",
-      "operationId": "federationGetAgentReputation",
-      "tag": "Federation",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [
-        "type"
-      ],
-      "pathParams": [
-        "agentId"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        414,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "GET",
       "path": "/health",
       "operationId": "healthCheck",
       "tag": "Health",
@@ -546,8 +523,10 @@
       "queryFields": [
         "createdBefore",
         "cursor",
+        "expiresBefore",
         "isActive",
         "limit",
+        "neverExpires",
         "offset",
         "orgId",
         "ownerId",
@@ -1006,9 +985,34 @@
     },
     {
       "method": "GET",
+      "path": "/v1/agents/{agentId}/drift",
+      "operationId": "getAgentDrift",
+      "tag": "Agent Drift",
+      "requiredFields": [],
+      "bodyFields": [],
+      "queryFields": [
+        "type",
+        "window"
+      ],
+      "pathParams": [
+        "agentId"
+      ],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        404,
+        414,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/v1/agents/{agentId}/history",
       "operationId": "getAgentHistory",
-      "tag": "Reputation",
+      "tag": "Agent Drift",
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
@@ -1022,51 +1026,6 @@
       ],
       "pathParams": [
         "agentId"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/v1/agents/{agentId}/reputation",
-      "operationId": "getAgentReputation",
-      "tag": "Reputation",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [
-        "agentId"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/v1/agents/{agentId}/reputation/{type}",
-      "operationId": "getAgentReputationByType",
-      "tag": "Reputation",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [
-        "agentId",
-        "type"
       ],
       "responseCodes": [
         200,
@@ -1118,6 +1077,29 @@
         401,
         403,
         404,
+        414,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/v1/agents/drift",
+      "operationId": "listFleetDrift",
+      "tag": "Agent Drift",
+      "requiredFields": [],
+      "bodyFields": [],
+      "queryFields": [
+        "cursor",
+        "limit",
+        "window"
+      ],
+      "pathParams": [],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
         414,
         429,
         500
@@ -2450,6 +2432,9 @@
       "bodyFields": [
         "allowedAlgs",
         "appliesTo",
+        "autoProvisionAgents",
+        "autoProvisionMaxAgents",
+        "autoProvisionScopeProfile",
         "claimMapping",
         "enabled",
         "expectedAudience",
@@ -2513,6 +2498,8 @@
         "agentCardUrl",
         "agentClass",
         "description",
+        "oidcIss",
+        "oidcSub",
         "orgUnit",
         "ownerRef"
       ],
@@ -2930,40 +2917,6 @@
     },
     {
       "method": "POST",
-      "path": "/federation/v1/reputation/contribute",
-      "operationId": "contributeReputation",
-      "tag": "Federation",
-      "requiredFields": [
-        "agentId",
-        "period",
-        "totalPassed",
-        "totalRecords",
-        "totalVerified",
-        "type"
-      ],
-      "bodyFields": [
-        "agentId",
-        "period",
-        "signature",
-        "totalPassed",
-        "totalRecords",
-        "totalVerified",
-        "type"
-      ],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        414,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
       "path": "/federation/v1/signals",
       "operationId": "federationSettlementSignal",
       "tag": "Federation",
@@ -3052,12 +3005,14 @@
       "operationId": "adminCreateAgent",
       "tag": "Admin",
       "requiredFields": [
+        "displayName",
         "orgId"
       ],
       "bodyFields": [
         "agentCardUrl",
         "displayName",
-        "name",
+        "oidcIss",
+        "oidcSub",
         "orgId"
       ],
       "queryFields": [],
@@ -3077,6 +3032,31 @@
       "method": "POST",
       "path": "/v1/admin/agents/{id}/deactivate",
       "operationId": "adminDeactivateAgent",
+      "tag": "Admin",
+      "requiredFields": [],
+      "bodyFields": [
+        "reason"
+      ],
+      "queryFields": [],
+      "pathParams": [
+        "id"
+      ],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        404,
+        409,
+        414,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/admin/agents/{id}/reactivate",
+      "operationId": "adminReactivateAgent",
       "tag": "Admin",
       "requiredFields": [],
       "bodyFields": [
@@ -3128,6 +3108,7 @@
         403,
         409,
         414,
+        422,
         429,
         500
       ]
@@ -3264,6 +3245,31 @@
     },
     {
       "method": "POST",
+      "path": "/v1/admin/orgs/{id}/reactivate",
+      "operationId": "adminReactivateOrg",
+      "tag": "Admin",
+      "requiredFields": [],
+      "bodyFields": [
+        "reason"
+      ],
+      "queryFields": [],
+      "pathParams": [
+        "id"
+      ],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        404,
+        409,
+        414,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/v1/admin/provisioning/reload",
       "operationId": "adminProvisioningReload",
       "tag": "Admin",
@@ -3357,6 +3363,9 @@
       "bodyFields": [
         "allowedAlgs",
         "appliesTo",
+        "autoProvisionAgents",
+        "autoProvisionMaxAgents",
+        "autoProvisionScopeProfile",
         "claimMapping",
         "enabled",
         "expectedAudience",
@@ -3607,6 +3616,7 @@
         201,
         400,
         401,
+        403,
         404,
         409,
         414,

@@ -940,6 +940,11 @@ class AuditExportMetadata(BaseModel):
     chain_integrity_reason: (
         Literal[
             "chain_broken_at",
+            # The record exists but its chain holds no entries. Every creation
+            # path appends an entry in the same transaction as the record, so
+            # an empty chain is every entry gone, not a record that was never
+            # chained. Reported rather than passed as trivially valid.
+            "audit_vault_empty",
             "audit_vault_row_missing_for_checkpoint",
             "checkpoint_hash_mismatch",
             "payload_drift",
@@ -1140,24 +1145,129 @@ class OrgReadsCheckpointing(BaseModel):
     when the API process fell back to its own defaults."""
 
 
-class ReputationScore(BaseModel):
+class DriftWindow(BaseModel):
+    """The two windows a drift reading was computed over.
+
+    The current window is the last ``days`` days; the baseline is the ``days``
+    before it, so the two are the same length and adjacent."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    days: int
+    current_from: str = Field(alias="currentFrom")
+    current_to: str = Field(alias="currentTo")
+    baseline_from: str = Field(alias="baselineFrom")
+    baseline_to: str = Field(alias="baselineTo")
+
+
+class DriftBucket(BaseModel):
+    """Counts of what an agent did inside one window."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    from_: str = Field(alias="from")
+    """Start of the window. Named ``from_`` because ``from`` is a keyword; the
+    wire name is ``from``."""
+    to: str
+    records: int
+    """Records created in the window with this agent as the acting party: named
+    as performer, or as principal when no performer is named."""
+    completions: int
+    """Completions this agent submitted in the window that passed structural
+    validation. A refused submission is not counted."""
+    verdicts: int
+    """Gate verdicts rendered in the window on this agent's records: the final
+    verdict on each completion, so a principal-gated record counts the
+    principal's verdict and not the engine's structural pass before it. A record
+    that is revised and resubmitted contributes one per completion. Zero for a
+    notarize-only agent, whose records carry no gate."""
+    accepted: int
+    rejected: int
+    overturned: int
+    """Disputes resolved OVERTURNED in the window on this agent's records."""
+    acceptance_rate: float | None = Field(None, alias="acceptanceRate")
+    """``accepted / verdicts``. Null when the window holds no verdict."""
+    median_completion_ms: int | None = Field(None, alias="medianCompletionMs")
+    """Median milliseconds from record activation to completion submitted, over
+    the completions in the window. A resubmission after a revision request
+    measures from the original activation, so it carries the whole cycle. Null
+    when the window holds no completion."""
+
+
+class DriftChange(BaseModel):
+    """``current`` minus ``baseline``, field by field.
+
+    The sign says the direction; nothing here says whether a direction is good.
+    Null where either side is null. There is no ``accepted`` or ``rejected``
+    here: the pair is summarized by ``acceptance_rate``."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    records: int
+    completions: int
+    verdicts: int
+    overturned: int
+    acceptance_rate: float | None = Field(None, alias="acceptanceRate")
+    median_completion_ms: int | None = Field(None, alias="medianCompletionMs")
+
+
+class DriftSeries(BaseModel):
+    """One series: the current window, the window before it, and the difference."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    current: DriftBucket
+    baseline: DriftBucket
+    change: DriftChange
+
+
+class DriftTypeSeries(DriftSeries):
+    """A :class:`DriftSeries` for one contract type."""
+
+    type: str
+
+
+class AgentDrift(BaseModel):
+    """Drift for one agent, overall and per type.
+
+    Everything is computed on read from records, completions, verdicts and
+    disputes, by the time each one happened. There is no score, no weighting and
+    no threshold: an acceptance rate that moves from 0.8 to 1.0 is as much of a
+    change as one that moves to 0.6, and both are for whoever watches the agent
+    to look into."""
+
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     agent_id: str = Field(alias="agentId")
+    window: DriftWindow
+    overall: DriftSeries
+    by_type: list[DriftTypeSeries] = Field(default_factory=list[DriftTypeSeries], alias="byType")
+    """One entry per type the agent touched in either window. Always the
+    complete set; this listing does not page."""
+
+
+class FleetDriftRow(DriftSeries):
+    """One agent's roll-up row in the org-wide fleet listing."""
+
+    agent_id: str = Field(alias="agentId")
+    display_name: str | None = Field(None, alias="displayName")
+
+
+class AgentHistoryEntry(BaseModel):
+    """One record in an agent's history: the per-record feed behind the drift
+    counts."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    record_id: str = Field(alias="recordId")
     type: str
-    reliability_score: float | None = Field(None, alias="reliabilityScore")
-    accuracy_score: float | None = Field(None, alias="accuracyScore")
-    efficiency_score: float | None = Field(None, alias="efficiencyScore")
-    composite_score: float | None = Field(None, alias="compositeScore")
-    confidence_level: float | None = Field(None, alias="confidenceLevel")
-    """Statistical confidence (0-1): a number, not a label. Null until the agent has history."""
-    lifetime_records: int = Field(0, alias="lifetimeRecords")
-    lifetime_verdicts: int = Field(0, alias="lifetimeVerdicts")
-    lifetime_accepted: int = Field(0, alias="lifetimeAccepted")
-    lifetime_completions: int = Field(0, alias="lifetimeCompletions")
-    reversals: int = Field(0, alias="reversals")
-    last_updated_at: str | None = Field(None, alias="lastUpdatedAt")
-    formula_version: int | None = Field(None, alias="formulaVersion")
+    status: str
+    """Record status at the time of the read."""
+    outcome: str
+    """Gate verdict: ``accept``, ``reject``, or ``PENDING`` when none has been
+    rendered."""
+    created_at: str = Field(alias="createdAt")
+    completed_at: str | None = Field(None, alias="completedAt")
 
 
 class Event(BaseModel):
@@ -1176,6 +1286,13 @@ class Event(BaseModel):
 
 
 ApiKeyRole = Literal["admin", "agent", "platform"]
+
+AutoProvisionScopeProfile = Literal["agent-full", "agent-readonly", "agent-performer-only"]
+"""The agent scope profiles a trusted issuer may grant to the agents it creates.
+
+Also the scope ceiling for every cert minted from that issuer: the IdP's mapped
+``scopes`` claim intersects this set and can never widen past it. Null on the
+wire means no ceiling."""
 
 
 class AccountProfile(BaseModel):
@@ -1227,6 +1344,16 @@ class OrgReadsCheckpointPage(Page[OrgReadsCheckpoint]):
     checkpointing: OrgReadsCheckpointing
 
 
+class FleetDriftPage(Page[FleetDriftRow]):
+    """``GET /v1/agents/drift``: a page of fleet rows plus the window every row
+    on it was computed over.
+
+    The window rides beside the rows rather than on each one, so a walk that
+    keeps ``window`` fixed produces comparable pages."""
+
+    window: DriftWindow
+
+
 class HealthResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -1266,7 +1393,7 @@ class ConformanceResponse(BaseModel):
     capabilities: dict[str, Any] | None = None
     """Feature capability flags: which features are wired on this install (e.g.
     ``recordLifecycle``, ``twoPhaseGate``, ``euAiActCompliance``,
-    ``oidcWorkloadIdentity``). Open-ended; read defensively.
+    ``agentDrift``, ``oidcWorkloadIdentity``). Open-ended; read defensively.
 
     Values are NOT all booleans. ``signingAlgorithms`` is a list of the COSE
     algorithms this build can sign with, e.g. ``["Ed25519"]``. This was typed
@@ -1305,6 +1432,11 @@ class AgentCard(BaseModel):
     skills: list[dict[str, Any]] | None = None
 
 
+AgentClass = Literal["personal", "system", "team", "ephemeral"]
+"""Agent classification: personal (human-owned), system (always-on), team
+(shared), ephemeral (per-task)."""
+
+
 class AgentProfile(BaseModel):
     """Agent identity returned by ``GET /v1/agents/{id}``.
 
@@ -1317,11 +1449,15 @@ class AgentProfile(BaseModel):
     id: str
     org_id: str | None = Field(None, alias="orgId")
     display_name: str | None = Field(None, alias="displayName")
-    agent_class: str | None = Field(None, alias="agentClass")
+    agent_class: AgentClass | str | None = Field(None, alias="agentClass")
     agent_card_url: str | None = Field(None, alias="agentCardUrl")
     owner_ref: str | None = Field(None, alias="ownerRef")
     org_unit: str | None = Field(None, alias="orgUnit")
     description: str | None = None
+    oidc_iss: str | None = Field(None, alias="oidcIss")
+    """Issuer of the external identity bound to this agent, or null when unbound."""
+    oidc_sub: str | None = Field(None, alias="oidcSub")
+    """Subject of the external identity bound to this agent, or null when unbound."""
     references: list[dict[str, Any]] | None = None
     created_at: str | None = Field(None, alias="createdAt")
 

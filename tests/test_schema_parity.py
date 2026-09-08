@@ -40,7 +40,6 @@ from agledger.types import (
     Page,
     RecordReadCompletion,
     RecordRow,
-    ReputationScore,
     Webhook,
 )
 
@@ -63,7 +62,6 @@ ALIASES: dict[str, type[BaseModel]] = {
     "DisputeResponse": Dispute,
     "DisputeEvidence": DisputeEvidence,
     "WebhookSubscription": Webhook,
-    "ReputationScore": ReputationScore,
     "EntityReference": EntityReference,
     "NextStepAction": NextStep,
     # v1.5.0 promoted these to named components; they were inline before, so the
@@ -90,8 +88,6 @@ EXCLUDED_COMPONENTS: set[str] = {
 # SDK-only fields that are intentional, not drift. Keyed by API component name.
 # Keep SHORT and justify every entry. Mirrors the TS ALLOWED_SDK_ONLY.
 ALLOWED_SDK_ONLY: dict[str, set[str]] = {
-    # recentHistory is hydrated from the separate reputation-history endpoint.
-    "ReputationScore": {"recentHistory"},
     # `data` is the SDK's own field: the API declares the envelope without it
     # and each route intersects its own `data` array on top.
     "PaginatedResponse": {"data"},
