@@ -4,11 +4,21 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.11.0] - 2026-09-08
+## [1.11.0] - 2026-09-10
 
-Reconciled against the API build that follows 1.6.0, which replaced agent reputation with agent drift.
+Reconciled against the API build that follows 1.6.0. That build replaced agent reputation with agent drift, removed the dispute tier ladder in favour of a single rendered outcome, dropped the negotiation counter-offer, and took commission out of the record entirely.
+
+Everything the Server removed here was removed without an alias, so this SDK removes it clean: there is no deprecation shim, and a call to one of these is a compile-time or attribute error rather than a runtime 404.
 
 ### Removed (routes and a scope the Server no longer accepts)
+
+- **`records.counter_propose()` and `records.accept_counter()` are gone.** `POST /v1/records/{id}/counter-propose` and `POST /v1/records/{id}/accept-counter` no longer exist. A performer answering a proposal accepts it or rejects it; there is no counter-offer round. `AcceptanceStatus` loses `COUNTER_PROPOSED` with them, and `record.proposal_counter_proposed` is no longer a `WebhookEventType`, so a subscription naming it is refused. It stays an `EventType` member, because the events already written under it are still queryable through `GET /v1/events`.
+
+- **`disputes.escalate()` is gone, and with it the tier ladder.** `POST /v1/records/{recordId}/dispute/escalate` no longer exists. `DisputeStatus` is now `EVIDENCE_WINDOW | PENDING_RESOLUTION | RESOLVED | WITHDRAWN`: `TIER_2_REVIEW`, `ESCALATED` and `TIER_3_ARBITRATION` were members and are values no filter accepts now, so code that branched on them, or passed one to the `status` filter on `disputes.list()` or the `dispute_status` filter on `records.list()` and `records.search()`, needs rewriting against the new four. A dispute that would have escalated sits at `PENDING_RESOLUTION` waiting on the principal. `dispute.escalated` is likewise no longer subscribable and remains queryable.
+
+- **`RecordStatus` loses `PENDING_ARBITRATION`**, along with the `PENDING_ARBITRATION` key in `RECORD_TRANSITIONS`, and `DISPUTED` no longer transitions to it: a disputed Record settles at `FULFILLED` or `FAILED`. The status is gone from the `status` filter on the record listings and from the admin import `terminalStatus` too. The one place the label survives is the `state` on `federation.submit_state_transition()`, which the Server keeps accepting for one release so a peer still on 1.6.0 can finish a rolling upgrade.
+
+- **`federation_admin.resync_peer()` is gone** (`POST /federation/v1/admin/peers/{peerHubId}/resync`), as is **`federation.sync_agent_directory()`** (`POST /federation/v1/peer/agent-sync`). V1 federation has no agent-directory protocol to push or to re-push, so both were operations on a thing that no longer exists.
 
 - **`client.reputation` is gone; `client.drift` replaces it.** The reputation routes (`GET /v1/agents/{id}/reputation` and its per-type sibling) no longer exist, so every method on the old resource 404s. Drift answers a different question: what the agent did in the current window, the same counts for the window before it, and the difference. There is no score, no weighting and no threshold. An acceptance rate that moves from 0.8 to 1.0 is as much of a change as one that moves to 0.6, and both are for whoever watches the agent to look into. The `ReputationScore` model is removed with it.
 
@@ -20,7 +30,41 @@ Reconciled against the API build that follows 1.6.0, which replaced agent reputa
 
 - **`admin.create_agent()` no longer takes `name`, and `display_name` is now required.** The route body is `additionalProperties: false`, so sending `name` is a 400 rather than an ignored field. An agent has one name, unique within its org, and that is `display_name`.
 
+### Removed (fields the Server no longer returns or accepts)
+
+- **Commission is gone from the record surface.** `RecordRow.commission_pct` and `RecordRow.commission_amount` are removed from every record response, `records.create(commission_pct=)` is removed along with the same key on a `records.bulk_create()` item, and `commissionSourceField` is gone from a contract type's `rulesConfig`. AGLedger records what was asked and what came back; who gets paid how much for it was never something it inspected.
+
+- **`Dispute` loses `current_tier`, `fee_charged_to`, `fee_amount` and `fee_currency`.** The tier ladder they belonged to is gone, and a dispute carries no fee.
+
+- **`FederationPeer` loses `agent_directory_hash` and `last_sync_at`**, both directory-sync state with no directory to sync. Reachability was always `last_delivery_at` and still is. `FederationPeerStatus` is now `active | revoked`: `suspended` is not a state a peer can be in or a value the peer listing will filter on. `federation_admin.get_instance()` no longer returns `encryptionPublicKey`, and the revoke response is `{"revoked": true}` without `remoteAgentsDeleted`.
+
+- **`PeerHandshakeResult.server_encryption_public_key` is gone**, and `federation.peer_handshake()` no longer sends `encryptionPublicKey` or `agentDirectory`.
+
+- **`AiImpactAssessment.overseer_name` is gone.** Who oversees is in `human_oversight`.
+
+- **`admin.get_ops_summary()` no longer reports `federation.peers.suspended`**, the status having been removed.
+
 ### Added
+
+- **`disputes.resolve(dispute_id, outcome=, rationale=)`, sync and async.** `POST /v1/disputes/{id}/resolve` is how a dispute outcome is rendered now that the tier ladder is gone. The path takes the **dispute** id, not the record id, which makes it the odd one out among the dispute methods here: every other one takes the record id. `filed.id` from `disputes.create()` is the value to pass.
+
+  `outcome` is the new `DisputeOutcome` (`UPHELD` or `OVERTURNED`), exported from the package root. `UPHELD` returns the Record to exactly the status it held before the dispute and emits no signal. `OVERTURNED` says the disputed verdict does not stand: a Record whose pre-dispute status was FAILED settles at FULFILLED with the verdict re-rendered as `accept`, one already FULFILLED or REMEDIATED is restored to that terminal, and a RELEASE Settlement Signal follows carrying reason code `DISPUTE_OVERTURNED`. The rendering is the caller's; AGLedger holds and serves the signed decision and never makes it.
+
+  Accepted while the dispute is at `EVIDENCE_WINDOW` or `PENDING_RESOLUTION`. One already `RESOLVED` or `WITHDRAWN` raises `UnprocessableError` carrying `currentState` and `allowedActions`. An omitted `rationale` is left off the body rather than sent as null, which a `minLength` string would refuse.
+
+- **`records.create(max_revisions=)`**, and the same key on a `records.bulk_create()` item. It caps the rework cycles a Record allows, from 1 to 20. Omit it to inherit the org default (`enforcement.defaultMaxRevisions`, 3 unless the org set one). It is immutable once created, and reaching the cap refuses the next resubmit with a 422 and leaves the Record where it was, so the principal can still render a verdict, cancel or dispute.
+
+- **`agents.list(include_deactivated=)`, and `deactivated_at` on the agent rows** returned by `agents.list()`, `agents.get()` and `agents.update()`. The flag is bound into `next_cursor`, so set it on the first call of a walk rather than partway through: a cursor minted without it keeps listing active agents only.
+
+- **`DisputeOutcome`, `CoSignStatus`, `EnforcementMode` and `EnforcementSource` are exported from the package root**, all named module-level types pinned by the enum-member parity guard. `EnforcementMode` (`none`, `advisory`, `enforced`) and `EnforcementSource` (`org`, `default`) name the values the org config's `enforcement` and `enforcementSource` blocks carry; the config itself stays a dict. `CoSignStatus` was written inline on `RecordRow.co_sign_status` and on the Settlement Signal's `co_sign_status`, where nothing checked it, and it gained `partial`: the state a multi-party co-sign lands in when some but not all of the counter-signatures came back. Code that treated `succeeded` and `failed` as the only settled outcomes now has a third to handle.
+
+- **Two `EventType` members**, `system.cascading_gate_enqueue_failed` and `system.verification_enqueue_failed`: work the Server could not hand to a worker. They are queryable through `events.list()` and not subscribable, and they are the reason a Record can sit at PROCESSING with nothing wrong on the Record itself.
+
+- **`DisputeResponse.next_steps`**, on the envelope `disputes.get()` returns rather than on the dispute inside it.
+
+- **The org config surface takes the dispute and rework settings.** `admin.update_org_config()` accepts `disputes.autoReadjudicate` (`deadlineGraceSeconds`, `toleranceExpansion`, or null to turn auto-readjudication off) and `enforcement.defaultMaxRevisions`, and every `enforcement` field is nullable now, where null clears the override rather than setting zero. That makes omitting a key and passing null different requests, so build the body explicitly. `admin.get_org_config()` gains three resolved blocks alongside `config`: `enforcement`, the values actually in force, `enforcementDefaults`, the install-wide floor, and `enforcementSource`, which says per field whether the value came from the org or the default. Read `enforcement` to answer what applies and `enforcementSource` to answer who decided it; `config.enforcement` answers neither on its own, because an unset override is absent there rather than zero.
+
+- **`firstFailedAt` on federation DLQ items**, so how long a message has been stuck is readable without diffing two listings.
 
 - **`client.drift`, sync and async.** `get_agent(agent_id, window=..., type=...)` returns `AgentDrift`: the two windows, an `overall` series, and one series per type the agent touched in either window. `list_fleet(window=..., limit=..., cursor=...)` returns `FleetDriftPage`, one roll-up row per agent in the caller's org, with the window the page was computed over sitting beside the rows rather than on each one. `list_all_fleet(...)` walks that listing and resends `window` with every cursor, which the cursor requires: the query parameters are bound into the token, so every page of a walk is computed over the same window and the rows stay comparable. `get_agent_history(agent_id, ...)` returns `Page[AgentHistoryEntry]`, the per-record feed behind the counts, filtered by `type`, `outcome`, `from_` and `to`. `from_` carries the trailing underscore only in Python, where `from` is a keyword; it goes out as `from`.
 
@@ -47,6 +91,16 @@ Reconciled against the API build that follows 1.6.0, which replaced agent reputa
 ### Changed
 
 - **The `reputationScoring` conformance capability is `agentDrift`.** It reports whether the drift routes are wired on an install.
+
+- **`federation.peer_handshake()` takes five typed keywords instead of loose `**params`.** `peer_hub_id`, `peer_url`, `signing_public_key`, `peering_token` and `bound_org_id` are the whole body and all five are required: the route is `additionalProperties: false`, so a stray key is a 400 rather than an ignored field, and the old signature made that a runtime discovery. The route is unauthenticated now and admits on the single-use `peering_token` in the body, which is the one federation call with no signature to fall back on: send it over the peer's real URL and nothing else.
+
+- **`RecordRow.awaiting_actor` no longer names `arbitration`**, leaving `principal`, `performer`, `system` and `None`.
+
+- **`disputes.list(status=)` takes `DisputeStatus` rather than a bare `str`.** The route declares a strict enum; a typo used to reach the wire and come back a 400.
+
+- **`AgentHistoryEntry.status` is typed as the record-status enum** rather than a bare string, matching what the Server now declares on `GET /v1/agents/{agentId}/history` and on the nodes of `records.get_graph()`.
+
+- **The dispute create envelope renamed `tier1Result` to `autoReadjudication`**, and its `reason` gained `not_configured`. `disputes.create()` returns the dispute out of that envelope either way, so this is only visible to a caller reading the raw envelope through `client.request()`.
 
 ## [1.10.0] - 2026-08-30
 

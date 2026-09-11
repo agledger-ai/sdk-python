@@ -764,9 +764,9 @@ def test_disputes_list():
         return_value=httpx.Response(200, json={"data": [], "hasMore": False})
     )
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    page = client.disputes.list(status="OPENED")
+    page = client.disputes.list(status="PENDING_RESOLUTION")
     assert page.data == []
-    assert "status=OPENED" in str(respx.calls[0].request.url)
+    assert "status=PENDING_RESOLUTION" in str(respx.calls[0].request.url)
 
 
 @respx.mock
@@ -972,20 +972,135 @@ def test_webhooks_pause():
     assert webhook.is_paused is True
 
 
-# --- Record counter_propose and batch_get ---
+# --- Dispute resolution, record rework cap, agent listing ---
+
+_DISPUTE_JSON = {
+    "id": "55555555-5555-4555-8555-555555555555",
+    "recordId": "rec-123",
+    "initiatedByRole": "principal",
+    "initiatedById": "agt-principal",
+    "grounds": "quality_issue",
+    "context": None,
+    "status": "RESOLVED",
+    "outcome": "OVERTURNED",
+    "resolutionRationale": "The completion met the band on re-read.",
+    "evidenceWindowClosesAt": None,
+    "createdAt": "2026-09-01T00:00:00Z",
+    "resolvedAt": "2026-09-02T00:00:00Z",
+}
+
 
 @respx.mock
-def test_records_counter_propose():
-    counter_json = {**RECORD_JSON, "status": "PROPOSED", "acceptanceStatus": "COUNTER_PROPOSED"}
-    respx.post("https://agledger.example.com/v1/records/rec-123/counter-propose").mock(
-        return_value=httpx.Response(200, json=counter_json)
+def test_disputes_resolve_takes_the_dispute_id_in_the_path():
+    """The path param is the DISPUTE id, not the record id. Passing a record id
+    here reaches a different dispute or a 404, and nothing about the call site
+    would look wrong."""
+    route = respx.post(
+        "https://agledger.example.com/v1/disputes/55555555-5555-4555-8555-555555555555/resolve"
+    ).mock(return_value=httpx.Response(200, json=_DISPUTE_JSON))
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    dispute = client.disputes.resolve(
+        "55555555-5555-4555-8555-555555555555",
+        outcome="OVERTURNED",
+        rationale="The completion met the band on re-read.",
+    )
+    assert route.called
+    assert json.loads(respx.calls[0].request.content) == {
+        "outcome": "OVERTURNED",
+        "rationale": "The completion met the band on re-read.",
+    }
+    assert dispute.status == "RESOLVED"
+    assert dispute.outcome == "OVERTURNED"
+    assert dispute.resolution_rationale == "The completion met the band on re-read."
+
+
+@respx.mock
+def test_disputes_resolve_omits_an_unset_rationale():
+    """The body is additionalProperties: false and rationale has a minLength, so
+    a null sent for "not provided" is a 400 rather than an ignored field."""
+    respx.post(
+        "https://agledger.example.com/v1/disputes/55555555-5555-4555-8555-555555555555/resolve"
+    ).mock(return_value=httpx.Response(200, json={**_DISPUTE_JSON, "outcome": "UPHELD"}))
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.disputes.resolve("55555555-5555-4555-8555-555555555555", outcome="UPHELD")
+    assert json.loads(respx.calls[0].request.content) == {"outcome": "UPHELD"}
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_async_disputes_resolve():
+    respx.post(
+        "https://agledger.example.com/v1/disputes/55555555-5555-4555-8555-555555555555/resolve"
+    ).mock(return_value=httpx.Response(200, json=_DISPUTE_JSON))
+    async with AsyncAgledgerClient(
+        base_url="https://agledger.example.com", api_key="test-key"
+    ) as client:
+        dispute = await client.disputes.resolve(
+            "55555555-5555-4555-8555-555555555555", outcome="OVERTURNED"
+        )
+    assert dispute.outcome == "OVERTURNED"
+    assert json.loads(respx.calls[0].request.content) == {"outcome": "OVERTURNED"}
+
+
+@respx.mock
+def test_records_create_sends_max_revisions():
+    """maxRevisions is immutable once created, so a keyword that silently did not
+    reach the wire would leave the Record on the org default forever."""
+    respx.post("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json={**RECORD_JSON, "maxRevisions": 5})
     )
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    record = client.records.counter_propose("rec-123", counter_deadline="2026-06-01T00:00:00Z")
-    assert isinstance(record, RecordRow)
-    assert record.acceptance_status == "COUNTER_PROPOSED"
-    sent = json.loads(respx.calls[0].request.content)
-    assert sent["counterDeadline"] == "2026-06-01T00:00:00Z"
+    record = client.records.create(
+        type="notarize-generic-v1",
+        criteria={"item_spec": "widgets"},
+        max_revisions=5,
+    )
+    assert json.loads(respx.calls[0].request.content)["maxRevisions"] == 5
+    assert record.max_revisions == 5
+
+
+@respx.mock
+def test_records_create_omits_max_revisions_when_unset():
+    """Omitting the key is how a Record inherits the org default; sending null
+    would be a 400 against a typed integer."""
+    respx.post("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(200, json=RECORD_JSON)
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.records.create(type="notarize-generic-v1", criteria={"item_spec": "widgets"})
+    assert "maxRevisions" not in json.loads(respx.calls[0].request.content)
+
+
+@respx.mock
+def test_agents_list_include_deactivated():
+    """The flag is bound into nextCursor, so it belongs on the first call of a
+    walk. A row that carries deactivatedAt reads it back."""
+    respx.get("https://agledger.example.com/v1/agents").mock(
+        return_value=httpx.Response(200, json={
+            "data": [{
+                "id": "agt-1",
+                "orgId": "ent-1",
+                "displayName": "retired-bot",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "deactivatedAt": "2026-08-01T00:00:00Z",
+            }],
+            "hasMore": False,
+        })
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    page = client.agents.list(include_deactivated=True)
+    assert "includeDeactivated=true" in str(respx.calls[0].request.url)
+    assert page.data[0].deactivated_at == "2026-08-01T00:00:00Z"
+
+
+@respx.mock
+def test_agents_list_omits_include_deactivated_by_default():
+    respx.get("https://agledger.example.com/v1/agents").mock(
+        return_value=httpx.Response(200, json={"data": [], "hasMore": False})
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.agents.list()
+    assert "includeDeactivated" not in str(respx.calls[0].request.url)
 
 
 @respx.mock

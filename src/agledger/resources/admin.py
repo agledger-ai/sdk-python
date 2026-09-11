@@ -311,11 +311,35 @@ class AdminResource:
         return self._http.post("/v1/admin/orgs", json=body)
 
     def get_org_config(self, org_id: str) -> dict[str, Any]:
-        """Get an org's configuration."""
+        """Get an org's configuration.
+
+        ``config`` holds what this org set; it is not what the org runs on. The
+        response also carries ``enforcement``, the resolved values actually in
+        force, ``enforcementDefaults``, the install-wide floor, and
+        ``enforcementSource``, which says per field whether the resolved value
+        came from the org (``"org"``) or the default (``"default"``). Read
+        ``enforcement`` to answer what applies and ``enforcementSource`` to
+        answer who decided it; ``config.enforcement`` answers neither on its own,
+        because an unset override is absent there rather than zero.
+
+        ``config.disputes.autoReadjudicate`` is the auto-readjudication window
+        (``deadlineGraceSeconds``, ``toleranceExpansion``), null when the org has
+        not configured one, and ``config.enforcement.defaultMaxRevisions`` is the
+        rework cap new Records inherit.
+        """
         return self._http.get(f"/v1/admin/orgs/{org_id}/config")
 
     def update_org_config(self, org_id: str, config: dict[str, Any]) -> dict[str, Any]:
-        """Partially update an org's configuration (PATCH semantics)."""
+        """Partially update an org's configuration (PATCH semantics).
+
+        Every ``enforcement`` field takes null now, and null means clear the
+        override so the field falls back to the install default. That is a
+        different request from leaving the key out, which leaves the stored
+        override alone, so build the body explicitly rather than dropping Nones.
+        ``enforcement.defaultMaxRevisions`` (1 to 20) and ``disputes`` (with its
+        ``autoReadjudicate`` block, or null to turn auto-readjudication off) are
+        settable here.
+        """
         return self._http.patch(f"/v1/admin/orgs/{org_id}/config", json=config)
 
     # --- Agents ---
@@ -839,9 +863,13 @@ class AsyncAdminResource:
         return await self._http.post("/v1/admin/orgs", json=body)
 
     async def get_org_config(self, org_id: str) -> dict[str, Any]:
+        """Get an org's configuration, alongside the resolved ``enforcement``
+        block, ``enforcementDefaults`` and ``enforcementSource``."""
         return await self._http.get(f"/v1/admin/orgs/{org_id}/config")
 
     async def update_org_config(self, org_id: str, config: dict[str, Any]) -> dict[str, Any]:
+        """Partially update an org's configuration (PATCH semantics). A null on an
+        ``enforcement`` field clears the override rather than setting zero."""
         return await self._http.patch(f"/v1/admin/orgs/{org_id}/config", json=config)
 
     async def list_agents(self, **params: Any) -> dict[str, Any]:

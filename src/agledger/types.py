@@ -61,7 +61,6 @@ RecordStatus = Literal[
     "FAILED",
     "REMEDIATED",
     "EXPIRED",
-    "PENDING_ARBITRATION",
     "CANCELLED",
     "REJECTED",
     "RECORDED",
@@ -101,7 +100,19 @@ EuAiActDomain = Literal[
 and an AI impact assessment's ``domain`` so the two surfaces speak one taxonomy."""
 ConstraintInheritanceMode = Literal["none", "advisory", "enforced"]
 
-AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED", "COUNTER_PROPOSED"]
+EnforcementMode = Literal["none", "advisory", "enforced"]
+"""How an org enforcement rule is applied: skipped, warned on, or blocked on.
+
+Carried by the ``toleranceEnforcement``, ``deadlineEnforcement``,
+``schemaValidation``, ``maxSubmissionsMode`` and ``expressionRuleMode`` fields
+of the org config's ``enforcement`` block."""
+
+EnforcementSource = Literal["org", "default"]
+"""Where a resolved org enforcement value came from: the org's own override or
+the engine default. One entry per field in the org config's
+``enforcementSource`` block."""
+
+AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED"]
 
 
 class SignedStatement(BaseModel):
@@ -155,6 +166,21 @@ class EntityReference(BaseModel):
     created_by: str = Field(alias="createdBy")
 
 
+CoSignStatus = Literal["not_required", "pending", "succeeded", "partial", "failed"]
+"""State of the co-signature a Record's settlement may require.
+
+``partial`` is the state a multi-party co-sign lands in when some but not all
+of the required counter-signatures came back: it is neither done nor failed,
+and treating it as either loses the distinction the Server draws. The same
+closed set serves ``RecordRow.co_sign_status`` and the ``co_sign_status`` on
+the Settlement Signal projected onto the Record; both read ``None`` when
+co-signing is not configured.
+
+A named module-level alias so the enum-member parity guard can pin it. It was
+written inline at both sites, where nothing checked it, and ``partial`` was
+added by the Server without either site naming it."""
+
+
 class SettlementSignalSummary(BaseModel):
     """Settlement Signal projected onto a Record: the SETTLE/HOLD/RELEASE
     recommendation bound to the terminal verdict, plus federation delivery state."""
@@ -179,9 +205,7 @@ class SettlementSignalSummary(BaseModel):
     """Peer Servers the signal failed to deliver to."""
     idempotency_key: str | None = Field(alias="idempotencyKey")
     """Idempotency key for the signal, or None."""
-    co_sign_status: Literal["not_required", "pending", "succeeded", "failed"] | None = Field(
-        None, alias="coSignStatus"
-    )
+    co_sign_status: CoSignStatus | None = Field(None, alias="coSignStatus")
     """Co-signature state of the signal, or None."""
     counter_signature: str | None = Field(None, alias="counterSignature")
     """Hex Ed25519 counter-signature on the signal, or None."""
@@ -250,10 +274,6 @@ class RecordRow(BaseModel):
     """Tolerance bands for numeric criteria."""
     deadline: str | None = None
     """ISO 8601 deadline for completion."""
-    commission_pct: float | None = Field(None, alias="commissionPct")
-    """Commission percentage for the performing agent."""
-    commission_amount: float | None = Field(None, alias="commissionAmount")
-    """Computed commission amount."""
     operating_mode: OperatingMode | str | None = Field(None, alias="operatingMode")
     """Operating mode: cleartext (default) or encrypted."""
     gate_mode: GateMode | str | None = Field(None, alias="gateMode")
@@ -393,7 +413,7 @@ class RecordRow(BaseModel):
     """True when this Record has child (delegated) Records."""
     latest_completion_id: str | None = Field(None, alias="latestCompletionId")
     """ID of the most recent Completion submitted against this Record, or None."""
-    awaiting_actor: Literal["principal", "performer", "system", "arbitration"] | None = Field(
+    awaiting_actor: Literal["principal", "performer", "system"] | None = Field(
         None, alias="awaitingActor"
     )
     """Which role the Record is currently awaiting, or None when not blocked."""
@@ -413,9 +433,7 @@ class RecordRow(BaseModel):
     """Lifecycle status of the dispute, or None when none."""
     co_sign_required: bool | None = Field(None, alias="coSignRequired")
     """Whether a co-signature is required before settlement, or None when not configured."""
-    co_sign_status: Literal["not_required", "pending", "succeeded", "failed"] | None = Field(
-        None, alias="coSignStatus"
-    )
+    co_sign_status: CoSignStatus | None = Field(None, alias="coSignStatus")
     """Co-signature state, or None when co-sign is not configured."""
     counter_signature: str | None = Field(None, alias="counterSignature")
     """Hex Ed25519 counter-signature from the most recent successful co-sign, or None."""
@@ -548,19 +566,42 @@ class GateEvaluationResult(BaseModel):
 
 
 DisputeStatus = Literal[
-    "EVIDENCE_WINDOW", "TIER_2_REVIEW", "ESCALATED",
-    "TIER_3_ARBITRATION", "RESOLVED", "WITHDRAWN",
+    "EVIDENCE_WINDOW", "PENDING_RESOLUTION", "RESOLVED", "WITHDRAWN",
 ]
 """Lifecycle status of a dispute.
 
 This is the full set the Server serves, and the set every dispute-status filter
-validates against. ``OPENED`` and ``TIER_1_REVIEW`` were listed here and exist
-nowhere in the API: the three query params that take this type declare a strict
-enum, so either value is a guaranteed 400.
+validates against. ``EVIDENCE_WINDOW`` takes evidence until the dispute's
+``evidence_window_closes_at``; ``PENDING_RESOLUTION`` is that window closed and
+the dispute waiting on the record principal to render an outcome through
+:meth:`~agledger.resources.disputes.DisputesResource.resolve`; ``RESOLVED`` and
+``WITHDRAWN`` are terminal. The engine writes a transient ``OPENED`` inside the
+transaction that opens a dispute and never commits a row at it, so it is not
+externally observable and is not a member here.
+
+The tier ladder is gone: ``TIER_2_REVIEW``, ``ESCALATED`` and
+``TIER_3_ARBITRATION`` were members of this union and are no longer values the
+Server serves or any filter accepts. A dispute that would have escalated now
+sits at ``PENDING_RESOLUTION``.
 
 Models widen this to ``DisputeStatus | str`` where the value is read off a
 response, so a status added by a newer Server parses rather than raising.
 """
+
+DisputeOutcome = Literal["UPHELD", "OVERTURNED"]
+"""The rendering a principal sends to
+:meth:`~agledger.resources.disputes.DisputesResource.resolve`.
+
+``UPHELD`` leaves the disputed verdict standing and returns the record to
+exactly the status it held before the dispute, with no Settlement Signal.
+``OVERTURNED`` says the disputed verdict does not stand: a record whose
+pre-dispute status was FAILED settles at FULFILLED with the verdict re-rendered
+as ``accept``, one already FULFILLED or REMEDIATED is restored to that terminal,
+and a RELEASE Settlement Signal follows carrying reason code
+``DISPUTE_OVERTURNED``.
+
+The rendering is the caller's. AGLedger holds and serves the signed decision and
+never makes it."""
 
 
 class Dispute(BaseModel):
@@ -573,12 +614,8 @@ class Dispute(BaseModel):
     grounds: str
     context: str | None = None
     status: DisputeStatus | str
-    current_tier: int = Field(alias="currentTier")
     outcome: str | None = None
     resolution_rationale: str | None = Field(None, alias="resolutionRationale")
-    fee_charged_to: str | None = Field(None, alias="feeChargedTo")
-    fee_amount: float | None = Field(None, alias="feeAmount")
-    fee_currency: str | None = Field(None, alias="feeCurrency")
     evidence_window_closes_at: str | None = Field(None, alias="evidenceWindowClosesAt")
     created_at: str = Field(alias="createdAt")
     resolved_at: str | None = Field(None, alias="resolvedAt")
@@ -609,6 +646,9 @@ class DisputeResponse(BaseModel):
 
     dispute: Dispute
     evidence: list[DisputeEvidence] = Field(default_factory=list[DisputeEvidence])
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls on the dispute, on the envelope rather than on
+    ``dispute``."""
 
 
 WebhookEventType = (
@@ -635,7 +675,6 @@ WebhookEventType = (
         "record.proposed",
         "record.proposal_accepted",
         "record.proposal_rejected",
-        "record.proposal_counter_proposed",
         "record.delegated",
         "record.revision_requested",
         # Cascading gate
@@ -647,7 +686,6 @@ WebhookEventType = (
         "signal.emitted",
         "signal.received",
         "dispute.opened",
-        "dispute.escalated",
         "dispute.resolved",
         "dispute.withdrawn",
         # Federation
@@ -674,10 +712,12 @@ WebhookEventType = (
 ``POST /v1/webhooks`` ``eventTypes`` enum plus the ``"*"`` wildcard.
 
 ``record.settled`` (deprecated alias of ``record.fulfilled``),
-``record.released`` and ``dispute.evidence_window_closed`` are NOT here: they
-are persisted-event/replay surface only, queryable through :data:`EventType`
-but rejected 400 by ``POST /v1/webhooks``. Settlement outcomes reach webhooks
-via ``signal.emitted``/``signal.received``, not per-variant types."""
+``record.released``, ``dispute.evidence_window_closed``,
+``record.proposal_counter_proposed``, ``dispute.escalated`` and the two
+``system.*`` types are NOT here: they are persisted-event/replay surface only,
+queryable through :data:`EventType` but rejected 400 by ``POST /v1/webhooks``.
+Settlement outcomes reach webhooks via ``signal.emitted``/``signal.received``,
+not per-variant types."""
 
 EventType = Literal[
     # Record lifecycle
@@ -715,6 +755,11 @@ EventType = Literal[
     "dispute.evidence_window_closed",
     "dispute.resolved",
     "dispute.withdrawn",
+    # Engine-internal enqueue failures: work the Server could not hand to a
+    # worker. Queryable here only, and the reason a record can sit at PROCESSING
+    # with nothing wrong on the record itself.
+    "system.cascading_gate_enqueue_failed",
+    "system.verification_enqueue_failed",
     # Federation
     "federation.record.state_changed",
     "federation.settlement.signal",
@@ -734,9 +779,12 @@ EventType = Literal[
 ]
 """The full ``GET /v1/events`` ``eventType`` query enum: a deliberate superset
 of :data:`WebhookEventType`. Types queryable here but not subscribable there
-(``record.released``, ``record.settled``, ``dispute.evidence_window_closed``)
-are persisted-event/replay surface only. No ``"*"``: that is a subscription
-wildcard, not a queryable event type."""
+(``record.released``, ``record.settled``, ``dispute.evidence_window_closed``,
+``record.proposal_counter_proposed``, ``dispute.escalated`` and the two
+``system.*`` types) are persisted-event/replay surface only. The two the
+Server stopped emitting keep their place here so a replay of history that
+already holds them still parses. No ``"*"``: that is a subscription wildcard,
+not a queryable event type."""
 
 
 class Webhook(BaseModel):
@@ -1261,8 +1309,9 @@ class AgentHistoryEntry(BaseModel):
 
     record_id: str = Field(alias="recordId")
     type: str
-    status: str
-    """Record status at the time of the read."""
+    status: RecordStatus | str
+    """Record status at the time of the read. The Server types this as the record
+    status enum now, where it used to be a bare string."""
     outcome: str
     """Gate verdict: ``accept``, ``reject``, or ``PENDING`` when none has been
     rendered."""
@@ -1460,6 +1509,10 @@ class AgentProfile(BaseModel):
     """Subject of the external identity bound to this agent, or null when unbound."""
     references: list[dict[str, Any]] | None = None
     created_at: str | None = Field(None, alias="createdAt")
+    deactivated_at: str | None = Field(None, alias="deactivatedAt")
+    """When this agent was deactivated, or ``None`` while it is active. A
+    deactivated agent keeps its records and its history; what it loses is the
+    ability to act."""
 
 
 class AgentDirectoryEntry(BaseModel):
@@ -1478,6 +1531,10 @@ class AgentDirectoryEntry(BaseModel):
     org_unit: str | None = Field(None, alias="orgUnit")
     description: str | None = None
     created_at: str | None = Field(None, alias="createdAt")
+    deactivated_at: str | None = Field(None, alias="deactivatedAt")
+    """When this agent was deactivated, or ``None`` while it is active. Rows with
+    a value here appear only when the listing was asked for them with
+    ``include_deactivated=True``."""
 
 
 class GateStatus(BaseModel):
@@ -1540,7 +1597,6 @@ class AiImpactAssessment(BaseModel):
     record_id: str = Field(alias="recordId")
     risk_level: EuAiActRiskTier | str = Field(alias="riskLevel")
     domain: EuAiActDomain | str
-    overseer_name: str | None = Field(None, alias="overseerName")
     human_oversight: dict[str, Any] | None = Field(None, alias="humanOversight")
     testing_results: dict[str, Any] | None = Field(None, alias="testingResults")
     created_at: str = Field(alias="createdAt")
@@ -1579,12 +1635,16 @@ class VerificationKeysResponse(BaseModel):
     """Template for the canonical signature-input string (v0.25.x)."""
 
 
-FederationPeerStatus = Literal["active", "suspended", "revoked"] | str
-"""``FederationPeer.status``. Pinned to a closed three-value enum at every spec
-site that serves it. A named module-level alias so the enum-parity guard
+FederationPeerStatus = Literal["active", "revoked"] | str
+"""``FederationPeer.status``. Pinned to a closed two-value enum at every spec
+site that serves it, including the ``status`` filter on the peer listing. A
+named module-level alias so the enum-parity guard
 (``tests/test_enum_parity.py``) can see and pin it. The ``| str`` still
 protects a caller against a value a newer Server adds before this SDK names
-it."""
+it.
+
+``suspended`` was a member and is gone: a peer is either taking messages or
+revoked, and there is no middle state to filter on."""
 
 
 class FederationPeer(BaseModel):
@@ -1604,9 +1664,6 @@ class FederationPeer(BaseModel):
     peer_url: str = Field(alias="peerUrl")
     status: FederationPeerStatus
     created_at: str = Field(alias="createdAt")
-    agent_directory_hash: str | None = Field(None, alias="agentDirectoryHash")
-    """Digest of the agent directory this peer last pushed. ``None`` until the
-    peer has pushed one."""
     consecutive_delivery_failures: int | None = Field(None, alias="consecutiveDeliveryFailures")
     """Failed delivery attempts since the last success, reset to 0 on a 2xx. Not
     purely a reachability count: a peer that answers and rejects the payload
@@ -1618,10 +1675,6 @@ class FederationPeer(BaseModel):
     last_delivery_error: str | None = Field(None, alias="lastDeliveryError")
     """Why the most recent delivery attempt failed, cleared on the next
     success."""
-    last_sync_at: str | None = Field(None, alias="lastSyncAt")
-    """When this peer last pushed its agent directory. Directory-sync state, NOT
-    reachability: V1 federation has no pull protocol, so a peer taking delivery
-    after delivery never moves it. Read ``last_delivery_at`` instead."""
 
 
 class PeerHandshakeResult(BaseModel):
@@ -1640,5 +1693,6 @@ class PeerHandshakeResult(BaseModel):
     status: str
     """Peer status as created (``active``)."""
     server_signing_public_key: str = Field(alias="serverSigningPublicKey")
-    server_encryption_public_key: str = Field(alias="serverEncryptionPublicKey")
+    """The receiving Server's Ed25519 signing public key, SPKI-DER base64. Verify
+    every federation message it sends you against this."""
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")

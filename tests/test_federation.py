@@ -1,5 +1,7 @@
 """Federation resource tests (v0.24.0 surface)."""
 
+import json
+
 import httpx
 import respx
 
@@ -10,8 +12,10 @@ BASE = "https://agledger.example.com"
 
 class TestFederationResource:
     @respx.mock
-    def test_peer_handshake(self):
-        respx.post(f"{BASE}/federation/v1/peer").mock(
+    def test_peer_handshake_sends_exactly_the_five_body_fields(self):
+        """The route is additionalProperties: false, so an extra key is a 400 and
+        a missing one is a 400. The body is the whole contract here."""
+        route = respx.post(f"{BASE}/federation/v1/peer").mock(
             return_value=httpx.Response(
                 201,
                 json={
@@ -20,36 +24,32 @@ class TestFederationResource:
                     "peerHubId": "hub-x",
                     "status": "active",
                     "serverSigningPublicKey": "ed25519-pk",
-                    "serverEncryptionPublicKey": "x25519-pk",
                 },
             )
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation.peer_handshake(
-                hubId="hub-x",
-                signingPublicKey="ed25519-pk",
-                encryptionPublicKey="x25519-pk",
-                peeringToken="tok-abc",
-                agentDirectory=[],
+                peer_hub_id="33333333-3333-4333-8333-333333333333",
+                peer_url="https://peer.example.com",
+                signing_public_key="ed25519-pk",
+                peering_token="tok-abcdefghijklmno",
+                bound_org_id="44444444-4444-4444-8444-444444444444",
             )
+        assert json.loads(route.calls[0].request.content) == {
+            "peerHubId": "33333333-3333-4333-8333-333333333333",
+            "peerUrl": "https://peer.example.com",
+            "signingPublicKey": "ed25519-pk",
+            "peeringToken": "tok-abcdefghijklmno",
+            "boundOrgId": "44444444-4444-4444-8444-444444444444",
+        }
         assert result.peered is True
         # peer_hub_id is the identifier the admin peer paths take; peer_id is
         # the receiver-local row id and resolves nowhere.
         assert result.peer_hub_id == "hub-x"
         assert result.peer_id == "11111111-1111-4111-8111-111111111111"
         assert result.status == "active"
+        assert result.server_signing_public_key == "ed25519-pk"
         assert result.next_steps is None
-
-    @respx.mock
-    def test_sync_agent_directory(self):
-        route = respx.post(f"{BASE}/federation/v1/peer/agent-sync").mock(
-            return_value=httpx.Response(200, json={"synced": True})
-        )
-        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            client.federation.sync_agent_directory(
-                hubId="hub-x", agents=[], directoryHash="sha256-abc"
-            )
-        assert route.called
 
     @respx.mock
     def test_submit_state_transition(self):
@@ -189,7 +189,7 @@ class TestFederationAdminResource:
                     "peerId": "22222222-2222-4222-8222-222222222222",
                     "peerHubId": "hub-x",
                     "peerUrl": "https://peer.example.com",
-                    "status": "suspended",
+                    "status": "revoked",
                     "createdAt": "2026-03-01T00:00:00Z",
                     "lastDeliveryAt": "2026-03-02T00:00:00Z",
                     "lastDeliveryError": "503 from peer",
@@ -199,11 +199,12 @@ class TestFederationAdminResource:
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             peer = client.federation_admin.get_peer(peer_hub_id="hub-x")
-        assert peer.status == "suspended"
-        # Reachability is lastDeliveryAt, not lastSyncAt, which only moves when
-        # the peer pushes its agent directory.
+        assert peer.status == "revoked"
+        # Reachability is lastDeliveryAt. There is no lastSyncAt any more: the
+        # directory push it tracked is gone, so a caller reaching for it now gets
+        # an AttributeError rather than a permanently null field.
         assert peer.last_delivery_at == "2026-03-02T00:00:00Z"
-        assert peer.last_sync_at is None
+        assert not hasattr(peer, "last_sync_at")
         assert peer.consecutive_delivery_failures == 3
 
     @respx.mock
