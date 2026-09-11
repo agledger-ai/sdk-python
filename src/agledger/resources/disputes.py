@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import Dispute, DisputeResponse, Page
+from agledger.types import Dispute, DisputeOutcome, DisputeResponse, DisputeStatus, Page
 
 
 class DisputesResource:
@@ -15,12 +15,15 @@ class DisputesResource:
     def list(
         self,
         *,
-        status: str | None = None,
+        status: DisputeStatus | str | None = None,
         record_id: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
     ) -> Page[Dispute]:
         """List disputes across the org. Filter by status or record_id.
+
+        ``status`` takes a :data:`~agledger.types.DisputeStatus`; the route
+        declares a strict enum, so anything else is a 400.
 
         Backed by ``GET /v1/disputes``.
         """
@@ -39,7 +42,9 @@ class DisputesResource:
         if context is not None:
             body["context"] = context
         response = self._http.post(f"/v1/records/{record_id}/dispute", json=body)
-        # API may return { dispute, tier1Result } envelope on create
+        # The create 201 is a { dispute, autoReadjudication } envelope. Read the
+        # envelope through ``client.request()`` when you need the
+        # auto-readjudication result alongside the dispute.
         if isinstance(response, dict) and "dispute" in response:
             return Dispute.model_validate(response["dispute"])
         return Dispute.model_validate(response)
@@ -48,10 +53,37 @@ class DisputesResource:
         """Get the dispute for a Record, including submitted evidence."""
         return DisputeResponse.model_validate(self._http.get(f"/v1/records/{record_id}/dispute"))
 
-    def escalate(self, record_id: str, reason: str | None = None) -> Dispute:
-        """Escalate a dispute to the next review tier."""
-        body = {"reason": reason} if reason else {}
-        return Dispute.model_validate(self._http.post(f"/v1/records/{record_id}/dispute/escalate", json=body))
+    def resolve(
+        self,
+        dispute_id: str,
+        *,
+        outcome: DisputeOutcome,
+        rationale: str | None = None,
+    ) -> Dispute:
+        """Render the outcome on a dispute. The dispute id goes in the path, not
+        the record id.
+
+        ``OVERTURNED`` says the disputed verdict does not stand: a record whose
+        pre-dispute status was FAILED settles at FULFILLED with the verdict
+        re-rendered as ``accept``, one already FULFILLED or REMEDIATED is
+        restored to that terminal, and a RELEASE Settlement Signal follows
+        carrying reason code ``DISPUTE_OVERTURNED``. ``UPHELD`` returns the
+        record to exactly the status it held before the dispute and emits no
+        signal.
+
+        Accepted while the dispute is at ``EVIDENCE_WINDOW`` or
+        ``PENDING_RESOLUTION``. One already ``RESOLVED`` or ``WITHDRAWN`` raises
+        :class:`~agledger.UnprocessableError` carrying ``currentState`` and
+        ``allowedActions``.
+
+        The rendering is the caller's: AGLedger holds and serves the signed
+        decision and never makes it. Authorized for the principal of the
+        disputed record, or an org admin.
+        """
+        body: dict[str, Any] = {"outcome": outcome}
+        if rationale is not None:
+            body["rationale"] = rationale
+        return Dispute.model_validate(self._http.post(f"/v1/disputes/{dispute_id}/resolve", json=body))
 
     def withdraw(self, record_id: str, reason: str | None = None) -> Dispute:
         """Withdraw an open dispute. Optional ``reason`` is recorded in the audit trail."""
@@ -79,7 +111,7 @@ class AsyncDisputesResource:
     async def list(
         self,
         *,
-        status: str | None = None,
+        status: DisputeStatus | str | None = None,
         record_id: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
@@ -98,6 +130,7 @@ class AsyncDisputesResource:
         if context is not None:
             body["context"] = context
         response = await self._http.post(f"/v1/records/{record_id}/dispute", json=body)
+        # The create 201 is a { dispute, autoReadjudication } envelope.
         if isinstance(response, dict) and "dispute" in response:
             return Dispute.model_validate(response["dispute"])
         return Dispute.model_validate(response)
@@ -105,9 +138,21 @@ class AsyncDisputesResource:
     async def get(self, record_id: str) -> DisputeResponse:
         return DisputeResponse.model_validate(await self._http.get(f"/v1/records/{record_id}/dispute"))
 
-    async def escalate(self, record_id: str, reason: str | None = None) -> Dispute:
-        body = {"reason": reason} if reason else {}
-        return Dispute.model_validate(await self._http.post(f"/v1/records/{record_id}/dispute/escalate", json=body))
+    async def resolve(
+        self,
+        dispute_id: str,
+        *,
+        outcome: DisputeOutcome,
+        rationale: str | None = None,
+    ) -> Dispute:
+        """Render the outcome on a dispute. The dispute id goes in the path, not
+        the record id."""
+        body: dict[str, Any] = {"outcome": outcome}
+        if rationale is not None:
+            body["rationale"] = rationale
+        return Dispute.model_validate(
+            await self._http.post(f"/v1/disputes/{dispute_id}/resolve", json=body)
+        )
 
     async def withdraw(self, record_id: str, reason: str | None = None) -> Dispute:
         """Withdraw an open dispute. Optional ``reason`` is recorded in the audit trail."""

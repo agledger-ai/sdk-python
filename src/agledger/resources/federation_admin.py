@@ -22,8 +22,8 @@ class FederationAdminResource:
     def list_peers(self, **params: Any) -> Page[FederationPeer]:
         """List all peer Servers known to this instance.
 
-        Filters: ``status`` (``active`` / ``suspended`` / ``revoked``),
-        ``limit``, ``offset``, ``cursor``."""
+        Filters: ``status`` (``active`` or ``revoked``), ``limit``, ``offset``,
+        ``cursor``."""
         return Page[FederationPeer].model_validate(
             self._http.get_page("/federation/v1/admin/peers", params=params)
         )
@@ -38,19 +38,19 @@ class FederationAdminResource:
         )
 
     def revoke_peer(self, peer_hub_id: str, *, reason: str) -> dict[str, Any]:
-        """Revoke a peer Server (irreversible)."""
+        """Revoke a peer Server (irreversible). Returns ``{"revoked": true}`` and
+        the usual ``nextSteps``."""
         return self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/revoke", json={"reason": reason})
-
-    def resync_peer(self, peer_hub_id: str) -> dict[str, Any]:
-        """Trigger a full resync with a peer Server."""
-        return self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/resync", json={})
 
     def delete_peer(self, peer_hub_id: str) -> dict[str, Any]:
         """Permanently remove a revoked peer's record."""
         return self._http.delete(f"/federation/v1/admin/peers/{peer_hub_id}")
 
     def list_dlq(self, **params: Any) -> dict[str, Any]:
-        """List failed outbound federation messages in the dead-letter queue."""
+        """List failed outbound federation messages in the dead-letter queue.
+
+        Each item carries ``firstFailedAt`` alongside the latest attempt, so how
+        long a message has been stuck is readable without diffing two listings."""
         return self._http.get_page("/federation/v1/admin/dlq", params=params)
 
     def recover_dlq(self, **params: Any) -> dict[str, Any]:
@@ -59,8 +59,8 @@ class FederationAdminResource:
 
     def get_instance(self) -> dict[str, Any]:
         """This instance's federation identity: ``instanceId`` (paste verbatim as
-        a peer's ``peerHubId``), ``signingPublicKey``, ``encryptionPublicKey``,
-        and ``configured``, which is true only when a handshake can complete."""
+        a peer's ``peerHubId``), ``signingPublicKey``, and ``configured``, which
+        is true only when a handshake can complete."""
         return self._http.get("/federation/v1/admin/instance")
 
 
@@ -85,9 +85,6 @@ class AsyncFederationAdminResource:
 
     async def revoke_peer(self, peer_hub_id: str, *, reason: str) -> dict[str, Any]:
         return await self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/revoke", json={"reason": reason})
-
-    async def resync_peer(self, peer_hub_id: str) -> dict[str, Any]:
-        return await self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/resync", json={})
 
     async def delete_peer(self, peer_hub_id: str) -> dict[str, Any]:
         return await self._http.delete(f"/federation/v1/admin/peers/{peer_hub_id}")

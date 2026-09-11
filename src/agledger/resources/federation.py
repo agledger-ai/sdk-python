@@ -8,6 +8,21 @@ from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import PeerHandshakeResult
 
 
+def _handshake_body(
+    peer_hub_id: str, peer_url: str, signing_public_key: str,
+    peering_token: str, bound_org_id: str,
+) -> dict[str, Any]:
+    """The whole ``POST /federation/v1/peer`` body. All five are required and the
+    route takes nothing else."""
+    return {
+        "peerHubId": peer_hub_id,
+        "peerUrl": peer_url,
+        "signingPublicKey": signing_public_key,
+        "peeringToken": peering_token,
+        "boundOrgId": bound_org_id,
+    }
+
+
 def _state_transition_body(
     record_id: str, state: str, type: str, idempotency_key: str,
     schema_ref: dict[str, Any] | None, principal_agent_id: str | None,
@@ -65,19 +80,38 @@ class FederationResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def peer_handshake(self, **params: Any) -> PeerHandshakeResult:
-        """Establish a peer relationship via single-use peering token.
+    def peer_handshake(
+        self,
+        *,
+        peer_hub_id: str,
+        peer_url: str,
+        signing_public_key: str,
+        peering_token: str,
+        bound_org_id: str,
+    ) -> PeerHandshakeResult:
+        """Establish a peer relationship with another Server.
+
+        The five fields are the whole body: the route is
+        ``additionalProperties: false``, so anything else is a 400. It is
+        unauthenticated and admits on ``peering_token`` alone, a single-use
+        secret the RECEIVING Server's operator mints at
+        ``federation_admin.create_peering_token()`` and shares out of band. Send
+        it over the peer's real URL and nothing else: this is the one federation
+        call that carries no signature to fall back on.
+
+        ``signing_public_key`` is your own Ed25519 signing key, SPKI-DER
+        base64, which this Server will verify your later messages against. Your
+        own is served at ``federation_admin.get_instance()``.
 
         The ``peer_hub_id`` on the result is the identifier every
         ``/federation/v1/admin/peers/{peerHubId}`` path takes; ``peer_id`` is
-        the receiver-local row id and resolves nowhere."""
+        the receiver-local row id and resolves nowhere.
+        """
         return PeerHandshakeResult.model_validate(
-            self._http.post("/federation/v1/peer", json=params)
+            self._http.post("/federation/v1/peer", json=_handshake_body(
+                peer_hub_id, peer_url, signing_public_key, peering_token, bound_org_id,
+            ))
         )
-
-    def sync_agent_directory(self, **params: Any) -> dict[str, Any]:
-        """Synchronize agent directory with a peer."""
-        return self._http.post("/federation/v1/peer/agent-sync", json=params)
 
     def submit_state_transition(
         self,
@@ -145,13 +179,22 @@ class AsyncFederationResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def peer_handshake(self, **params: Any) -> PeerHandshakeResult:
+    async def peer_handshake(
+        self,
+        *,
+        peer_hub_id: str,
+        peer_url: str,
+        signing_public_key: str,
+        peering_token: str,
+        bound_org_id: str,
+    ) -> PeerHandshakeResult:
+        """Establish a peer relationship with another Server. The five fields are
+        the whole body, and the route admits on ``peering_token`` alone."""
         return PeerHandshakeResult.model_validate(
-            await self._http.post("/federation/v1/peer", json=params)
+            await self._http.post("/federation/v1/peer", json=_handshake_body(
+                peer_hub_id, peer_url, signing_public_key, peering_token, bound_org_id,
+            ))
         )
-
-    async def sync_agent_directory(self, **params: Any) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/peer/agent-sync", json=params)
 
     async def submit_state_transition(
         self,

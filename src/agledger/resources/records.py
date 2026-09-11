@@ -71,8 +71,8 @@ class RecordsResource:
         platform_ref: str | None = None,
         tolerance: dict[str, Any] | None = None,
         deadline: str | None = None,
-        commission_pct: float | None = None,
         max_submissions: int | None = None,
+        max_revisions: int | None = None,
         operating_mode: str | None = None,
         gate_mode: str | None = None,
         risk_classification: str | None = None,
@@ -102,6 +102,12 @@ class RecordsResource:
         ``UnprocessableError`` with ``type == "/problems/ambiguous-publisher"``
         and the candidates on ``.publishers``, rather than the engine picking one.
         Re-send pinned to one of those labels.
+
+        ``max_revisions`` caps the rework cycles this Record allows. Omit it to
+        inherit the org default (``enforcement.defaultMaxRevisions``, 3 unless
+        the org set one). It is immutable once created, and reaching the cap
+        refuses the next resubmit with a 422 and leaves the Record where it was,
+        so the principal can still render a verdict, cancel or dispute.
         """
         body: dict[str, Any] = {"type": type, "criteria": criteria}
         if publisher is not None: body["publisher"] = publisher
@@ -113,8 +119,8 @@ class RecordsResource:
         if platform_ref is not None: body["platformRef"] = platform_ref
         if tolerance is not None: body["tolerance"] = tolerance
         if deadline is not None: body["deadline"] = deadline
-        if commission_pct is not None: body["commissionPct"] = commission_pct
         if max_submissions is not None: body["maxSubmissions"] = max_submissions
+        if max_revisions is not None: body["maxRevisions"] = max_revisions
         if operating_mode is not None: body["operatingMode"] = operating_mode
         if gate_mode is not None: body["gateMode"] = gate_mode
         if risk_classification is not None: body["riskClassification"] = risk_classification
@@ -355,34 +361,6 @@ class RecordsResource:
         """Get the delegation graph for a Record."""
         return self._http.get(f"/v1/records/{record_id}/graph")
 
-    def counter_propose(
-        self,
-        record_id: str,
-        *,
-        counter_criteria: dict[str, Any] | None = None,
-        counter_tolerance: dict[str, Any] | None = None,
-        counter_deadline: str | None = None,
-        counter_commission_pct: float | None = None,
-        message: str | None = None,
-    ) -> RecordRow:
-        """Counter-propose modified terms on a PROPOSED Record. Sets
-        acceptanceStatus to COUNTER_PROPOSED."""
-        body: dict[str, Any] = {}
-        if counter_criteria is not None: body["counterCriteria"] = counter_criteria
-        if counter_tolerance is not None: body["counterTolerance"] = counter_tolerance
-        if counter_deadline is not None: body["counterDeadline"] = counter_deadline
-        if counter_commission_pct is not None: body["counterCommissionPct"] = counter_commission_pct
-        if message is not None: body["message"] = message
-        return RecordRow.model_validate(
-            self._http.post(f"/v1/records/{record_id}/counter-propose", json=body)
-        )
-
-    def accept_counter(self, record_id: str) -> RecordRow:
-        """Accept a counter-proposal on a Record."""
-        return RecordRow.model_validate(
-            self._http.post(f"/v1/records/{record_id}/accept-counter", json={})
-        )
-
     def get_sub_records(
         self,
         record_id: str,
@@ -532,8 +510,8 @@ class AsyncRecordsResource:
         platform_ref: str | None = None,
         tolerance: dict[str, Any] | None = None,
         deadline: str | None = None,
-        commission_pct: float | None = None,
         max_submissions: int | None = None,
+        max_revisions: int | None = None,
         operating_mode: str | None = None,
         gate_mode: str | None = None,
         risk_classification: str | None = None,
@@ -554,7 +532,8 @@ class AsyncRecordsResource:
         constraint_inheritance: str | None = None,
         enforcement_overrides: dict[str, Any] | None = None,
     ) -> RecordRow:
-        """Create a Record."""
+        """Create a Record. ``max_revisions`` caps the rework cycles it allows;
+        omit it to inherit the org default."""
         body: dict[str, Any] = {"type": type, "criteria": criteria}
         if publisher is not None: body["publisher"] = publisher
         if principal_agent_id is not None: body["principalAgentId"] = principal_agent_id
@@ -565,8 +544,8 @@ class AsyncRecordsResource:
         if platform_ref is not None: body["platformRef"] = platform_ref
         if tolerance is not None: body["tolerance"] = tolerance
         if deadline is not None: body["deadline"] = deadline
-        if commission_pct is not None: body["commissionPct"] = commission_pct
         if max_submissions is not None: body["maxSubmissions"] = max_submissions
+        if max_revisions is not None: body["maxRevisions"] = max_revisions
         if operating_mode is not None: body["operatingMode"] = operating_mode
         if gate_mode is not None: body["gateMode"] = gate_mode
         if risk_classification is not None: body["riskClassification"] = risk_classification
@@ -799,31 +778,6 @@ class AsyncRecordsResource:
 
     async def get_graph(self, record_id: str) -> dict[str, Any]:
         return await self._http.get(f"/v1/records/{record_id}/graph")
-
-    async def counter_propose(
-        self,
-        record_id: str,
-        *,
-        counter_criteria: dict[str, Any] | None = None,
-        counter_tolerance: dict[str, Any] | None = None,
-        counter_deadline: str | None = None,
-        counter_commission_pct: float | None = None,
-        message: str | None = None,
-    ) -> RecordRow:
-        body: dict[str, Any] = {}
-        if counter_criteria is not None: body["counterCriteria"] = counter_criteria
-        if counter_tolerance is not None: body["counterTolerance"] = counter_tolerance
-        if counter_deadline is not None: body["counterDeadline"] = counter_deadline
-        if counter_commission_pct is not None: body["counterCommissionPct"] = counter_commission_pct
-        if message is not None: body["message"] = message
-        return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/counter-propose", json=body)
-        )
-
-    async def accept_counter(self, record_id: str) -> RecordRow:
-        return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/accept-counter", json={})
-        )
 
     async def get_sub_records(
         self,

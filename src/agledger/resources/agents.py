@@ -36,15 +36,22 @@ class AgentsResource:
         *,
         limit: int | None = None,
         cursor: str | None = None,
+        include_deactivated: bool | None = None,
     ) -> Page[AgentDirectoryEntry]:
         """List agents in the caller's org (peer directory).
 
         Returns the lightweight directory shape: for full agent identity
-        use ``get(agent_id)``.
+        use ``get(agent_id)``. Deactivated agents are left out unless asked for.
+
+        ``include_deactivated=True`` widens the listing to agents that have been
+        deactivated, which read back with a ``deactivated_at``. The flag is bound
+        into ``next_cursor``, so set it before a walk rather than partway
+        through: a cursor minted without it keeps listing active agents only.
         """
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
+        if include_deactivated is not None: params["includeDeactivated"] = include_deactivated
         raw = self._http.get_page("/v1/agents", params=params)
         raw["data"] = [AgentDirectoryEntry.model_validate(d) for d in raw.get("data", [])]
         return Page[AgentDirectoryEntry].model_validate(raw)
@@ -101,11 +108,20 @@ class AsyncAgentsResource:
         *,
         limit: int | None = None,
         cursor: str | None = None,
+        include_deactivated: bool | None = None,
     ) -> Page[AgentDirectoryEntry]:
-        """List agents in the caller's org (peer directory)."""
+        """List agents in the caller's org (peer directory). Deactivated agents
+        are left out unless asked for.
+
+        ``include_deactivated=True`` widens the listing to agents that have been
+        deactivated, which read back with a ``deactivated_at``. The flag is bound
+        into ``next_cursor``, so set it before a walk rather than partway
+        through: a cursor minted without it keeps listing active agents only.
+        """
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
+        if include_deactivated is not None: params["includeDeactivated"] = include_deactivated
         raw = await self._http.get_page("/v1/agents", params=params)
         raw["data"] = [AgentDirectoryEntry.model_validate(d) for d in raw.get("data", [])]
         return Page[AgentDirectoryEntry].model_validate(raw)

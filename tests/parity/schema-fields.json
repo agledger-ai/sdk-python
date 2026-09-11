@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.6.0",
+  "apiVersion": "1.7.0",
   "schemaCount": 13,
   "schemas": {
     "Completion": [
@@ -33,11 +33,7 @@
     "DisputeResponse": [
       "context",
       "createdAt",
-      "currentTier",
       "evidenceWindowClosesAt",
-      "feeAmount",
-      "feeChargedTo",
-      "feeCurrency",
       "grounds",
       "id",
       "initiatedById",
@@ -233,8 +229,6 @@
       "childRecordIds",
       "coSignRequired",
       "coSignStatus",
-      "commissionAmount",
-      "commissionPct",
       "completionHint",
       "constraintInheritance",
       "contractVersion",
@@ -343,7 +337,7 @@
       "url"
     ]
   },
-  "enumCount": 31,
+  "enumCount": 35,
   "enums": {
     "AgentClass": {
       "values": [
@@ -366,6 +360,19 @@
       "specSites": [
         "paths//v1/admin/trusted-issuers/post/requestBody/content/application/json/schema/properties/autoProvisionScopeProfile",
         "paths//v1/admin/trusted-issuers/{id}/get/responses/200/content/application/json/schema/properties/autoProvisionScopeProfile"
+      ]
+    },
+    "CoSignStatus": {
+      "values": [
+        "failed",
+        "not_required",
+        "partial",
+        "pending",
+        "succeeded"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/coSignStatus",
+        "components/schemas/RecordRow/properties/settlementSignal/properties/coSignStatus"
       ]
     },
     "ComplianceRecordType": {
@@ -403,6 +410,15 @@
         "paths//federation/v1/disputes/post/requestBody/content/application/json/schema/properties/grounds"
       ]
     },
+    "DisputeOutcome": {
+      "values": [
+        "OVERTURNED",
+        "UPHELD"
+      ],
+      "specSites": [
+        "paths//v1/disputes/{id}/resolve/post/requestBody/content/application/json/schema/properties/outcome"
+      ]
+    },
     "DisputeProtocolAction": {
       "values": [
         "escalated",
@@ -416,15 +432,32 @@
     },
     "DisputeStatus": {
       "values": [
-        "ESCALATED",
         "EVIDENCE_WINDOW",
+        "PENDING_RESOLUTION",
         "RESOLVED",
-        "TIER_2_REVIEW",
-        "TIER_3_ARBITRATION",
         "WITHDRAWN"
       ],
       "specSites": [
         "components/schemas/DisputeResponse/properties/status"
+      ]
+    },
+    "EnforcementMode": {
+      "values": [
+        "advisory",
+        "enforced",
+        "none"
+      ],
+      "specSites": [
+        "paths//v1/admin/orgs/{id}/config/get/responses/200/content/application/json/schema/properties/enforcement/properties/toleranceEnforcement"
+      ]
+    },
+    "EnforcementSource": {
+      "values": [
+        "default",
+        "org"
+      ],
+      "specSites": [
+        "paths//v1/admin/orgs/{id}/config/get/responses/200/content/application/json/schema/properties/enforcementSource/properties/toleranceEnforcement"
       ]
     },
     "EuAiActDomain": {
@@ -497,7 +530,9 @@
         "record.revision_requested",
         "record.settled",
         "signal.emitted",
-        "signal.received"
+        "signal.received",
+        "system.cascading_gate_enqueue_failed",
+        "system.verification_enqueue_failed"
       ],
       "specSites": [
         "paths//v1/events/get/parameters/eventType/schema"
@@ -518,8 +553,7 @@
     "FederationPeerStatus": {
       "values": [
         "active",
-        "revoked",
-        "suspended"
+        "revoked"
       ],
       "specSites": [
         "paths//federation/v1/admin/peers/get/parameters/status/schema",
@@ -591,7 +625,6 @@
         "EXPIRED",
         "FAILED",
         "FULFILLED",
-        "PENDING_ARBITRATION",
         "PROCESSING",
         "PROPOSED",
         "RECORDED",
@@ -715,7 +748,6 @@
         "*",
         "agent.reference_added",
         "cascading.gate.complete",
-        "dispute.escalated",
         "dispute.opened",
         "dispute.resolved",
         "dispute.withdrawn",
@@ -744,7 +776,6 @@
         "record.gate_complete",
         "record.gate_held",
         "record.proposal_accepted",
-        "record.proposal_counter_proposed",
         "record.proposal_rejected",
         "record.proposed",
         "record.recorded",

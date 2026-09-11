@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-09-08T22:12:57.196Z",
+  "generatedAt": "2026-09-11T01:02:45.199Z",
   "sourceKind": "local",
-  "apiVersion": "1.6.0",
-  "count": 194,
+  "apiVersion": "1.7.0",
+  "count": 190,
   "routes": [
     {
       "method": "DELETE",
@@ -948,6 +948,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
+        "includeDeactivated",
         "limit"
       ],
       "pathParams": [],
@@ -1991,6 +1992,7 @@
         403,
         404,
         414,
+        422,
         429,
         500
       ]
@@ -2044,6 +2046,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -2098,6 +2101,7 @@
         403,
         404,
         414,
+        422,
         429,
         500
       ]
@@ -2406,6 +2410,7 @@
       "requiredFields": [],
       "bodyFields": [
         "approvedSuppliers",
+        "disputes",
         "enforcement"
       ],
       "queryFields": [],
@@ -2730,28 +2735,6 @@
     },
     {
       "method": "POST",
-      "path": "/federation/v1/admin/peers/{peerHubId}/resync",
-      "operationId": "resyncPeer",
-      "tag": "Federation Admin",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [
-        "peerHubId"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
       "path": "/federation/v1/admin/peers/{peerHubId}/revoke",
       "operationId": "revokePeerServer",
       "tag": "Federation Admin",
@@ -2856,18 +2839,14 @@
       "operationId": "peerHandshake",
       "tag": "Federation Peering",
       "requiredFields": [
-        "agentDirectory",
         "boundOrgId",
-        "encryptionPublicKey",
         "peerHubId",
         "peerUrl",
         "peeringToken",
         "signingPublicKey"
       ],
       "bodyFields": [
-        "agentDirectory",
         "boundOrgId",
-        "encryptionPublicKey",
         "peerHubId",
         "peerUrl",
         "peeringToken",
@@ -2882,35 +2861,6 @@
         403,
         414,
         422,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/federation/v1/peer/agent-sync",
-      "operationId": "receivePeerAgentDirectorySync",
-      "tag": "Federation Peering",
-      "requiredFields": [
-        "agents",
-        "directoryHash",
-        "peerHubId"
-      ],
-      "bodyFields": [
-        "agents",
-        "directoryHash",
-        "peerHubId",
-        "since"
-      ],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
         429,
         500
       ]
@@ -3344,6 +3294,7 @@
       "pathParams": [],
       "responseCodes": [
         200,
+        400,
         401,
         403,
         414,
@@ -3653,6 +3604,35 @@
     },
     {
       "method": "POST",
+      "path": "/v1/disputes/{id}/resolve",
+      "operationId": "resolveDispute",
+      "tag": "Disputes",
+      "requiredFields": [
+        "outcome"
+      ],
+      "bodyFields": [
+        "outcome",
+        "rationale"
+      ],
+      "queryFields": [],
+      "pathParams": [
+        "id"
+      ],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        404,
+        409,
+        414,
+        422,
+        429,
+        500
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/v1/records",
       "operationId": "createRecord",
       "tag": "Records",
@@ -3662,7 +3642,6 @@
       ],
       "bodyFields": [
         "autoActivate",
-        "commissionPct",
         "constraintInheritance",
         "contractVersion",
         "correlationId",
@@ -3674,6 +3653,7 @@
         "externalTaskId",
         "gateMode",
         "humanOversight",
+        "maxRevisions",
         "maxSubmissions",
         "metadata",
         "operatingMode",
@@ -3701,6 +3681,7 @@
         400,
         401,
         403,
+        404,
         414,
         422,
         429,
@@ -3736,65 +3717,11 @@
     },
     {
       "method": "POST",
-      "path": "/v1/records/{id}/accept-counter",
-      "operationId": "acceptCounterProposal",
-      "tag": "Agent-to-Agent",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [
-        "id"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        422,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
       "path": "/v1/records/{id}/cancel",
       "operationId": "cancelRecord",
       "tag": "Records",
       "requiredFields": [],
       "bodyFields": [
-        "reason"
-      ],
-      "queryFields": [],
-      "pathParams": [
-        "id"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        422,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/records/{id}/counter-propose",
-      "operationId": "counterProposeRecord",
-      "tag": "Agent-to-Agent",
-      "requiredFields": [],
-      "bodyFields": [
-        "counterCommissionPct",
-        "counterCriteria",
-        "counterDeadline",
-        "counterTolerance",
-        "message",
-        "notes",
         "reason"
       ],
       "queryFields": [],
@@ -4092,29 +4019,6 @@
         403,
         404,
         409,
-        414,
-        422,
-        429,
-        500
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/records/{recordId}/dispute/escalate",
-      "operationId": "escalateDispute",
-      "tag": "Disputes",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [
-        "recordId"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
         414,
         422,
         429,

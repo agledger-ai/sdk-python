@@ -123,6 +123,25 @@ record.schema_url  # "/v1/schemas/acme-po-v1?publisher=acme-corp". Follow it ver
 
 Single-publisher orgs, which is nearly every install, never pass `publisher` and read their one label (usually `local`) back.
 
+### Disputes
+
+`client.disputes` lists, files, resolves and withdraws disputes. Filing, withdrawing, reading and submitting evidence all take the **record** id. Resolving takes the **dispute** id, because the outcome is rendered on the dispute itself:
+
+```python
+page = client.disputes.list(status="PENDING_RESOLUTION")
+
+filed = client.disputes.create(record.id, grounds="quality_issue")
+
+# The dispute id, not the record id. `filed.id` is the one to pass.
+resolved = client.disputes.resolve(
+    filed.id,
+    outcome="OVERTURNED",
+    rationale="The completion met the tolerance band on re-read.",
+)
+```
+
+`UPHELD` leaves the disputed verdict standing and returns the Record to the status it held before the dispute. `OVERTURNED` says the verdict does not stand: a Record that had failed settles at FULFILLED with the verdict re-rendered as `accept`, and a RELEASE Settlement Signal follows. The rendering is the caller's; AGLedger holds and serves the signed decision and never makes it.
+
 ## Webhook Verification
 
 Webhooks ship in two signing schemes, selected per subscription via `signing_alg`.

@@ -34,7 +34,6 @@ CRITICAL_ROUTES: list[tuple[str, str]] = [
     ("POST", "/v1/records/{id}/transition"),
     ("POST", "/v1/records/{id}/accept"),
     ("POST", "/v1/records/{id}/reject"),
-    ("POST", "/v1/records/{id}/counter-propose"),
     ("POST", "/v1/records/{id}/verdict"),
     ("POST", "/v1/records/{recordId}/completions"),
     ("GET", "/v1/records/{recordId}/completions"),
@@ -47,6 +46,7 @@ CRITICAL_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/records/me/verdict-statistics"),
     ("GET", "/v1/records/agent/proposals"),
     ("GET", "/v1/disputes"),
+    ("POST", "/v1/disputes/{id}/resolve"),
     ("GET", "/v1/audit/org-reads"),
     ("GET", "/v1/audit/org-reads/checkpoints"),
     ("GET", "/v1/audit/org-reads/checkpoints/{id}"),
@@ -54,7 +54,6 @@ CRITICAL_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/audit/org-reads/checkpoints/{id}/proof"),
     ("GET", "/federation/v1/admin/peers/{peerHubId}"),
     ("DELETE", "/federation/v1/admin/peers/{peerHubId}"),
-    ("POST", "/federation/v1/admin/peers/{peerHubId}/resync"),
     ("POST", "/federation/v1/admin/peers/{peerHubId}/revoke"),
     ("POST", "/v1/webhooks"),
     ("POST", "/v1/schemas"),
@@ -109,6 +108,17 @@ RETIRED_ROUTES: list[tuple[str, str]] = [
     ("GET", "/v1/audit/enterprise-report"),
     ("PATCH", "/v1/admin/accounts/{id}/trust-level"),
     ("GET", "/v1/audit/stream"),  # renamed to /v1/siem/stream
+    # The negotiation counter-offer and the dispute tier ladder, removed by the
+    # Server without aliases. A dispute outcome is rendered at
+    # POST /v1/disputes/{id}/resolve now, and there is no counter-offer step:
+    # a performer accepts or rejects a proposal.
+    ("POST", "/v1/records/{id}/counter-propose"),
+    ("POST", "/v1/records/{id}/accept-counter"),
+    ("POST", "/v1/records/{recordId}/dispute/escalate"),
+    # Federation directory push and its operator-triggered resync. V1 federation
+    # has no agent-directory protocol.
+    ("POST", "/federation/v1/peer/agent-sync"),
+    ("POST", "/federation/v1/admin/peers/{peerHubId}/resync"),
 ]
 
 
@@ -158,6 +168,33 @@ def test_webhook_create_requires_event_types(
 
 def test_capabilities_uses_put(route_map: dict[str, dict[str, Any]]) -> None:
     assert "PUT /v1/agents/{agentId}/capabilities" in route_map
+
+
+def test_dispute_resolve_takes_the_dispute_id(
+    route_map: dict[str, dict[str, Any]],
+) -> None:
+    """The resolve route is keyed on the dispute, not the record it is against.
+    Every other dispute route in this SDK takes a recordId, so the odd one out is
+    worth pinning: the mistake resolves someone else's dispute or 404s."""
+    entry = route_map["POST /v1/disputes/{id}/resolve"]
+    assert entry["pathParams"] == ["id"]
+    assert "outcome" in entry["requiredFields"]
+    assert "recordId" not in entry["bodyFields"]
+
+
+def test_agents_list_takes_include_deactivated(
+    route_map: dict[str, dict[str, Any]],
+) -> None:
+    entry = route_map["GET /v1/agents"]
+    assert "includeDeactivated" in entry["queryFields"]
+
+
+def test_records_post_takes_max_revisions_and_not_commission(
+    route_map: dict[str, dict[str, Any]],
+) -> None:
+    entry = route_map["POST /v1/records"]
+    assert "maxRevisions" in entry["bodyFields"]
+    assert "commissionPct" not in entry["bodyFields"]
 
 
 def test_verdict_requires_completion_and_verdict(
