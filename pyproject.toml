@@ -54,8 +54,8 @@ dev = [
     # Pinned so CI matches the gate the SDK was validated against. Ruff stable
     # adds lint rules and pyright tightens inference across releases; an
     # unpinned floor would let a tool bump turn CI red without a code change.
-    "ruff==0.16.2",
-    "pyright==1.1.411",
+    "ruff==0.16.7",
+    "pyright==1.1.414",
 ]
 
 [project.scripts]
