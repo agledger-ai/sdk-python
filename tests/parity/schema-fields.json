@@ -337,7 +337,7 @@
       "url"
     ]
   },
-  "enumCount": 35,
+  "enumCount": 38,
   "enums": {
     "AgentClass": {
       "values": [
@@ -439,6 +439,17 @@
       ],
       "specSites": [
         "components/schemas/DisputeResponse/properties/status"
+      ]
+    },
+    "DisputeStatusFilter": {
+      "values": [
+        "EVIDENCE_WINDOW",
+        "PENDING_RESOLUTION",
+        "RESOLVED",
+        "WITHDRAWN"
+      ],
+      "specSites": [
+        "paths//v1/disputes/get/parameters/status/schema"
       ]
     },
     "EnforcementMode": {
@@ -556,9 +567,17 @@
         "revoked"
       ],
       "specSites": [
-        "paths//federation/v1/admin/peers/get/parameters/status/schema",
         "paths//federation/v1/admin/peers/get/responses/200/content/application/json/schema/allOf/1/properties/data/items/properties/status",
         "paths//federation/v1/admin/peers/{peerHubId}/get/responses/200/content/application/json/schema/properties/status"
+      ]
+    },
+    "FederationPeerStatusFilter": {
+      "values": [
+        "active",
+        "revoked"
+      ],
+      "specSites": [
+        "paths//federation/v1/admin/peers/get/parameters/status/schema"
       ]
     },
     "FederationSettlementSignal": {
@@ -634,6 +653,28 @@
       ],
       "specSites": [
         "components/schemas/RecordRow/properties/status"
+      ]
+    },
+    "RecordStatusFilter": {
+      "values": [
+        "ACTIVE",
+        "CANCELLED",
+        "CREATED",
+        "DISPUTED",
+        "EXPIRED",
+        "FAILED",
+        "FULFILLED",
+        "PROCESSING",
+        "PROPOSED",
+        "RECORDED",
+        "REJECTED",
+        "REMEDIATED",
+        "REVISION_REQUESTED"
+      ],
+      "specSites": [
+        "paths//v1/records/get/parameters/status/schema",
+        "paths//v1/records/search/get/parameters/status/schema",
+        "paths//v1/admin/records/get/parameters/status/schema"
       ]
     },
     "RecordTransitionAction": {

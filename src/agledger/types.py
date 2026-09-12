@@ -115,6 +115,18 @@ the engine default. One entry per field in the org config's
 AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED"]
 
 
+RecordStatusFilter = RecordStatus
+"""The Record statuses a status FILTER accepts.
+
+Identical to :data:`RecordStatus` here, because this SDK already closes the
+response union. The TypeScript SDK keeps its response union open for forward
+compatibility and so needs the two names to differ: the querystring is a strict
+enum server-side, and API 1.7.0 removed ``PENDING_ARBITRATION``, so a filter
+that still typed it sent a guaranteed 400. The name exists in both SDKs so the
+two speak the same vocabulary."""
+
+
+
 class SignedStatement(BaseModel):
     """Inline tamper-evident head of a Record's audit chain (the Signed Statement at chainPosition)."""
 
@@ -181,6 +193,28 @@ written inline at both sites, where nothing checked it, and ``partial`` was
 added by the Server without either site naming it."""
 
 
+class CoSignPeerLeg(BaseModel):
+    """One peer's leg of a Settlement Signal co-sign fan-out.
+
+    ``status`` is deliberately narrower than :data:`CoSignStatus`: ``partial``
+    is a fan-out outcome no single peer can hold, so it exists only on the
+    rollup."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    peer_hub_id: str = Field(alias="peerHubId")
+    """The peer this leg was addressed to."""
+    status: Literal["not_required", "pending", "succeeded", "failed"]
+    """That peer's own co-sign answer.
+
+    ``not_required`` is a leg that was never asked: a single-signature contract
+    type, or a peer the lenient peer policy waived because it does not carry the
+    co-sign type (that leg anchors a ``FEDERATION_CO_SIGN_WAIVED`` chain entry)."""
+    counter_signature: str | None = Field(None, alias="counterSignature")
+    """That peer's own counter-signature, verifiable offline against its
+    published vault keys. None unless its ``status`` is ``succeeded``."""
+
+
 class SettlementSignalSummary(BaseModel):
     """Settlement Signal projected onto a Record: the SETTLE/HOLD/RELEASE
     recommendation bound to the terminal verdict, plus federation delivery state."""
@@ -217,6 +251,20 @@ class SettlementSignalSummary(BaseModel):
     """Origin of the signal relative to this Server."""
     received_from: dict[str, Any] | None = Field(None, alias="receivedFrom")
     """Peer the signal was received from (inbound only), or None."""
+    co_sign_peers: list[CoSignPeerLeg] | None = Field(None, alias="coSignPeers")
+    """The per-peer legs ``co_sign_status`` and ``counter_signature`` roll up,
+    sorted by ``peer_hub_id``.
+
+    The only surface that answers WHICH peer did what: the rollup is one word
+    over the whole fan-out, and the counter-signature beside it is one peer's
+    artifact. It matters most for a waived leg, which sits outside the count on
+    every rollup value.
+
+    Read each leg off its own ``status``, never off ``delivered_to_peers`` or
+    ``failed_to_peers``: a peer can counter-sign and still fail delivery.
+    Present only on ``source == "outbound"``; an empty list when no signal row
+    carries co-sign metadata, which is the same condition that leaves
+    ``co_sign_status`` None."""
 
 
 class RecordIntegrity(BaseModel):
@@ -241,6 +289,13 @@ class RecordIntegrity(BaseModel):
     """True when the row-vs-chain projection cross-check ran."""
     drift_fields: list[str] = Field(default_factory=list, alias="driftFields")
     """Record fields that diverged from the chain when ``reason`` is ``record_projection_drift``."""
+    compared_fields: list[str] = Field(default_factory=list, alias="comparedFields")
+    """Record fields the comparison actually covered, which is not a fixed list.
+
+    ``criteria`` and ``verdict`` are compared only where the chain asserts them,
+    so on a record whose chain asserts no outcome (a dispute-overturned one)
+    ``verified is True`` is silent about the served ``verdict``. Read this before
+    treating a clean ``verified`` as covering the field you care about."""
 
 
 class RecordRow(BaseModel):
@@ -587,6 +642,9 @@ sits at ``PENDING_RESOLUTION``.
 Models widen this to ``DisputeStatus | str`` where the value is read off a
 response, so a status added by a newer Server parses rather than raising.
 """
+
+DisputeStatusFilter = DisputeStatus
+"""The dispute statuses a status FILTER accepts. See :data:`RecordStatusFilter`."""
 
 DisputeOutcome = Literal["UPHELD", "OVERTURNED"]
 """The rendering a principal sends to
@@ -1312,6 +1370,12 @@ class AgentHistoryEntry(BaseModel):
     status: RecordStatus | str
     """Record status at the time of the read. The Server types this as the record
     status enum now, where it used to be a bare string."""
+    role: Literal["performer", "principal", "both"]
+    """The structural role this agent held on the record: ``performer`` it was
+    assigned the work, ``principal`` it registered the work, ``both`` it is on
+    both sides. An agent-created notarize record defaults its performer to its
+    principal, so ``both`` is the ordinary case. Same vocabulary as ``role`` on
+    ``records.list()``, plus ``both`` for the overlap a filter does not name."""
     outcome: str
     """Gate verdict: ``accept``, ``reject``, or ``PENDING`` when none has been
     rendered."""
@@ -1543,10 +1607,43 @@ class GateStatus(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     record_id: str = Field(alias="recordId")
-    phase1_status: str = Field(alias="phase1Status")
-    phase2_status: str = Field(alias="phase2Status")
+    phase1_status: Literal["pending", "passed", "failed", "not_applicable"] = Field(
+        alias="phase1Status"
+    )
+    """Structural validation phase: the completion shape against the type's
+    ``completionSchema``. ``not_applicable`` when the record reached a terminal
+    state without a completion, so none is coming: a notarize-only type, a
+    parent settled by its children's rollup in auto mode, a record cancelled or
+    timed out before evidence landed.
+
+    Agents driving settle/hold should key on ``verdict`` instead."""
+    phase2_status: Literal[
+        "pending", "in_progress", "passed", "failed", "superseded", "not_applicable"
+    ] = Field(alias="phase2Status")
+    """Semantic (rules-engine) evaluation phase. In ``principal`` gate mode this
+    reflects whichever verdict row is most recent, engine-advisory or
+    principal-rendered, so ``verdict`` is the unambiguous accept/reject.
+
+    ``superseded`` means the latest evaluation row is no longer the decision that
+    stands: a dispute resolved OVERTURNED re-renders ``verdict`` and writes no
+    evaluation row of its own, leaving the failing gate row on the record with
+    ``verdict: accept`` and ``recommendation: RELEASE`` beside it."""
     last_evaluated_at: str | None = Field(None, alias="lastEvaluatedAt")
     pending_rules: list[str] | None = Field(None, alias="pendingRules")
+    verdict: Literal["accept", "reject"] | None = None
+    """The unambiguous gate decision, or None until one is rendered."""
+    recommendation: Literal["SETTLE", "HOLD", "RELEASE"] | None = None
+    """The Settlement Signal the record last emitted, the same value
+    ``records.get(id).settlementSignal.recommendation`` carries. ``RELEASE`` is
+    the value that says a dispute overturn released a held settlement rather
+    than settling it. None while pending, while the record is DISPUTED, and on a
+    federation projection."""
+    gate_mode: Literal["auto", "principal"] | None = Field(None, alias="gateMode")
+    """Whether the engine renders the verdict or a principal does."""
+    reporter_type: Literal["system", "principal", "accessor"] | None = Field(
+        None, alias="reporterType"
+    )
+    """Who rendered the standing verdict, or None when none has been."""
 
 
 class WebhookTestResult(BaseModel):
@@ -1645,6 +1742,14 @@ it.
 
 ``suspended`` was a member and is gone: a peer is either taking messages or
 revoked, and there is no middle state to filter on."""
+
+
+FederationPeerStatusFilter = Literal["active", "revoked"]
+"""The peer statuses a status FILTER accepts, closed on purpose.
+
+:data:`FederationPeerStatus` keeps its ``| str`` tail so a status a newer Server
+adds still parses on a response. A filter is the other direction: the
+querystring is a strict enum server-side, so anything else is a 400."""
 
 
 class FederationPeer(BaseModel):

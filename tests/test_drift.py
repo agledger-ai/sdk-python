@@ -151,7 +151,7 @@ def test_get_agent_history_maps_from_to_the_wire_name():
         return_value=httpx.Response(200, json={
             "data": [{
                 "recordId": "rec-1", "type": "notarize-generic-v1",
-                "status": "FULFILLED", "outcome": "accept",
+                "status": "FULFILLED", "role": "both", "outcome": "accept",
                 "createdAt": "2026-09-01T00:00:00Z",
                 "completedAt": "2026-09-01T00:05:00Z",
             }],
@@ -189,7 +189,7 @@ def test_get_agent_history_tolerates_a_pending_record():
         return_value=httpx.Response(200, json={
             "data": [{
                 "recordId": "rec-2", "type": "principal-gate-generic-v1",
-                "status": "PROCESSING", "outcome": "PENDING",
+                "status": "PROCESSING", "role": "performer", "outcome": "PENDING",
                 "createdAt": "2026-09-07T00:00:00Z", "completedAt": None,
             }],
             "total": 1, "nextCursor": None, "hasMore": False,
