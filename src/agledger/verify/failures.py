@@ -16,6 +16,17 @@ directive, not just a verdict.
 Mirrors ``packages/verify-core/src/failures.ts`` exactly: the export verifier
 emits the subset reachable on the ``/audit-export`` wire; the dump verifier
 emits the full set.
+
+Server-side cert re-checks are not mirrored here. The engine's chain
+verification also reports ``cert_missing``, ``cert_actor_drift``,
+``cert_window_drift``, ``cert_expired`` and ``agent_signature_invalid``, by
+comparing what an entry sealed in ``predicate.on_behalf_of.cert`` against the
+live ``ephemeral_certs`` row. Neither the export nor the dump carries that
+table, so an offline verifier cannot reproduce those comparisons, and it does
+not need to: it trusts only the signed bytes, which already fix the sealed cert
+id, thumbprint and expiry. The one cert-related check that can run offline is
+the agent signature, and only when the caller supplies the cert's public key
+(``CHAIN_AGENT_SIGNATURE_INVALID``).
 """
 
 from __future__ import annotations
@@ -49,6 +60,7 @@ FailureCode = Literal[
     "CHAIN_ALG_MISMATCH",
     "CHAIN_UNSUPPORTED_ALGORITHM",
     "CHAIN_SIGNING_KEY_DRIFT",
+    "CHAIN_AGENT_SIGNATURE_INVALID",
     # --- vault checkpoints ---
     "CHECKPOINT_ROW_MISSING",
     "CHECKPOINT_HASH_MISMATCH",
@@ -160,6 +172,14 @@ _SUGGESTIONS: dict[str, str] = {
         "kid in the COSE protected header. The column is a denormalized convenience and was "
         "rewritten after signing (possibly to point verification at another key). Trust the "
         "signed kid; treat the row as tampered."
+    ),
+    "CHAIN_AGENT_SIGNATURE_INVALID": (
+        "The agent signature sealed in predicate.on_behalf_of.agent_signature does not "
+        "verify under the supplied key whose RFC 7638 thumbprint the entry itself names, or "
+        "is sealed in a shape nothing can verify. The engine checks this signature at intake "
+        "and the envelope signature says the engine wrote it, so this is not a caller "
+        "mistake: treat the agent attribution of this entry as unproven and escalate to the "
+        "operator."
     ),
     "CHECKPOINT_ROW_MISSING": (
         "A signed checkpoint anchors a position that has no matching chain row. The chain was "
