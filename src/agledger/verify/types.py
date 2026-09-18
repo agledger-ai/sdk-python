@@ -12,7 +12,7 @@ verification path's only third-party needs are ``cbor2`` + ``cryptography``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from agledger.verify.failures import FailureCode
 
@@ -64,6 +64,22 @@ class VaultChainsReport:
     entry_count: int = 0
     checkpoint_count: int = 0
     failures: list[Failure] = field(default_factory=list[Failure])
+    agent_signatures_present: int = 0
+    """Entries that passed every other check and whose signed payload carries
+    ``predicate.on_behalf_of.agent_signature``, across every chain."""
+    agent_signatures_verified: int = 0
+    """Of those, the ones re-checked against a key passed as ``agent_keys`` and
+    found good. ``present > verified`` on a clean report means some were not
+    checked (no key for their cert, or a caller-asserted identity)."""
+    optional_checks: dict[str, Literal["applied", "skipped_no_input"]] = field(
+        default_factory=lambda: dict.fromkeys(
+            ("payload_binding", "oidc_actor", "key_temporal", "agent_signature"), "skipped_no_input"
+        )
+    )
+    """Which input-gated checks ran: ``payload_binding``, ``oidc_actor``,
+    ``key_temporal`` and ``agent_signature``, each ``applied`` once it ran on
+    any chain, so "not checked anywhere" never reads as "passed". Mirrors the
+    ``@agledger/verify`` report."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -71,6 +87,11 @@ class VaultChainsReport:
             "entryCount": self.entry_count,
             "checkpointCount": self.checkpoint_count,
             "failures": [f.to_json() for f in self.failures],
+            "optionalChecks": dict(self.optional_checks),
+            "agentSignatures": {
+                "present": self.agent_signatures_present,
+                "verified": self.agent_signatures_verified,
+            },
         }
 
 
