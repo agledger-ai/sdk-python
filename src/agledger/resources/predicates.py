@@ -12,7 +12,7 @@ Known kinds: ``record-state``, ``settlement-signal``, ``vault-checkpoint``,
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from agledger._http import AsyncHttpClient, HttpClient
 
@@ -22,12 +22,16 @@ class PredicatesResource:
         self._http = http
 
     def list(self) -> dict[str, Any]:
-        """List available predicate kinds."""
+        """List the predicate kinds: ``{"data": [{"kind", "predicateType",
+        "schemaUrl"}]}``."""
         return self._http.get("/predicates")
 
-    def get(self, kind: str, version: str = "v1") -> dict[str, Any]:
-        """Fetch the JSON Schema for a specific predicate kind + version."""
-        return self._http.get(f"/predicates/{kind}/{version}")
+    def get(self, kind: str, version: Literal["v1"] = "v1") -> dict[str, Any]:
+        """Fetch the JSON Schema (draft 2019-09) for a predicate kind, returned as
+        the schema document itself. ``v1`` is the only version the Server
+        publishes; the path segment is literal, so any other value 404s."""
+        del version
+        return self._http.get(f"/predicates/{kind}/v1")
 
 
 class AsyncPredicatesResource:
@@ -37,5 +41,6 @@ class AsyncPredicatesResource:
     async def list(self) -> dict[str, Any]:
         return await self._http.get("/predicates")
 
-    async def get(self, kind: str, version: str = "v1") -> dict[str, Any]:
-        return await self._http.get(f"/predicates/{kind}/{version}")
+    async def get(self, kind: str, version: Literal["v1"] = "v1") -> dict[str, Any]:
+        del version
+        return await self._http.get(f"/predicates/{kind}/v1")

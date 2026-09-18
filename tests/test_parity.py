@@ -11,6 +11,7 @@ self-contained. Skips when the manifest is unavailable (PyPI install).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -203,3 +204,65 @@ def test_verdict_requires_completion_and_verdict(
     entry = route_map["POST /v1/records/{id}/verdict"]
     for field in ("completionId", "verdict"):
         assert field in entry["requiredFields"]
+
+
+# --- every route the SDK calls is in the spec ---
+#
+# The critical-routes list above checks only the routes someone thought to
+# list. ``admin.get_rate_limit_exemption()`` called GET
+# /v1/admin/rate-limit-exemptions/{ownerId}, which the Server never registered,
+# and ``predicates.get()`` interpolated a version into a path whose version
+# segment is literal. This reads the call sites instead, so a method that
+# reaches a route the spec does not have fails here.
+
+_VERBS = {
+    "get": "GET", "get_page": "GET", "paginate": "GET", "get_ndjson": "GET", "get_bytes": "GET",
+    "post": "POST", "post_bytes": "POST", "put": "PUT", "patch": "PATCH", "delete": "DELETE",
+}
+# Reached on purpose although the published spec omits it: registered only on
+# a multi-org Server (see ``admin.create_org``).
+_OFF_SPEC = {"POST /v1/admin/orgs"}
+
+
+def _shape(path: str) -> str:
+    return re.sub(r"\{[^}]*\}", "{}", path.split("?")[0])
+
+
+def _sdk_calls() -> list[str]:
+    import ast
+
+    resources = Path(__file__).resolve().parents[1] / "src" / "agledger" / "resources"
+    calls: list[str] = []
+    for file in sorted(resources.glob("*.py")):
+        for node in ast.walk(ast.parse(file.read_text())):
+            if not (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in _VERBS
+                and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "_http"
+                and node.args
+            ):
+                continue
+            arg = node.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                path = arg.value
+            elif isinstance(arg, ast.JoinedStr):
+                path = "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in arg.values)
+            else:
+                raise AssertionError(f"{file.name}:{node.lineno}: route is not a literal path")
+            calls.append(f"{_VERBS[node.func.attr]} {path}")
+    return calls
+
+
+def test_the_route_guard_finds_the_call_sites() -> None:
+    # An extraction slip must not pass vacuously.
+    assert len(_sdk_calls()) > 300
+
+
+def test_every_route_the_sdk_calls_is_in_the_snapshot(route_map: dict[str, dict[str, Any]]) -> None:
+    known = {f"{key.split(' ', 1)[0]} {_shape(key.split(' ', 1)[1])}" for key in route_map}
+    missing = sorted(
+        {c for c in _sdk_calls() if c not in _OFF_SPEC and f"{c.split(' ', 1)[0]} {_shape(c.split(' ', 1)[1])}" not in known}
+    )
+    assert not missing, "SDK calls routes the spec does not have:\n" + "\n".join(missing)
