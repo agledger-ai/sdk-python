@@ -1,6 +1,6 @@
 # AGLedger Python SDK
 
-The official Python SDK for [AGLedger](https://agledger.ai): change control for AI agents. A self-hosted notary that records every change an agent makes, signed and hash-chained, and gates the ones that matter.
+The official Python SDK for [AGLedger](https://agledger.ai): change control for AI agents. Agent memory, approvals, audit trail, and notifications: one API, one signed ledger, self-hosted.
 
 **Learn more**
 
@@ -19,6 +19,8 @@ pip install agledger
 
 ```python
 import os
+import time
+
 from agledger import AgledgerClient
 
 client = AgledgerClient(
@@ -32,7 +34,9 @@ record = client.records.create(
     type="principal-gate-generic-v1",
     contract_version="1",
     platform="internal",
-    performer_agent_id="agt-123",
+    # Agent ids are uuids of agents you provisioned, so there is no id you can
+    # invent here: read one from your config.
+    performer_agent_id=os.environ["AGLEDGER_PERFORMER_AGENT_ID"],
     auto_activate=True,
     criteria={"summary": "Procure 100 widgets", "amount": 500, "currency": "USD"},
 )
@@ -40,8 +44,15 @@ record = client.records.create(
 # Submit a completion
 completion = client.completions.submit(
     record.id,
-    evidence={"summary": "Delivered 95 widgets", "evidenceUrl": "/out.pdf"},
+    evidence={"summary": "Delivered 95 widgets", "evidenceUrl": "https://files.example.com/out.pdf"},
 )
+
+# The worker validates the completion, then holds the Record at PROCESSING
+# until the principal renders its verdict.
+for _ in range(30):
+    if client.records.get(record.id).status == "PROCESSING":
+        break
+    time.sleep(1)
 
 # Principal verdict
 client.records.submit_verdict(record.id, completion_id=completion.id, verdict="accept")
@@ -64,6 +75,64 @@ default server to call. Omitting it raises `ConfigurationError` at construction,
 where the mistake is, rather than failing every subsequent call against a host
 you never named. `api_key` is the one option that falls back to an environment
 variable (`AGLEDGER_API_KEY`).
+
+Pass `bearer_token=` instead of `api_key=` to authenticate with a token your
+identity provider issued. It takes a string, a function the client calls before
+every request, or a credential object such as the OIDC cert credential below.
+Pass one or the other: both at once raises `ConfigurationError`. The function
+form caches nothing, so when the operator registers your issuer with
+`jti_single_use=True` (each token accepted once), have the function mint a
+fresh token on every call.
+
+## OIDC workload identity
+
+An agent can run with no AGLedger secret at rest. The operator registers your
+identity provider as a trusted issuer; the agent then trades a short-lived token
+from that provider for a certificate the Server signs, bound to a key pair the
+SDK generates in memory. `oidc_cert_credential` does the exchange, renews the
+certificate at half its lifetime (and once more if the Server answers 401), and
+signs every request body with the bound key, so each chain entry the agent
+writes carries the agent's signature as well as the Server's.
+
+```bash
+pip install 'agledger[oidc]'
+```
+
+```python
+import os
+from pathlib import Path
+
+from agledger import AgledgerClient, oidc_cert_credential
+
+def read_token() -> str:
+    # Kubernetes rotates a projected service-account token on disk; read it on
+    # every call rather than caching it.
+    return Path(os.environ["AGLEDGER_OIDC_TOKEN_FILE"]).read_text().strip()
+
+credential = oidc_cert_credential(get_oidc_token=read_token)
+client = AgledgerClient(bearer_token=credential, base_url=os.environ["AGLEDGER_EXTERNAL_URL"])
+
+me = client.auth.get_me()
+print(me.auth_type, me.owner_id)  # ephemeral_cert <agent id>
+```
+
+The function is called once per exchange. The Server accepts a token carrying a
+`jti` only once, so return one that has not been exchanged before: a token file
+works when it holds a new token by each renewal; otherwise have the function
+request a fresh token from your provider.
+`agent_id=` binds the certificate to a named agent; without it the Server binds
+from the token or, if the issuer allows it, creates the agent. A refused
+exchange raises `OidcCertExchangeError` carrying the Server's `recovery_hint`,
+with the token scrubbed out. `AsyncAgledgerClient` takes
+`async_oidc_cert_credential`, whose token function may be a coroutine.
+
+To verify an agent's own signatures offline later, keep `credential.public_key_jwk`
+and pass it to `verify_export(..., agent_keys=[jwk])` (see below).
+
+Work done for a person or another party rather than for the agent itself takes
+`on_behalf_of=`: an RFC 8693 delegation token your provider issued, sent as the
+`AGLedger-On-Behalf-Of` header on `records.create`, `records.transition`,
+`records.submit_verdict`, `completions.submit` and `a2a.call`.
 
 ## Async Support
 
@@ -217,6 +286,27 @@ if not result.valid:
 # VerifyExportResult(valid=True, verified_entries=12, total_entries=12, ...)
 ```
 
+Records written with the OIDC cert credential also carry the agent's own
+signature over each request body. Pass the certificate's public key to check
+those too; without it they are counted in `result.agent_signatures.present` and
+left unchecked:
+
+```python
+from agledger.verify import verify_export
+
+export_data = client.records.get_audit_export("rec-123")
+result = verify_export(
+    export_data.model_dump(by_alias=True),
+    agent_keys=[credential.public_key_jwk],  # the JWK sent at cert exchange
+)
+print(result.agent_signature_check, result.agent_signatures)
+# applied AgentSignatureCounts(present=1, verified=1)
+```
+
+A signature that does not verify fails as `CHAIN_AGENT_SIGNATURE_INVALID`. A key
+is matched to an entry only through the certificate thumbprint the entry signed,
+so a key for another certificate is simply never used.
+
 `broken_at.code` is a canonical SCREAMING_SNAKE `FailureCode` (e.g.
 `CHAIN_HASH_MISMATCH`, `CHAIN_SIGNATURE_INVALID`) shared with the TypeScript
 verification core, so both languages report identical verdicts over the shared
@@ -338,9 +428,7 @@ checkpoints = client.audit.vault_checkpoints.list(record_id="rec-123")
 
 ## Licensing
 
-The database is the license line. AGLedger is **free with its bundled PostgreSQL** (Docker Compose or Helm), in production, with every feature and every topology, federation included. Connecting to an external or managed database (Aurora, RDS, Cloud SQL, self-managed) requires a perpetual Enterprise license, priced per external database instance, plus an annual subscription for Enterprise-grade support. The license is perpetual: production never stops due to licensing.
-
-Full details: [agledger.ai/pricing](https://agledger.ai/pricing) | [License Agreement](https://agledger.ai/license)
+Running AGLedger in production requires a license. The Developer Edition license is free; see https://agledger.ai/license and https://agledger.ai/pricing.
 
 ## SDK License
 

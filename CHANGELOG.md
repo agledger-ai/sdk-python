@@ -4,6 +4,52 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload identity: an agent can authenticate with a short-lived certificate obtained from its own identity provider instead of an API key.
+
+### Added
+
+- **`bearer_token=` on `AgledgerClient` and `AsyncAgledgerClient`**, beside `api_key=`. Pass exactly one; both at once raises `ConfigurationError`. It takes a string, a function the client calls before every request (async functions on the async client), or a credential object implementing `BearerCredential` (`AsyncBearerCredential` on the async client). The function form caches nothing and is called again on a retried attempt, so a token source for an issuer registered with `jti_single_use` works as written. `AGLEDGER_API_KEY` still backs `api_key` only.
+
+- **`oidc_cert_credential(get_oidc_token=..., agent_id=None, refresh_fraction=0.5)`** and **`async_oidc_cert_credential(...)`**. The credential generates an Ed25519 key pair in memory, calls `get_oidc_token()` for a fresh token, and exchanges it at `POST /v1/auth/oidc/cert` for a certificate bound to that key. Requests then carry `Authorization: Bearer <certJws>`. It exchanges again once `refresh_fraction` of the certificate lifetime has passed, and once more on a 401 before surfacing it. Concurrent requests share one exchange (thread-safe on the sync client, task-safe on the async one). Every request with a body also carries `X-Agent-Signature` and `X-Agent-Signature-Content-Hash`, an Ed25519 signature over the exact bytes sent, which the Server seals into the chain entry as `predicate.on_behalf_of.agent_signature`. The private key is never written or logged. Needs the new `oidc` extra: `pip install 'agledger[oidc]'`.
+
+  A refused exchange raises `OidcCertExchangeError` (an `APIError`, not an `AuthenticationError`) carrying the Server's `recovery_hint`. The OIDC token is scrubbed from its message and `details`, because the Server echoes submitted input on a 400. The Server accepts each OIDC token id once, so `get_oidc_token` must return a token that has not been exchanged before.
+
+- **`agent_keys=` on `agledger.verify.verify_export`.** Pass the certificate's public key (`credential.public_key_jwk`) and every engine-validated agent signature sealed in the chain is re-verified offline, matched to the key only through the certificate thumbprint the entry signed. A failure is the new `CHAIN_AGENT_SIGNATURE_INVALID`. `VerifyExportResult` gains `agent_signatures` (present and verified counts) and `agent_signature_check` (`applied` or `skipped_no_input`). Without `agent_keys` no verdict changes. Mirrors `@agledger/verify-core`.
+
+- **`on_behalf_of=` on `records.create`, `records.transition`, `records.submit_verdict`, `completions.submit`, `a2a.dispatch` and `a2a.call`**, sent as the `AGLedger-On-Behalf-Of` header: an RFC 8693 delegation token for work done for a person or another party. `client.request()` also takes `headers=`.
+
+- **API key administration**: `create_api_key(allowed_ips=)`, `list_api_keys` and `list_all_api_keys` take `last_used_before=` and `never_used=` for finding dormant keys, `update_api_key(allowed_ips=)` replaces or (with `None`) removes the IP allow-list, and `bulk_revoke_api_keys` takes the filters the route accepts (`owner_id`, `role`, `created_before`, `last_used_before`, `never_used`, `reason`) as well as ids. Listed keys carry `revokedAt`, `revokedByKeyId`, `revocationReason` and `rotatedFromKeyId`.
+
+- **Trusted issuers** take `jti_single_use=` (an admin bearer is accepted once per token id) and `subject_allowlist=` on create and update.
+
+- **`record_read`** on `Completion`, `GateStatus`, `GateEvaluationResult` and `DisputeResponse`: the inclusion-proof coordinates of the org-admin read the call logged.
+
+- **`Webhook.managed_by`**: `provisioning` on a subscription declared in the operator's provisioning config. Deleting one is refused with 409 (`ConflictError`).
+
+- **`ConformanceResponse.license`** (`ConformanceLicense`: `validity`, `notice`, `escalated`), and **`LicenseTier`**, which gains `unlicensed`.
+
+- **`AuditChainIntegrityReason` and `AuditChainFailure`** are exported, named types, and both gain `cert_window_drift`: the certificate row's expiry no longer matches the instant the entry sealed.
+
+### Changed
+
+- **`chainIntegrityReason` and `chainIntegrityDetail.failure` on an audit export are open unions now.** They were closed `Literal`s, so an export carrying a reason this SDK did not list failed to parse at all. A value added by a newer Server now reads as a plain string.
+
+- The missing-credential error names both options: "No credential provided. Pass api_key or bearer_token, or set AGLEDGER_API_KEY." It is still an `AuthenticationError`.
+
+- `get_ndjson` (the SIEM stream) now records `last_request_id` and `rate_limit_info` like every other call.
+
+### Removed
+
+- **`create_api_key(environment=)`.** The Server refuses the field with a 400, and it was never read by anything: a key belongs to one Server's database, so the label named nothing.
+
+### Fixed
+
+- The async `update_api_key` mapped `expires_at` to `expiresAt`, which the route refuses. It now accepts exactly what the sync method does.
+
+- The README Quick Start ran against a placeholder agent id, sent an `evidenceUrl` the seeded contract refuses as not a URI, and rendered the verdict before the Record was awaiting one. It now reads the performer from `AGLEDGER_PERFORMER_AGENT_ID` and waits for `PROCESSING`, and runs end to end.
+
 ## [1.11.0] - 2026-09-10
 
 Reconciled against the API build that follows 1.6.0. That build replaced agent reputation with agent drift, removed the dispute tier ladder in favour of a single rendered outcome, dropped the negotiation counter-offer, and took commission out of the record entirely.
