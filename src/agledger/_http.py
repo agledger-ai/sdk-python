@@ -5,6 +5,8 @@ AGLedger SDK: HTTP client with retry, idempotency, and error mapping.
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
 import os
 import random
 import time
@@ -17,6 +19,15 @@ from typing import Any, cast
 
 import httpx
 
+from agledger._credentials import (
+    AsyncBearerCredential,
+    AsyncBearerToken,
+    AsyncCredentialContext,
+    BearerCredential,
+    BearerToken,
+    BodySigner,
+    CredentialContext,
+)
 from agledger._errors import (
     APIConnectionError,
     APIError,
@@ -119,14 +130,6 @@ def _parse_holdback_seconds(headers: httpx.Headers) -> int | None:
         return None
 
 
-def resolve_api_key(api_key: str | None) -> str:
-    """Resolve API key from argument or AGLEDGER_API_KEY env var."""
-    key = api_key or os.environ.get("AGLEDGER_API_KEY")
-    if not key:
-        raise AuthenticationError(message="No API key provided. Pass api_key or set AGLEDGER_API_KEY.")
-    return key
-
-
 def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
     try:
         return response.json()
@@ -134,7 +137,7 @@ def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
         return {"message": response.text or f"HTTP {response.status_code}"}
 
 
-def _build_error(response: httpx.Response) -> APIError:
+def build_error(response: httpx.Response) -> APIError:
     body = _parse_error_body(response)
     status = response.status_code
     cls = _ERROR_MAP.get(status, APIError)
@@ -231,27 +234,82 @@ def _query_params(params: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
-def _base_headers(
-    api_key: str,
-    method: str,
-    idempotency_key: str | None = None,
-    auth_override: str | None = None,
-) -> dict[str, str]:
+
+def resolve_api_key(api_key: str | None) -> str:
+    """Resolve API key from argument or AGLEDGER_API_KEY env var."""
+    key = api_key or os.environ.get("AGLEDGER_API_KEY")
+    if not key:
+        raise AuthenticationError(
+            message=(
+                "No credential provided. Pass api_key or bearer_token, or set AGLEDGER_API_KEY."
+            )
+        )
+    return key
+
+
+def _resolve_credential(api_key: str | None, bearer_token: object | None) -> object:
+    """Exactly one of ``api_key`` / ``bearer_token``; the env var backs ``api_key`` only."""
+    if api_key is not None and bearer_token is not None:
+        raise ConfigurationError(
+            "Pass api_key or bearer_token, not both. They are two ways of saying who "
+            "is calling, and the SDK will not pick one for you."
+        )
+    if bearer_token is None:
+        return resolve_api_key(api_key)
+    if isinstance(bearer_token, str) and not bearer_token:
+        raise ConfigurationError("bearer_token is an empty string.")
+    return bearer_token
+
+
+def on_behalf_of_headers(on_behalf_of: str | None) -> dict[str, str]:
+    """The ``AGLedger-On-Behalf-Of`` header for a delegation token, or none."""
+    return {"AGLedger-On-Behalf-Of": on_behalf_of} if on_behalf_of else {}
+
+
+def _checked_token(token: object) -> str:
+    if not isinstance(token, str) or not token:
+        raise ConfigurationError(
+            f"bearer_token produced {type(token).__name__} {token!r}; expected a non-empty string."
+        )
+    return token
+
+
+def encode_json(body: Any) -> bytes:
+    """The request body, serialized once.
+
+    Serialized here rather than by httpx so that the bytes a credential signs
+    are, by construction, the bytes that go on the wire."""
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _base_headers(method: str, idempotency_key: str | None = None) -> dict[str, str]:
     headers: dict[str, str] = {
         "Accept": "application/json",
         "User-Agent": f"agledger-python/{SDK_VERSION}",
     }
-    # Auth override: "none" omits header; any other string becomes Bearer token
-    if auth_override == "none":
-        pass  # No Authorization header (federation register / self-revoke)
-    elif auth_override:
-        headers["Authorization"] = f"Bearer {auth_override}"
-    else:
-        headers["Authorization"] = f"Bearer {api_key}"
     if method in ("POST", "PUT", "PATCH", "DELETE"):
         headers["Content-Type"] = "application/json"
         headers["Idempotency-Key"] = idempotency_key or str(uuid.uuid4())
     return headers
+
+
+def _parse_ndjson(response: httpx.Response) -> dict[str, Any]:
+    lines = [line for line in response.text.split("\n") if line.strip()]
+    return {
+        "data": [json.loads(line) for line in lines],
+        "cursor": response.headers.get("x-agledger-stream-cursor"),
+        "holdbackSeconds": _parse_holdback_seconds(response.headers),
+    }
+
+
+def _page(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, list):
+        return {"data": raw, "hasMore": False}
+    if isinstance(raw, dict) and "data" in raw:
+        return cast("dict[str, Any]", raw)
+    if isinstance(raw, dict):
+        return {"data": [raw], "hasMore": False}
+    return {"data": [], "hasMore": False}
 
 
 class HttpClient:
@@ -259,14 +317,22 @@ class HttpClient:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.Client | None = None,
+        *,
+        bearer_token: BearerToken | None = None,
     ) -> None:
-        self._api_key = api_key
+        credential = _resolve_credential(api_key, bearer_token)
+        if isinstance(credential, BearerCredential) and inspect.iscoroutinefunction(credential.get_token):
+            raise ConfigurationError(
+                "This credential is asynchronous. Use it with AsyncAgledgerClient, or build "
+                "a synchronous one (oidc_cert_credential rather than async_oidc_cert_credential)."
+            )
+        self._credential = cast("BearerToken", credential)
         if not base_url:
             raise ConfigurationError(
                 "base_url is required. AGLedger is self-hosted, so the SDK cannot guess "
@@ -292,10 +358,100 @@ class HttpClient:
         self.last_request_id = response.headers.get("x-request-id")
         self.rate_limit_info = _parse_rate_limit_headers(response.headers) or self.rate_limit_info
 
+    def _token(self, force_refresh: bool, rejected_token: str | None = None) -> str:
+        credential = self._credential
+        if isinstance(credential, str):
+            return credential
+        if isinstance(credential, BearerCredential):
+            context = CredentialContext(self._base_url, self._client, force_refresh, rejected_token)
+            return _checked_token(credential.get_token(context))
+        return _checked_token(credential())
+
+    def _signature_headers(self, body: bytes | None, auth_override: str | None) -> Mapping[str, str]:
+        if not body or auth_override is not None or not isinstance(self._credential, BodySigner):
+            return {}
+        return self._credential.sign_body(body)
+
     def close(self) -> None:
         """Close the underlying HTTP client if we own it."""
         if self._owns_client:
             self._client.close()
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: Mapping[str, str],
+        content: bytes | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        auth_override: str | None = None,
+        keep_error_body: bool = False,
+    ) -> httpx.Response:
+        """Send one logical request: retries, the credential, and error mapping.
+
+        The Authorization header is rebuilt on every attempt, because a
+        function-form bearer is called per request and a credential may have
+        refreshed since the last one. A 401 on a :class:`BearerCredential`
+        asks it for a fresh token exactly once and resends; a second 401 is
+        raised as it stands.
+        """
+        url = f"{self._base_url}{path}"
+        refreshable = auth_override is None and isinstance(self._credential, BearerCredential)
+        force_refresh = False
+        refreshed = False
+        sent_token: str | None = None
+        rejected_token: str | None = None
+        attempt = 0
+        while True:
+            try:
+                request_headers = dict(headers)
+                if auth_override is None:
+                    sent_token = self._token(force_refresh, rejected_token)
+                    request_headers["Authorization"] = f"Bearer {sent_token}"
+                elif auth_override != "none":
+                    request_headers["Authorization"] = f"Bearer {auth_override}"
+                force_refresh = False
+                response = self._client.request(
+                    method,
+                    url,
+                    headers=request_headers,
+                    content=content,
+                    params=_query_params(params),
+                    timeout=timeout or self._timeout,
+                )
+            except httpx.ConnectError as e:
+                if attempt < self._max_retries:
+                    time.sleep(_backoff(attempt))
+                    attempt += 1
+                    continue
+                raise APIConnectionError(str(e)) from e
+            except httpx.TimeoutException as e:
+                if attempt < self._max_retries:
+                    time.sleep(_backoff(attempt))
+                    attempt += 1
+                    continue
+                raise APITimeoutError(str(e)) from e
+
+            self._capture_response_meta(response)
+
+            if response.status_code == 401 and refreshable and not refreshed:
+                refreshed = True
+                force_refresh = True
+                rejected_token = sent_token
+                continue
+
+            if response.status_code >= 400:
+                error = build_error(response)
+                if keep_error_body:
+                    error.raw_body = response.content
+                if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
+                    time.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
+                    attempt += 1
+                    continue
+                raise error
+            return response
 
     def request(
         self,
@@ -307,52 +463,20 @@ class HttpClient:
         idempotency_key: str | None = None,
         timeout: float | None = None,
         auth_override: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        url = f"{self._base_url}{path}"
         key = f"{self._idempotency_key_prefix}{idempotency_key}" if idempotency_key else None
-        headers = _base_headers(self._api_key, method, key, auth_override=auth_override)
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = self._client.request(
-                    method,
-                    url,
-                    headers=headers,
-                    json=json,
-                    params=_query_params(params),
-                    timeout=timeout or self._timeout,
-                )
-
-                self._capture_response_meta(response)
-
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        time.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-
-                if response.status_code == 204:
-                    return None
-                return response.json()
-
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-
-        raise last_error or APIError(500, message="Max retries exceeded")
+        request_headers = _base_headers(method, key)
+        request_headers.update(headers or {})
+        content = encode_json(json) if json is not None else None
+        request_headers.update(self._signature_headers(content, auth_override))
+        response = self._send(
+            method, path, headers=request_headers, content=content, params=params,
+            timeout=timeout, auth_override=auth_override,
+        )
+        if response.status_code == 204:
+            return None
+        return response.json()
 
     def get(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         return self.request("GET", path, params=params, **kwargs)
@@ -413,116 +537,32 @@ class HttpClient:
         auth_override: str | None = None,
         timeout: float | None = None,
     ) -> bytes:
-        url = f"{self._base_url}{path}"
         idempotency_key = f"{self._idempotency_key_prefix}{uuid.uuid4()}" if method == "POST" else None
-        headers = _base_headers(self._api_key, method, idempotency_key, auth_override=auth_override)
+        headers = _base_headers(method, idempotency_key)
         headers["Accept"] = accept
         if body is not None:
             headers["Content-Type"] = content_type
         else:
             headers.pop("Content-Type", None)
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = self._client.request(
-                    method,
-                    url,
-                    headers=headers,
-                    content=body,
-                    params=_query_params(params),
-                    timeout=timeout or self._timeout,
-                )
-                self._capture_response_meta(response)
-                raw = response.content
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    error.raw_body = raw
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        time.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-                return raw
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-        raise last_error or APIError(500, message="Max retries exceeded")
+        headers.update(self._signature_headers(body, auth_override))
+        response = self._send(
+            method, path, headers=headers, content=body, params=params, timeout=timeout,
+            auth_override=auth_override, keep_error_body=True,
+        )
+        return response.content
 
     def get_ndjson(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         """Fetch an NDJSON endpoint.
 
         Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
         """
-        url = f"{self._base_url}{path}"
-        headers = _base_headers(self._api_key, "GET")
+        headers = _base_headers("GET")
         headers["Accept"] = "application/x-ndjson"
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = self._client.request(
-                    "GET",
-                    url,
-                    headers=headers,
-                    params=_query_params(params),
-                    timeout=kwargs.get("timeout") or self._timeout,
-                )
-
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        time.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-
-                import json as _json
-                text = response.text
-                lines = [line for line in text.split("\n") if line.strip()]
-                data = [_json.loads(line) for line in lines]
-                cursor = response.headers.get("x-agledger-stream-cursor")
-                return {
-                    "data": data,
-                    "cursor": cursor,
-                    "holdbackSeconds": _parse_holdback_seconds(response.headers),
-                }
-
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-
-        raise last_error or APIError(500, message="Max retries exceeded")
+        response = self._send("GET", path, headers=headers, params=params, timeout=kwargs.get("timeout"))
+        return _parse_ndjson(response)
 
     def get_page(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
-        raw = self.get(path, params=params, **kwargs)
-        if isinstance(raw, list):
-            return {"data": raw, "hasMore": False}
-        if isinstance(raw, dict) and "data" in raw:
-            return cast("dict[str, Any]", raw)
-        if isinstance(raw, dict):
-            return {"data": [raw], "hasMore": False}
-        return {"data": [], "hasMore": False}
+        return _page(self.get(path, params=params, **kwargs))
 
     def paginate(
         self, path: str, *, params: dict[str, Any] | None = None, max_pages: int | None = None
@@ -560,14 +600,24 @@ class AsyncHttpClient:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.AsyncClient | None = None,
+        *,
+        bearer_token: AsyncBearerToken | None = None,
     ) -> None:
-        self._api_key = api_key
+        credential = _resolve_credential(api_key, bearer_token)
+        if isinstance(credential, AsyncBearerCredential) and not inspect.iscoroutinefunction(
+            credential.get_token
+        ):
+            raise ConfigurationError(
+                "This credential is synchronous. Use it with AgledgerClient, or build an "
+                "asynchronous one (async_oidc_cert_credential rather than oidc_cert_credential)."
+            )
+        self._credential = cast("AsyncBearerToken", credential)
         if not base_url:
             raise ConfigurationError(
                 "base_url is required. AGLedger is self-hosted, so the SDK cannot guess "
@@ -593,9 +643,95 @@ class AsyncHttpClient:
         self.last_request_id = response.headers.get("x-request-id")
         self.rate_limit_info = _parse_rate_limit_headers(response.headers) or self.rate_limit_info
 
+    async def _token(self, force_refresh: bool, rejected_token: str | None = None) -> str:
+        credential = self._credential
+        if isinstance(credential, str):
+            return credential
+        if isinstance(credential, AsyncBearerCredential):
+            context = AsyncCredentialContext(self._base_url, self._client, force_refresh, rejected_token)
+            return _checked_token(await credential.get_token(context))
+        token = credential()
+        if inspect.isawaitable(token):
+            token = await token
+        return _checked_token(token)
+
+    def _signature_headers(self, body: bytes | None, auth_override: str | None) -> Mapping[str, str]:
+        if not body or auth_override is not None or not isinstance(self._credential, BodySigner):
+            return {}
+        return self._credential.sign_body(body)
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    async def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: Mapping[str, str],
+        content: bytes | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        auth_override: str | None = None,
+        keep_error_body: bool = False,
+    ) -> httpx.Response:
+        """Async twin of :meth:`HttpClient._send`."""
+        url = f"{self._base_url}{path}"
+        refreshable = auth_override is None and isinstance(self._credential, AsyncBearerCredential)
+        force_refresh = False
+        refreshed = False
+        sent_token: str | None = None
+        rejected_token: str | None = None
+        attempt = 0
+        while True:
+            try:
+                request_headers = dict(headers)
+                if auth_override is None:
+                    sent_token = await self._token(force_refresh, rejected_token)
+                    request_headers["Authorization"] = f"Bearer {sent_token}"
+                elif auth_override != "none":
+                    request_headers["Authorization"] = f"Bearer {auth_override}"
+                force_refresh = False
+                response = await self._client.request(
+                    method,
+                    url,
+                    headers=request_headers,
+                    content=content,
+                    params=_query_params(params),
+                    timeout=timeout or self._timeout,
+                )
+            except httpx.ConnectError as e:
+                if attempt < self._max_retries:
+                    await asyncio.sleep(_backoff(attempt))
+                    attempt += 1
+                    continue
+                raise APIConnectionError(str(e)) from e
+            except httpx.TimeoutException as e:
+                if attempt < self._max_retries:
+                    await asyncio.sleep(_backoff(attempt))
+                    attempt += 1
+                    continue
+                raise APITimeoutError(str(e)) from e
+
+            self._capture_response_meta(response)
+
+            if response.status_code == 401 and refreshable and not refreshed:
+                refreshed = True
+                force_refresh = True
+                rejected_token = sent_token
+                continue
+
+            if response.status_code >= 400:
+                error = build_error(response)
+                if keep_error_body:
+                    error.raw_body = response.content
+                if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
+                    await asyncio.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
+                    attempt += 1
+                    continue
+                raise error
+            return response
 
     async def request(
         self,
@@ -607,52 +743,20 @@ class AsyncHttpClient:
         idempotency_key: str | None = None,
         timeout: float | None = None,
         auth_override: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
-        url = f"{self._base_url}{path}"
         key = f"{self._idempotency_key_prefix}{idempotency_key}" if idempotency_key else None
-        headers = _base_headers(self._api_key, method, key, auth_override=auth_override)
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = await self._client.request(
-                    method,
-                    url,
-                    headers=headers,
-                    json=json,
-                    params=_query_params(params),
-                    timeout=timeout or self._timeout,
-                )
-
-                self._capture_response_meta(response)
-
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        await asyncio.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-
-                if response.status_code == 204:
-                    return None
-                return response.json()
-
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-
-        raise last_error or APIError(500, message="Max retries exceeded")
+        request_headers = _base_headers(method, key)
+        request_headers.update(headers or {})
+        content = encode_json(json) if json is not None else None
+        request_headers.update(self._signature_headers(content, auth_override))
+        response = await self._send(
+            method, path, headers=request_headers, content=content, params=params,
+            timeout=timeout, auth_override=auth_override,
+        )
+        if response.status_code == 204:
+            return None
+        return response.json()
 
     async def get(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         return await self.request("GET", path, params=params, **kwargs)
@@ -706,116 +810,32 @@ class AsyncHttpClient:
         auth_override: str | None = None,
         timeout: float | None = None,
     ) -> bytes:
-        url = f"{self._base_url}{path}"
         idempotency_key = f"{self._idempotency_key_prefix}{uuid.uuid4()}" if method == "POST" else None
-        headers = _base_headers(self._api_key, method, idempotency_key, auth_override=auth_override)
+        headers = _base_headers(method, idempotency_key)
         headers["Accept"] = accept
         if body is not None:
             headers["Content-Type"] = content_type
         else:
             headers.pop("Content-Type", None)
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = await self._client.request(
-                    method,
-                    url,
-                    headers=headers,
-                    content=body,
-                    params=_query_params(params),
-                    timeout=timeout or self._timeout,
-                )
-                self._capture_response_meta(response)
-                raw = response.content
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    error.raw_body = raw
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        await asyncio.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-                return raw
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-        raise last_error or APIError(500, message="Max retries exceeded")
+        headers.update(self._signature_headers(body, auth_override))
+        response = await self._send(
+            method, path, headers=headers, content=body, params=params, timeout=timeout,
+            auth_override=auth_override, keep_error_body=True,
+        )
+        return response.content
 
     async def get_ndjson(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         """Fetch an NDJSON endpoint.
 
         Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
         """
-        url = f"{self._base_url}{path}"
-        headers = _base_headers(self._api_key, "GET")
+        headers = _base_headers("GET")
         headers["Accept"] = "application/x-ndjson"
-        last_error: Exception | None = None
-
-        for attempt in range(self._max_retries + 1):
-            try:
-                response = await self._client.request(
-                    "GET",
-                    url,
-                    headers=headers,
-                    params=_query_params(params),
-                    timeout=kwargs.get("timeout") or self._timeout,
-                )
-
-                if response.status_code >= 400:
-                    error = _build_error(response)
-                    if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
-                        retry_after = getattr(error, "retry_after", None)
-                        await asyncio.sleep(_backoff(attempt, retry_after))
-                        last_error = error
-                        continue
-                    raise error
-
-                import json as _json
-                text = response.text
-                lines = [line for line in text.split("\n") if line.strip()]
-                data = [_json.loads(line) for line in lines]
-                cursor = response.headers.get("x-agledger-stream-cursor")
-                return {
-                    "data": data,
-                    "cursor": cursor,
-                    "holdbackSeconds": _parse_holdback_seconds(response.headers),
-                }
-
-            except httpx.ConnectError as e:
-                last_error = APIConnectionError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-            except httpx.TimeoutException as e:
-                last_error = APITimeoutError(str(e))
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    continue
-                raise last_error from e
-
-        raise last_error or APIError(500, message="Max retries exceeded")
+        response = await self._send("GET", path, headers=headers, params=params, timeout=kwargs.get("timeout"))
+        return _parse_ndjson(response)
 
     async def get_page(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
-        raw = await self.get(path, params=params, **kwargs)
-        if isinstance(raw, list):
-            return {"data": raw, "hasMore": False}
-        if isinstance(raw, dict) and "data" in raw:
-            return cast("dict[str, Any]", raw)
-        if isinstance(raw, dict):
-            return {"data": [raw], "hasMore": False}
-        return {"data": [], "hasMore": False}
+        return _page(await self.get(path, params=params, **kwargs))
 
     async def paginate(
         self, path: str, *, params: dict[str, Any] | None = None, max_pages: int | None = None

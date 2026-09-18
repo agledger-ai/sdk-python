@@ -324,12 +324,12 @@ def test_context_manager():
 def test_env_var_fallback(monkeypatch):
     monkeypatch.setenv("AGLEDGER_API_KEY", "agl_agt_from_env")
     client = AgledgerClient(base_url="https://agledger.example.com")
-    assert client._http._api_key == "agl_agt_from_env"
+    assert client._http._credential == "agl_agt_from_env"
 
 
 def test_no_api_key_raises(monkeypatch):
     monkeypatch.delenv("AGLEDGER_API_KEY", raising=False)
-    with pytest.raises(AuthenticationError, match="No API key"):
+    with pytest.raises(AuthenticationError, match="No credential provided"):
         AgledgerClient(base_url="https://agledger.example.com")
 
 

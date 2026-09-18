@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "1.7.0",
+  "apiVersion": "1.8.0",
   "schemaCount": 13,
   "schemas": {
     "Completion": [
@@ -13,6 +13,7 @@
       "lastVerdictReason",
       "nextSteps",
       "recordId",
+      "recordRead",
       "recordStatus",
       "settlementSignal",
       "structuralValidation",
@@ -328,6 +329,7 @@
       "isPaused",
       "lastFailureAt",
       "lastSuccessfulAt",
+      "managedBy",
       "nextSteps",
       "recordTypes",
       "secret",
@@ -611,7 +613,8 @@
     "LicenseTier": {
       "values": [
         "developer",
-        "enterprise"
+        "enterprise",
+        "unlicensed"
       ],
       "specSites": [
         "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/tier"

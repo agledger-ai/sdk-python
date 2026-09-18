@@ -372,3 +372,19 @@ async def test_async_stream():
         result = await client.compliance.stream(since="2026-01-01T00:00:00Z")
         assert len(result.events) == 2
         assert result.cursor == "2026-01-01T01:00:00Z_evt-2"
+
+
+@respx.mock
+def test_stream_records_the_request_id_like_every_other_call():
+    # The NDJSON path used to skip the response bookkeeping, so after a stream
+    # poll `last_request_id` still named the call before it.
+    respx.get("https://agledger.example.com/v1/siem/stream").mock(
+        return_value=httpx.Response(
+            200,
+            text=NDJSON,
+            headers={"content-type": "application/x-ndjson", "x-request-id": "req-stream-1"},
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.compliance.stream(since="2026-01-01T00:00:00Z")
+    assert client.last_request_id == "req-stream-1"

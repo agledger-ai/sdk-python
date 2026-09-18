@@ -606,6 +606,11 @@ class Completion(BaseModel):
     """ISO 8601 creation timestamp."""
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after completion submission."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this response logged,
+    present only when an org admin read a Record it is not a party to. Verify
+    it against a signed checkpoint with
+    ``audit.org_reads_checkpoints.proof(checkpoint_id, leaf_index)``."""
 
 
 class GateEvaluationResult(BaseModel):
@@ -618,6 +623,9 @@ class GateEvaluationResult(BaseModel):
     overall_status: str = Field(alias="overallStatus")
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after evaluation."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this call logged, when
+    an org admin evaluated a Record it is not a party to."""
 
 
 DisputeStatus = Literal[
@@ -707,6 +715,9 @@ class DisputeResponse(BaseModel):
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls on the dispute, on the envelope rather than on
     ``dispute``."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this call logged, when
+    an org admin read a dispute on a Record it is not a party to."""
 
 
 WebhookEventType = (
@@ -877,6 +888,12 @@ class Webhook(BaseModel):
     """Last successful delivery timestamp (ISO 8601), or None."""
     last_failure_at: str | None = Field(None, alias="lastFailureAt")
     """Last failed delivery timestamp (ISO 8601), or None."""
+    managed_by: str | None = Field(None, alias="managedBy")
+    """``provisioning`` when this subscription is declared in the operator's
+    provisioning config, or None when it was created through the API. A
+    provisioning-managed subscription is refused on delete with a 409
+    (:class:`~agledger.ConflictError`): remove it from the config and reload
+    provisioning instead."""
     created_at: str = Field(alias="createdAt")
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after webhook creation."""
@@ -981,6 +998,71 @@ class AuditExportEntry(BaseModel):
     integrity: dict[str, Any]
 
 
+AuditChainIntegrityReason = (
+    Literal[
+        "chain_broken_at",
+        # The record exists but its chain holds no entries. Every creation
+        # path appends an entry in the same transaction as the record, so an
+        # empty chain is every entry gone, not a record that was never chained.
+        # Reported rather than passed as trivially valid.
+        "audit_vault_empty",
+        "audit_vault_row_missing_for_checkpoint",
+        "checkpoint_hash_mismatch",
+        "payload_drift",
+        "oidc_actor_drift",
+        "cert_actor_drift",
+        # The cert row's expires_at is no longer the instant the entry sealed.
+        # Written once at issuance and never rewritten, so a divergence is an
+        # out-of-band edit, and widening it is how an entry outside the real
+        # window is made to pass the expiry check.
+        "cert_window_drift",
+        "cert_expired",
+        "cert_missing",
+        "agent_signature_invalid",
+        # API v1.3.2: the vault fails closed on per-entry signature
+        # verification: signature did not verify / signing key unresolvable /
+        # denormalized signing_key_id column drifted from the signed kid.
+        "signature_invalid",
+        "signing_key_unknown",
+        "signing_key_drift",
+        # Signed under a COSE algorithm this engine build cannot verify. Not a
+        # tamper signal: check minVerifierVersion on the key.
+        "unsupported_algorithm",
+    ]
+    | str
+)
+"""Why a Record's hash chain failed verification: ``chainIntegrityReason`` on
+the audit export, top level and under ``exportMetadata``.
+
+Open with ``| str`` because this is read off a response: the Server has added
+members here several times, and a closed ``Literal`` made every export
+carrying a new one fail to parse rather than surface it."""
+
+
+AuditChainFailure = (
+    Literal[
+        "previous_hash_mismatch",
+        "payload_hash_mismatch",
+        "checkpoint_anchor_mismatch",
+        "audit_vault_truncated",
+        "payload_drift",
+        "oidc_actor_drift",
+        "cert_actor_drift",
+        "cert_window_drift",
+        "cert_expired",
+        "cert_missing",
+        "agent_signature_invalid",
+        "signature_invalid",
+        "signing_key_unknown",
+        "signing_key_drift",
+        "unsupported_algorithm",
+    ]
+    | str
+)
+"""The failure mode inside ``chainIntegrityDetail.failure``. Same meanings as
+:data:`AuditChainIntegrityReason`, and open for the same reason."""
+
+
 class AuditChainIntegrityDetail(BaseModel):
     """Localizes a chain-integrity failure. Null on a clean chain."""
 
@@ -992,31 +1074,7 @@ class AuditChainIntegrityDetail(BaseModel):
     actual_previous_hash: str | None = Field(None, alias="actualPreviousHash")
     expected_payload_hash: str | None = Field(None, alias="expectedPayloadHash")
     actual_payload_hash: str | None = Field(None, alias="actualPayloadHash")
-    failure: (
-        Literal[
-            "previous_hash_mismatch",
-            "payload_hash_mismatch",
-            "checkpoint_anchor_mismatch",
-            "audit_vault_truncated",
-            "payload_drift",
-            "oidc_actor_drift",
-            "cert_actor_drift",
-            "cert_expired",
-            "cert_missing",
-            "agent_signature_invalid",
-            # Per-entry signature failures. These reached this field with the
-            # v1.3.2 fail-closed verification work and were only ever added to
-            # chain_integrity_reason, so a real export carrying one of them
-            # failed to parse here rather than typing loosely.
-            "signature_invalid",
-            "signing_key_unknown",
-            "signing_key_drift",
-            # Signed under a COSE algorithm this engine build cannot verify.
-            # Not a tamper signal: check minVerifierVersion on the key.
-            "unsupported_algorithm",
-        ]
-        | None
-    ) = None
+    failure: AuditChainFailure | None = None
 
 
 class AuditSignatureCoverage(BaseModel):
@@ -1043,34 +1101,7 @@ class AuditExportMetadata(BaseModel):
     total_entries: int = Field(alias="totalEntries")
     expected_entries: int | None = Field(None, alias="expectedEntries")
     chain_integrity: bool = Field(alias="chainIntegrity")
-    chain_integrity_reason: (
-        Literal[
-            "chain_broken_at",
-            # The record exists but its chain holds no entries. Every creation
-            # path appends an entry in the same transaction as the record, so
-            # an empty chain is every entry gone, not a record that was never
-            # chained. Reported rather than passed as trivially valid.
-            "audit_vault_empty",
-            "audit_vault_row_missing_for_checkpoint",
-            "checkpoint_hash_mismatch",
-            "payload_drift",
-            "oidc_actor_drift",
-            "cert_actor_drift",
-            "cert_expired",
-            "cert_missing",
-            "agent_signature_invalid",
-            # API v1.3.2: vault fails closed on per-entry signature
-            # verification: signature did not verify / signing key unresolvable /
-            # denormalized signing_key_id column drifted from the signed kid.
-            "signature_invalid",
-            "signing_key_unknown",
-            "signing_key_drift",
-            # Signed under a COSE algorithm this engine build cannot verify.
-            # Not a tamper signal: check minVerifierVersion on the key.
-            "unsupported_algorithm",
-        ]
-        | None
-    ) = Field(None, alias="chainIntegrityReason")
+    chain_integrity_reason: AuditChainIntegrityReason | None = Field(None, alias="chainIntegrityReason")
     chain_integrity_detail: AuditChainIntegrityDetail | None = Field(None, alias="chainIntegrityDetail")
     signature_coverage: AuditSignatureCoverage | None = Field(None, alias="signatureCoverage")
     integrity_level: (
@@ -1500,6 +1531,32 @@ class StatusResponse(BaseModel):
     timestamp: str
 
 
+LicenseTier = Literal["developer", "enterprise", "unlicensed"] | str
+"""``tier`` on ``admin.get_license()`` and ``admin.reload_license()``.
+``unlicensed`` is an install running with no license loaded. Nothing is gated
+on it; ``notice`` on the same response says what, if anything, the operator
+has to do."""
+
+
+class ConformanceLicense(BaseModel):
+    """License state of the install, as ``GET /v1/conformance`` reports it to
+    any caller. Nothing is gated on it. The detail is on
+    ``admin.get_license()``, which takes a platform key."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+
+    validity: str
+    """``valid``, ``unlicensed``, ``lapsed``, ``invalid_signature``,
+    ``invalid_format``, ``instance_mismatch``, ``version_too_new`` or
+    ``marketplace_unreachable``."""
+    notice: str | None = None
+    """The state an operator has to act on (``unlicensed``, ``dev-external`` or
+    ``error``), or None for a valid in-scope license."""
+    escalated: bool
+    """True once the install is past the escalation age. From then on every
+    2xx ``/v1/admin/*`` response also carries it as a ``Warning`` header."""
+
+
 class ConformanceResponse(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -1533,6 +1590,8 @@ class ConformanceResponse(BaseModel):
     mints."""
     version: str | None = None
     """AGLedger API version."""
+    license: ConformanceLicense | None = None
+    """License state of this install. None from a Server older than 1.8.0."""
 
 
 class AgentCard(BaseModel):
@@ -1644,6 +1703,9 @@ class GateStatus(BaseModel):
         None, alias="reporterType"
     )
     """Who rendered the standing verdict, or None when none has been."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this call logged, when
+    an org admin read a Record it is not a party to."""
 
 
 class WebhookTestResult(BaseModel):

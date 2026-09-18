@@ -5,18 +5,19 @@ Supports context manager protocol for proper connection cleanup.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, Literal, Self
 
 import httpx
 
+from agledger._credentials import AsyncBearerToken, BearerToken
 from agledger._http import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_TIMEOUT,
     AsyncHttpClient,
     HttpClient,
     RateLimitInfo,
-    resolve_api_key,
 )
 from agledger.resources.a2a import A2AResource, AsyncA2AResource
 from agledger.resources.admin import AdminResource, AsyncAdminResource
@@ -60,27 +61,41 @@ class AgledgerClient:
         with AgledgerClient(api_key="agl_agt_...") as client:
             record = client.records.create(
                 type="notarize-generic-v1",
-                criteria={"task_description": "summarize Q3 filings"},
+                criteria={"summary": "Summarized the Q3 filings"},
             )
 
     Or pass ``AGLEDGER_API_KEY`` env var::
 
-        client = AgledgerClient()  # reads from env
+        client = AgledgerClient(base_url=...)  # reads the key from env
+
+    Or authenticate with a bearer token instead of an API key. Pass exactly one
+    of ``api_key`` and ``bearer_token``; passing both raises
+    :class:`~agledger.ConfigurationError`. ``bearer_token`` is a string, a
+    function called before every request (nothing is cached, so a token source
+    that must mint a fresh token per request works as written), or a
+    :class:`~agledger.BearerCredential` such as the one
+    :func:`~agledger.oidc_cert_credential` returns::
+
+        client = AgledgerClient(
+            bearer_token=oidc_cert_credential(get_oidc_token=read_token),
+            base_url="https://agledger.internal",
+        )
     """
 
     def __init__(
         self,
         api_key: str | None = None,
         *,
+        bearer_token: BearerToken | None = None,
         base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.Client | None = None,
     ) -> None:
-        resolved_key = resolve_api_key(api_key)
         self._http = HttpClient(
-            api_key=resolved_key,
+            api_key=api_key,
+            bearer_token=bearer_token,
             base_url=base_url,
             max_retries=max_retries,
             timeout=timeout,
@@ -132,18 +147,22 @@ class AgledgerClient:
         json: Any | None = None,
         params: dict[str, Any] | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         """Escape hatch for API routes the SDK does not model.
 
-        Forwards ``method`` + ``path`` + body/query to the API verbatim.
-        Returns the parsed JSON response (or ``None`` on 204). Caller narrows
-        the type themselves.
+        Forwards ``method`` + ``path`` + body/query to the API verbatim, with
+        any extra ``headers`` beside the ones the client sets. Returns the
+        parsed JSON response (or ``None`` on 204). Caller narrows the type
+        themselves.
 
         Example::
 
             result = client.request("POST", "/v1/custom/endpoint", json={"foo": "bar"})
         """
-        return self._http.request(method, path, json=json, params=params, timeout=timeout)
+        return self._http.request(
+            method, path, json=json, params=params, timeout=timeout, headers=headers
+        )
 
     def close(self) -> None:
         """Close the underlying HTTP connection pool."""
@@ -163,21 +182,26 @@ class AsyncAgledgerClient:
 
         async with AsyncAgledgerClient(api_key="agl_agt_...") as client:
             record = await client.records.get("rec-123")
+
+    ``bearer_token`` takes the same three forms as on :class:`AgledgerClient`,
+    except that the function may be async and a credential's ``get_token`` is a
+    coroutine (:func:`~agledger.async_oidc_cert_credential`).
     """
 
     def __init__(
         self,
         api_key: str | None = None,
         *,
+        bearer_token: AsyncBearerToken | None = None,
         base_url: str | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_TIMEOUT,
         idempotency_key_prefix: str = "",
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        resolved_key = resolve_api_key(api_key)
         self._http = AsyncHttpClient(
-            api_key=resolved_key,
+            api_key=api_key,
+            bearer_token=bearer_token,
             base_url=base_url,
             max_retries=max_retries,
             timeout=timeout,
@@ -229,9 +253,12 @@ class AsyncAgledgerClient:
         json: Any | None = None,
         params: dict[str, Any] | None = None,
         timeout: float | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         """Escape hatch for API routes the SDK does not model."""
-        return await self._http.request(method, path, json=json, params=params, timeout=timeout)
+        return await self._http.request(
+            method, path, json=json, params=params, timeout=timeout, headers=headers
+        )
 
     async def close(self) -> None:
         """Close the underlying HTTP connection pool."""

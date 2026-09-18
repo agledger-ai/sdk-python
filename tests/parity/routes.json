@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-12T11:10:41.166Z",
+  "generatedAt": "2026-09-18T06:35:08.163Z",
   "sourceKind": "local",
-  "apiVersion": "1.7.0",
+  "apiVersion": "1.8.0",
   "count": 190,
   "routes": [
     {
@@ -115,6 +115,7 @@
         401,
         403,
         404,
+        409,
         414,
         429,
         500
@@ -524,8 +525,10 @@
         "cursor",
         "expiresBefore",
         "isActive",
+        "lastUsedBefore",
         "limit",
         "neverExpires",
+        "neverUsed",
         "offset",
         "orgId",
         "ownerId",
@@ -2379,6 +2382,7 @@
       "tag": "Admin",
       "requiredFields": [],
       "bodyFields": [
+        "allowedIps",
         "isActive",
         "reason",
         "scopeProfile",
@@ -2442,10 +2446,12 @@
         "expectedAudience",
         "expectedAzp",
         "issuerUrl",
+        "jtiSingleUse",
         "jwksUri",
         "label",
         "managedBy",
-        "maxCredentialTtlSeconds"
+        "maxCredentialTtlSeconds",
+        "subjectAllowlist"
       ],
       "queryFields": [],
       "pathParams": [
@@ -3039,7 +3045,6 @@
       ],
       "bodyFields": [
         "allowedIps",
-        "environment",
         "expiresAt",
         "label",
         "ownerId",
@@ -3071,6 +3076,8 @@
       "bodyFields": [
         "createdBefore",
         "keyIds",
+        "lastUsedBefore",
+        "neverUsed",
         "ownerId",
         "reason",
         "role"
@@ -3321,10 +3328,12 @@
         "expectedAudience",
         "expectedAzp",
         "issuerUrl",
+        "jtiSingleUse",
         "jwksUri",
         "label",
         "maxCredentialTtlSeconds",
-        "orgId"
+        "orgId",
+        "subjectAllowlist"
       ],
       "queryFields": [],
       "pathParams": [],
@@ -3540,6 +3549,7 @@
         401,
         403,
         414,
+        422,
         429,
         500
       ]
