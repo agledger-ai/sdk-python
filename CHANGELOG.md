@@ -28,9 +28,11 @@ Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload 
 
 - **`Webhook.managed_by`**: `provisioning` on a subscription declared in the operator's provisioning config. Deleting one is refused with 409 (`ConflictError`).
 
-- **`ConformanceResponse.license`** (`ConformanceLicense`: `validity`, `notice`, `escalated`), and **`LicenseTier`**, which gains `unlicensed`.
+- **`ConformanceResponse.license`** (`ConformanceLicense`: `validity`, `notice`, `escalated`), and **`LicenseTier`**, which gains `unlicensed`. All four license unions are pinned by the enum parity guard.
 
-- **`AuditChainIntegrityReason` and `AuditChainFailure`** are exported, named types, and both gain `cert_window_drift`: the certificate row's expiry no longer matches the instant the entry sealed.
+- **`AuditChainIntegrityReasonCode` and `AuditChainFailureCode`** are exported, named types, and both gain `cert_window_drift`: the certificate row's expiry no longer matches the instant the entry sealed.
+
+- **`LicenseValidity` and `LicenseNoticeKind`** name the values the license state carries, on `ConformanceLicense` and on the license responses.
 
 ### Changed
 

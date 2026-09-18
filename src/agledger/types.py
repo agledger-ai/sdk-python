@@ -998,7 +998,7 @@ class AuditExportEntry(BaseModel):
     integrity: dict[str, Any]
 
 
-AuditChainIntegrityReason = (
+AuditChainIntegrityReasonCode = (
     Literal[
         "chain_broken_at",
         # The record exists but its chain holds no entries. Every creation
@@ -1036,10 +1036,11 @@ the audit export, top level and under ``exportMetadata``.
 
 Open with ``| str`` because this is read off a response: the Server has added
 members here several times, and a closed ``Literal`` made every export
-carrying a new one fail to parse rather than surface it."""
+carrying a new one fail to parse rather than surface it. The wire value is
+nullable; fields type it ``AuditChainIntegrityReasonCode | None``."""
 
 
-AuditChainFailure = (
+AuditChainFailureCode = (
     Literal[
         "previous_hash_mismatch",
         "payload_hash_mismatch",
@@ -1060,7 +1061,7 @@ AuditChainFailure = (
     | str
 )
 """The failure mode inside ``chainIntegrityDetail.failure``. Same meanings as
-:data:`AuditChainIntegrityReason`, and open for the same reason."""
+:data:`AuditChainIntegrityReasonCode`, and open for the same reason."""
 
 
 class AuditChainIntegrityDetail(BaseModel):
@@ -1074,7 +1075,7 @@ class AuditChainIntegrityDetail(BaseModel):
     actual_previous_hash: str | None = Field(None, alias="actualPreviousHash")
     expected_payload_hash: str | None = Field(None, alias="expectedPayloadHash")
     actual_payload_hash: str | None = Field(None, alias="actualPayloadHash")
-    failure: AuditChainFailure | None = None
+    failure: AuditChainFailureCode | None = None
 
 
 class AuditSignatureCoverage(BaseModel):
@@ -1101,7 +1102,7 @@ class AuditExportMetadata(BaseModel):
     total_entries: int = Field(alias="totalEntries")
     expected_entries: int | None = Field(None, alias="expectedEntries")
     chain_integrity: bool = Field(alias="chainIntegrity")
-    chain_integrity_reason: AuditChainIntegrityReason | None = Field(None, alias="chainIntegrityReason")
+    chain_integrity_reason: AuditChainIntegrityReasonCode | None = Field(None, alias="chainIntegrityReason")
     chain_integrity_detail: AuditChainIntegrityDetail | None = Field(None, alias="chainIntegrityDetail")
     signature_coverage: AuditSignatureCoverage | None = Field(None, alias="signatureCoverage")
     integrity_level: (
@@ -1538,6 +1539,28 @@ on it; ``notice`` on the same response says what, if anything, the operator
 has to do."""
 
 
+LicenseValidity = (
+    Literal[
+        "valid",
+        "unlicensed",
+        "lapsed",
+        "invalid_signature",
+        "invalid_format",
+        "instance_mismatch",
+        "version_too_new",
+        "marketplace_unreachable",
+    ]
+    | str
+)
+"""Outcome of validating the install's license key."""
+
+
+LicenseNoticeKind = Literal["unlicensed", "dev-external", "error"] | str
+"""Which license state an operator has to act on: no key installed
+(``unlicensed``), a Developer Edition key on an external database
+(``dev-external``), or a key that failed validation (``error``)."""
+
+
 class ConformanceLicense(BaseModel):
     """License state of the install, as ``GET /v1/conformance`` reports it to
     any caller. Nothing is gated on it. The detail is on
@@ -1545,13 +1568,11 @@ class ConformanceLicense(BaseModel):
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
-    validity: str
-    """``valid``, ``unlicensed``, ``lapsed``, ``invalid_signature``,
-    ``invalid_format``, ``instance_mismatch``, ``version_too_new`` or
-    ``marketplace_unreachable``."""
-    notice: str | None = None
-    """The state an operator has to act on (``unlicensed``, ``dev-external`` or
-    ``error``), or None for a valid in-scope license."""
+    validity: LicenseValidity
+    """Outcome of validating the install's license key."""
+    notice: LicenseNoticeKind | None = None
+    """The state an operator has to act on, or None for a valid in-scope
+    license."""
     escalated: bool
     """True once the install is past the escalation age. From then on every
     2xx ``/v1/admin/*`` response also carries it as a ``Warning`` header."""
