@@ -40,16 +40,21 @@ from agledger.verify.types import (
 )
 from agledger.verify.verify_dump import verify_dump
 from agledger.verify.verify_export import (
+    AGENT_SIGNATURE_CONTEXT,
+    AgentSignatureCounts,
     BrokenAt,
     EntryVerificationResult,
     KeyProvenance,
     KeySource,
     SignatureCoverage,
     VerifyExportResult,
+    ed25519_jwk_thumbprint,
     verify_export,
 )
 
 __all__ = [
+    "AGENT_SIGNATURE_CONTEXT",
+    "AgentSignatureCounts",
     "BrokenAt",
     "Dump",
     "DumpLoadError",
@@ -63,6 +68,7 @@ __all__ = [
     "VaultChainsReport",
     "VerifyExportResult",
     "VerifyReport",
+    "ed25519_jwk_thumbprint",
     "load_dump",
     "suggestion",
     "verify_dump",

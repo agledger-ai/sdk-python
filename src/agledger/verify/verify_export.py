@@ -32,7 +32,10 @@ of an offline auditor.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
+import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -161,6 +164,26 @@ class KeyProvenance:
     embedded: int = 0
 
 
+#: Whether an input-gated check ran. Mirrors ``@agledger/verify-core``'s
+#: ``CheckApplicability``: ``skipped_no_input`` is never a pass.
+CheckApplicability = Literal["applied", "skipped_no_input"]
+
+
+@dataclass
+class AgentSignatureCounts:
+    """Agent signatures on the chain.
+
+    ``present`` counts entries that passed every other check and whose signed
+    payload carries ``predicate.on_behalf_of.agent_signature``; ``verified``
+    counts those re-checked against a key passed as ``agent_keys`` and found
+    good. ``present > verified`` on a valid chain means some were not checked
+    (no key supplied, or the identity was a caller assertion), never that they
+    failed."""
+
+    present: int = 0
+    verified: int = 0
+
+
 @dataclass
 class VerifyExportResult:
     valid: bool
@@ -171,6 +194,11 @@ class VerifyExportResult:
     broken_at: BrokenAt | None = None
     signature_coverage: SignatureCoverage = field(default_factory=SignatureCoverage)
     key_provenance: KeyProvenance = field(default_factory=KeyProvenance)
+    agent_signatures: AgentSignatureCounts = field(default_factory=AgentSignatureCounts)
+    #: ``applied`` only when ``agent_keys`` supplied the cert key for at least
+    #: one engine-validated agent signature on the chain. Mirrors
+    #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
+    agent_signature_check: CheckApplicability = "skipped_no_input"
 
 
 def verify_export(
@@ -179,6 +207,7 @@ def verify_export(
     public_keys: Mapping[str, str] | Sequence[Any] | None = None,
     require_key_id: str | None = None,
     require_out_of_band_keys: bool = False,
+    agent_keys: Sequence[Mapping[str, Any]] | None = None,
 ) -> VerifyExportResult:
     """Verify a record audit export offline.
 
@@ -199,8 +228,23 @@ def verify_export(
         only available key is export-embedded fails
         :data:`CHAIN_KEY_POLICY_VIOLATION`; verifying the engine against its own
         embedded key is not an independent audit.
+    :param agent_keys: Ed25519 public keys of agent ephemeral certs, as JWKs
+        (``{"kty": "OKP", "crv": "Ed25519", "x": ...}``): the ``publicKeyJwk``
+        the agent sent to ``POST /v1/auth/oidc/cert``, which is also the
+        ``cnf.jwk`` claim inside the returned ``certJws``, and what
+        :attr:`agledger.OidcCertCredential.public_key_jwk` returns. The export
+        does not carry them. Where an entry's signed payload carries an
+        engine-validated ``predicate.on_behalf_of.agent_signature`` and its
+        sealed cert thumbprint matches one of these keys, the signature is
+        re-verified offline, proving the cert holder signed that request-body
+        hash without taking the engine's word for it. A failure is
+        :data:`CHAIN_AGENT_SIGNATURE_INVALID`. A key is matched only through
+        the RFC 7638 thumbprint the entry signed, so where a key came from
+        does not need to be trusted. Anything that is not an Ed25519 JWK
+        raises ``TypeError``.
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
-        signature-coverage discriminator, and a key-provenance tally.
+        signature-coverage discriminator, a key-provenance tally, and the agent
+        signatures present and verified.
     """
     if isinstance(export_data, BaseModel):
         export_data = export_data.model_dump(by_alias=True)
@@ -210,6 +254,7 @@ def verify_export(
     record_id = str(meta.get("recordId", ""))
     overrides = _normalize_oob_keys(public_keys)
     registry = _build_key_registry(meta, overrides)
+    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
     coverage = SignatureCoverage(total=len(entries))
 
     fmt_version = meta.get("exportFormatVersion")
@@ -246,6 +291,8 @@ def verify_export(
 
     entry_results: list[EntryVerificationResult] = []
     provenance = KeyProvenance()
+    agent_counts = AgentSignatureCounts()
+    agent_check: list[CheckApplicability] = ["skipped_no_input"]
     verified = 0
     broken_at: BrokenAt | None = None
     prev_payload_hash: str | None = None
@@ -259,6 +306,8 @@ def verify_export(
             require_key_id,
             require_out_of_band_keys,
         )
+        if result.valid:
+            result = _check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
         entry_results.append(result)
         if result.valid:
             verified += 1
@@ -285,6 +334,8 @@ def verify_export(
         broken_at=broken_at,
         signature_coverage=coverage,
         key_provenance=provenance,
+        agent_signatures=agent_counts,
+        agent_signature_check=agent_check[0],
     )
 
 
@@ -943,6 +994,172 @@ def _strip_envelope_extensions(predicate: dict[str, Any]) -> dict[str, Any]:
     """Drop the envelope-sibling claims that live at the predicate root but are
     not part of the row-derived projection."""
     return {k: v for k, v in predicate.items() if k not in ("on_behalf_of", "traceparent")}
+
+
+# --- agent signature (mirror verify-core chain.ts checkAgentSignature) ---
+
+#: Domain-separation prefix the engine applies before verifying an agent's
+#: ``X-Agent-Signature`` at intake: the agent signs the UTF-8 bytes of this
+#: prefix followed by the lowercase hex sha256 of the raw request body (the hex
+#: string, not the digest bytes).
+AGENT_SIGNATURE_CONTEXT = "agledger.agent.sig.v1\n"
+
+_BASE64URL_32_BYTES = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_CONTENT_HASH = re.compile(r"^sha256:([0-9a-f]{64})$")
+_STANDARD_BASE64_64_BYTES = re.compile(r"^[A-Za-z0-9+/]{86}(==)?$")
+
+
+def ed25519_jwk_thumbprint(jwk: object) -> str | None:
+    """RFC 7638 thumbprint of an Ed25519 JWK in the engine's ``sha256:<hex>``
+    form, or ``None`` when the value is not an Ed25519 public-key JWK. The
+    members are hashed in the RFC's lexicographic order (``crv``, ``kty``,
+    ``x``), which is what the engine's thumbprint function produces for an OKP
+    key."""
+    if not isinstance(jwk, Mapping):
+        return None
+    fields = cast("Mapping[str, Any]", jwk)
+    kty, crv, x = fields.get("kty"), fields.get("crv"), fields.get("x")
+    if kty != "OKP" or crv != "Ed25519" or not isinstance(x, str) or not _BASE64URL_32_BYTES.match(x):
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(x + "=")
+    except (binascii.Error, ValueError):
+        return None
+    if len(raw) != 32:
+        return None
+    canonical = json.dumps({"crv": crv, "kty": kty, "x": x}, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_agent_key_registry(jwks: object) -> dict[str, _Ed25519PublicKey]:
+    """Index agent cert keys by the thumbprint an entry seals as
+    ``predicate.on_behalf_of.cert.thumbprint``. A key supplied for the wrong
+    cert matches nothing and is never checked against an entry. Raises
+    ``TypeError`` on anything that is not an Ed25519 public-key JWK."""
+    if isinstance(jwks, (str, bytes)) or not isinstance(jwks, Sequence):
+        raise TypeError('agent_keys must be a list of Ed25519 JWKs ({"kty": "OKP", "crv": "Ed25519", "x": ...}).')
+    registry: dict[str, _Ed25519PublicKey] = {}
+    for i, jwk in enumerate(cast("Sequence[object]", jwks)):
+        thumbprint = ed25519_jwk_thumbprint(jwk)
+        if thumbprint is None:
+            raise TypeError(
+                f"agent_keys[{i}] is not an Ed25519 public-key JWK. Expected "
+                '{"kty": "OKP", "crv": "Ed25519", "x": <base64url of 32 bytes>}, the '
+                "publicKeyJwk sent at cert exchange (also the cnf.jwk claim inside the certJws)."
+            )
+        x = cast("Mapping[str, str]", jwk)["x"]
+        registry[thumbprint] = _Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(x + "="))
+    return registry
+
+
+AgentSignatureOutcome = Literal["ok", "invalid", "malformed", "unsupported"]
+
+
+def verify_agent_signature(
+    public_key: _Ed25519PublicKey, alg: object, content_hash: object, signature: object
+) -> AgentSignatureOutcome:
+    """Verify a sealed agent signature against the cert's Ed25519 key.
+
+    ``malformed`` is a shape the engine never writes (alg other than EdDSA, a
+    content hash not ``sha256:<hex64>``, a signature that is not 64 bytes of
+    standard base64), which nothing can verify. ``unsupported`` means this host
+    cannot compute Ed25519: NOT verified and NOT tamper evidence. What an
+    ``ok`` proves: the holder of the cert's private key signed that content
+    hash. The export carries the hash, not the request body."""
+    if alg != "EdDSA" or not isinstance(content_hash, str):
+        return "malformed"
+    match = _CONTENT_HASH.match(content_hash)
+    if match is None:
+        return "malformed"
+    if not isinstance(signature, str) or not _STANDARD_BASE64_64_BYTES.match(signature):
+        return "malformed"
+    signature_bytes = base64.b64decode(signature)
+    if len(signature_bytes) != 64:
+        return "malformed"
+    if not runtime_can_compute("Ed25519"):
+        return "unsupported"
+    try:
+        public_key.verify(signature_bytes, f"{AGENT_SIGNATURE_CONTEXT}{match.group(1)}".encode())
+    except _InvalidSignature:
+        return "invalid"
+    except Exception:
+        return "invalid"
+    return "ok"
+
+
+def _check_agent_signature(
+    entry: Mapping[str, Any],
+    result: EntryVerificationResult,
+    agent_keys: Mapping[str, _Ed25519PublicKey] | None,
+    counts: AgentSignatureCounts,
+    applied: list[CheckApplicability],
+) -> EntryVerificationResult:
+    """Offline re-check of a sealed agent signature, on an entry that already
+    passed every other check (so its payload is the engine's signed bytes).
+
+    Runs only on an engine-validated identity (``on_behalf_of.validated`` is
+    true). On a caller-asserted one, entries written before the engine sealed
+    these fields itself carry them as caller passthrough, and the marker that
+    tells the two apart is a column neither the export nor the dump publishes,
+    so a failure there could not be told from a claim nobody ever checked."""
+    cose = as_mapping(entry.get("integrity")).get("coseSign1")
+    if not isinstance(cose, str):
+        return result
+    parts = _decode_cose_sign1(base64.b64decode(cose))
+    if parts is None:
+        return result
+    predicate = _decode_predicate(parts[1])
+    obo = as_mapping(predicate.get("on_behalf_of") if predicate else None)
+    sealed = obo.get("agent_signature")
+    if sealed is None:
+        return result
+    counts.present += 1
+    cert = as_mapping(obo.get("cert"))
+    thumbprint = cert.get("thumbprint")
+    if obo.get("validated") is not True or agent_keys is None or not isinstance(thumbprint, str):
+        return result
+    public_key = agent_keys.get(thumbprint)
+    if public_key is None:
+        return result
+
+    applied[0] = "applied"
+    claim = as_mapping(sealed)
+    outcome = verify_agent_signature(
+        public_key, claim.get("alg"), claim.get("content_hash"), claim.get("signature")
+    )
+    if outcome == "ok":
+        counts.verified += 1
+        return result
+    cert_id = cert.get("id")
+    label = cert_id if isinstance(cert_id, str) else thumbprint
+    if outcome == "unsupported":
+        return EntryVerificationResult(
+            position=result.position,
+            valid=False,
+            code="CHAIN_UNSUPPORTED_ALGORITHM",
+            detail=(
+                f"Agent signature for cert {label} could not be checked: this host cannot "
+                "compute Ed25519 (an active OpenSSL FIPS provider carries no EdDSA). Not "
+                "verified, and not tamper evidence."
+            ),
+            signature=result.signature,
+            key_source=result.key_source,
+        )
+    detail = (
+        f"Sealed agent_signature for cert {label} has a shape nothing can verify (alg must "
+        "be EdDSA, content_hash sha256:<hex64>, signature 64 bytes of standard base64)."
+        if outcome == "malformed"
+        else f"Sealed agent_signature for cert {label} does not verify under the supplied "
+        f"key with thumbprint {thumbprint}."
+    )
+    return EntryVerificationResult(
+        position=result.position,
+        valid=False,
+        code="CHAIN_AGENT_SIGNATURE_INVALID",
+        detail=detail,
+        signature=result.signature,
+        key_source=result.key_source,
+    )
 
 
 # --- OIDC-actor primitive (mirror verify-core chain.ts checkOidcActor) ---
