@@ -371,7 +371,15 @@ agledger-verify ./vault-dump-dir              # full-vault dump
 agledger-verify audit-export.json             # single record export
 agledger-verify ./vault-dump-dir -f json      # machine-readable report
 agledger-verify ./vault-dump-dir --quiet      # exit code only
+agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check agent signatures
 ```
+
+`--agent-keys` takes a JSON file of agent certificate keys: one JWK, a list, a
+`{"keys": [...]}` JWK Set, or entries wrapping a key as `{"publicKeyJwk": ...}`
+(what `credential.public_key_jwk` gives you). It works on a dump directory and
+on an `/audit-export` file; in code, pass `agent_keys=` to `verify_dump` or
+`verify_export`. Both reports say which input-gated checks ran
+(`optional_checks`) and how many agent signatures were present and verified.
 
 Exit codes: `0` clean, `1` verification failure, `2` usage/IO error (so a missing
 file is never mistaken for tamper). Every failure carries an actionable next step

@@ -17,9 +17,12 @@ Verification walks every entry and asserts:
     6. COSE_Sign1 signature verifies against the signingPublicKey for the
        entry's signingKeyId
 
-This is the export (per-record) path. It runs ONLY the always-run checks above;
-the binding-integrity, OIDC-actor, and temporal-key checks are dump-only (the
-``/audit-export`` wire does not carry their inputs) and are not run here.
+This is the export (per-record) path. Beside the always-run checks above, it
+runs the input-gated checks whenever the export carries their inputs (engine
+>= v0.26.x): binding-integrity on the row ``payload``, the OIDC-actor
+cross-check on ``actorOidc*``, and temporal key-validity on
+``signingKeyWindows``. The agent-signature re-check runs when the caller passes
+``agent_keys``. ``VerifyExportResult.optional_checks`` says which ran.
 
 This is an independent re-implementation of the shared TS verification core
 (``@agledger/verify-core``); it emits the SAME canonical SCREAMING_SNAKE
@@ -168,6 +171,14 @@ class KeyProvenance:
 #: ``CheckApplicability``: ``skipped_no_input`` is never a pass.
 CheckApplicability = Literal["applied", "skipped_no_input"]
 
+OPTIONAL_CHECKS = ("payload_binding", "oidc_actor", "key_temporal", "agent_signature")
+_NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
+
+
+def optional_checks_report(applied: set[str]) -> dict[str, CheckApplicability]:
+    """The ``optionalChecks`` map for a set of checks that ran."""
+    return {name: ("applied" if name in applied else "skipped_no_input") for name in OPTIONAL_CHECKS}
+
 
 @dataclass
 class AgentSignatureCounts:
@@ -199,6 +210,11 @@ class VerifyExportResult:
     #: one engine-validated agent signature on the chain. Mirrors
     #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
     agent_signature_check: CheckApplicability = "skipped_no_input"
+    #: Which input-gated checks ran on this export: ``payload_binding``,
+    #: ``oidc_actor``, ``key_temporal`` and ``agent_signature``. Mirrors
+    #: ``optionalChecks`` in ``@agledger/verify-core``, so a caller never
+    #: mistakes "not checked here" for "checked and passed".
+    optional_checks: dict[str, CheckApplicability] = field(default_factory=lambda: dict(_NO_OPTIONAL_CHECKS))
 
 
 def verify_export(
@@ -287,12 +303,13 @@ def verify_export(
     # Sort by chain position before the walk so a reordered export array still
     # validates the true chain (tampering surfaces through the hash links).
     # Mirrors verify-core's `verifyChain`.
-    sorted_entries = sorted(entries, key=_entry_position)
+    sorted_entries = [_with_export_oidc_actor(e) for e in sorted(entries, key=_entry_position)]
 
     entry_results: list[EntryVerificationResult] = []
     provenance = KeyProvenance()
     agent_counts = AgentSignatureCounts()
     agent_check: list[CheckApplicability] = ["skipped_no_input"]
+    applied: set[str] = set()
     verified = 0
     broken_at: BrokenAt | None = None
     prev_payload_hash: str | None = None
@@ -305,9 +322,10 @@ def verify_export(
             registry,
             require_key_id,
             require_out_of_band_keys,
+            applied,
         )
         if result.valid:
-            result = _check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
+            result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
         entry_results.append(result)
         if result.valid:
             verified += 1
@@ -336,6 +354,9 @@ def verify_export(
         key_provenance=provenance,
         agent_signatures=agent_counts,
         agent_signature_check=agent_check[0],
+        optional_checks=optional_checks_report(
+            applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
+        ),
     )
 
 
@@ -613,7 +634,39 @@ def _build_key_registry(
     if overrides:
         for k, v in overrides.items():
             keys[str(k)] = RegisteredKey(spki_base64=str(v), source="out-of-band")
+    # Activation/retirement windows from exportMetadata (engine >= v0.26.x)
+    # enable the temporal key-validity check on the export path. Out-of-band
+    # keys here carry no window of their own, so they take the export's, as
+    # verify-core does for an out-of-band key without one. Older exports omit
+    # the map and the check stays skipped_no_input.
+    windows = meta.get("signingKeyWindows")
+    if isinstance(windows, Mapping):
+        for k, w in cast("Mapping[Any, Any]", windows).items():
+            key = keys.get(str(k))
+            if key is None or not isinstance(w, Mapping):
+                continue
+            window = cast("Mapping[str, Any]", w)
+            activated, retired = window.get("activatedAt"), window.get("retiredAt")
+            key.activated_at = activated if isinstance(activated, str) else None
+            key.retired_at = retired if isinstance(retired, str) else None
     return KeyCache(keys)
+
+
+def _with_export_oidc_actor(entry: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Map an export entry's actor OIDC columns onto the shape the OIDC-actor
+    check reads. ``actorOidcSynthesized`` is the marker that the export
+    carries that wire shape at all; older exports omit it and the check stays
+    skipped_no_input. Mirrors verify-core's audit-export normalization."""
+    if "actorOidcSynthesized" not in entry or "actorOidc" in entry:
+        return entry
+    return {
+        **entry,
+        "actorOidc": {
+            "iss": entry.get("actorOidcIss"),
+            "sub": entry.get("actorOidcSub"),
+            "synthesized": entry.get("actorOidcSynthesized"),
+        },
+    }
 
 
 class KeyCache:
@@ -672,7 +725,12 @@ def verify_entry(
     keys: KeyCache,
     require_key_id: str | None,
     require_out_of_band_keys: bool,
+    applied_checks: set[str] | None = None,
 ) -> EntryVerificationResult:
+    """Verify one chain entry. ``applied_checks``, when given, collects the
+    input-gated checks that ran on it (``payload_binding``, ``oidc_actor``,
+    ``key_temporal``), so a caller can report "not checked" apart from
+    "passed"."""
     position = _entry_position(entry)
     integrity = as_mapping(entry.get("integrity"))
 
@@ -769,6 +827,7 @@ def verify_entry(
     predicate = _decode_predicate(parts[1]) if (run_binding or run_oidc) else None
 
     if run_binding:
+        if applied_checks is not None: applied_checks.add("payload_binding")
         rebuilt = _build_predicate_for_row(
             entry.get("recordId"),
             cast(str, entry_type),
@@ -799,6 +858,7 @@ def verify_entry(
     # synthesized row while coseSign1 stays intact. Export entries never carry
     # ``actorOidc`` → skipped. Mirrors verify-core chain.ts checkOidcActor.
     if run_oidc:
+        if applied_checks is not None: applied_checks.add("oidc_actor")
         oidc_failure = _check_oidc_actor(cast("Mapping[str, Any]", actor_oidc), predicate, position)
         if oidc_failure is not None:
             return oidc_failure
@@ -903,6 +963,7 @@ def verify_entry(
     created_at = entry.get("createdAt")
     activated_at, retired_at = keys.window(signing_key_id)
     if isinstance(created_at, str) and (activated_at or retired_at):
+        if applied_checks is not None: applied_checks.add("key_temporal")
         temporal = _temporal_key_failure(
             created_at, signing_key_id, activated_at, retired_at
         )
@@ -1126,7 +1187,7 @@ def verify_agent_signature(
     return "ok"
 
 
-def _check_agent_signature(
+def check_agent_signature(
     entry: Mapping[str, Any],
     result: EntryVerificationResult,
     agent_keys: Mapping[str, _Ed25519PublicKey] | None,

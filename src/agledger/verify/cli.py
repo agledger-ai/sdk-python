@@ -21,13 +21,19 @@ import json
 import os
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from agledger.verify.failures import suggestion
 from agledger.verify.loader import DumpLoadError, load_dump
 from agledger.verify.types import VerifyReport
 from agledger.verify.verify_dump import verify_dump
-from agledger.verify.verify_export import VerifyExportResult, verify_export
+from agledger.verify.verify_export import (
+    AgentSignatureCounts,
+    CheckApplicability,
+    VerifyExportResult,
+    build_agent_key_registry,
+    verify_export,
+)
 
 # Exit codes.
 _EXIT_OK = 0
@@ -58,12 +64,84 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output format (default: text)",
     )
     parser.add_argument(
+        "--agent-keys",
+        metavar="FILE",
+        help=(
+            "JSON file holding the Ed25519 public keys of agent certs: a JWK, a list "
+            "of JWKs, or a {keys:[...]} JWK Set, where an entry may wrap its key as "
+            "{publicKeyJwk:{...}}. Each is the publicKeyJwk an agent sent at cert "
+            "exchange (also the cnf.jwk claim in its certJws). An entry whose sealed "
+            "agent signature names one of them by thumbprint has that signature "
+            "re-verified offline, and fails CHAIN_AGENT_SIGNATURE_INVALID if it does "
+            "not verify. Applies to a dump directory and to an /audit-export file. "
+            "Neither carries agent cert keys, so without this flag the check reports "
+            "'not checked' and changes no verdict."
+        ),
+    )
+    parser.add_argument(
         "-q",
         "--quiet",
         action="store_true",
         help="suppress stdout; communicate the result through the exit code only",
     )
     return parser
+
+
+_AGENT_KEYS_SHAPE = (
+    'The --agent-keys file must hold Ed25519 public-key JWKs ({"kty":"OKP","crv":"Ed25519",'
+    '"x":"<base64url>"}): one JWK, a list of them, or a {"keys":[...]} JWK Set, where an '
+    'entry may wrap its key as {"publicKeyJwk":{...}}.'
+)
+
+
+def load_agent_keys(path: str) -> list[dict[str, Any]] | str:
+    """Read an ``--agent-keys`` file into a list of JWKs, or return the
+    usage-error message. Accepts a single JWK, a list of JWKs, or a
+    ``{keys: [...]}`` JWK Set, where an entry that wraps its key as
+    ``{"publicKeyJwk": {...}}`` is unwrapped. Every key is validated here,
+    before any verification runs, so a bad file is reported as a bad file
+    rather than as a verdict. Mirrors ``@agledger/verify``."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw: Any = json.load(fh)
+    except (OSError, ValueError) as err:
+        return f"Cannot read --agent-keys file {path}: {err}"
+    if isinstance(raw, list):
+        entries: list[Any] = list(cast("list[Any]", raw))
+    elif isinstance(raw, dict) and isinstance(cast("dict[str, Any]", raw).get("keys"), list):
+        entries = list(cast("dict[str, Any]", raw)["keys"])
+    else:
+        entries = [raw]
+    if not entries:
+        return f"The --agent-keys file {path} holds no keys. {_AGENT_KEYS_SHAPE}"
+    jwks: list[Any] = [
+        cast("dict[str, Any]", e)["publicKeyJwk"] if isinstance(e, dict) and "publicKeyJwk" in e else e
+        for e in entries
+    ]
+    try:
+        build_agent_key_registry(jwks)
+    except TypeError as err:
+        message = str(err).replace("agent_keys[", "entry ", 1).replace("] is not", " is not", 1)
+        return f"Invalid --agent-keys file {path}: {message}\n{_AGENT_KEYS_SHAPE}"
+    return cast("list[dict[str, Any]]", jwks)
+
+
+def _agent_signature_summary(counts: AgentSignatureCounts, check: CheckApplicability) -> str:
+    """One line on the agent-signature check. ``present > verified`` on a
+    passing report means some signatures were not re-checked, never that they
+    failed; the line says so rather than leaving a bare ratio to be misread."""
+    base = f"present={counts.present} verified={counts.verified}"
+    if check == "applied":
+        if counts.present > counts.verified:
+            return (
+                f"{base} (checked; {counts.present - counts.verified} not verified: no key "
+                "supplied for their cert, a caller-asserted identity, or a failure listed "
+                "in this report)"
+            )
+        return f"{base} (checked)"
+    if counts.present == 0:
+        return f"{base} (none on the chain)"
+    return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
 def _looks_like_audit_export(value: Any) -> bool:
@@ -79,6 +157,12 @@ def _format_dump_text(report: VerifyReport) -> str:
     lines.append(f"  records     : {report.vault.record_count}")
     lines.append(f"  entries     : {report.vault.entry_count}")
     lines.append(f"  checkpoints : {report.vault.checkpoint_count}")
+    vault_counts = AgentSignatureCounts(
+        report.vault.agent_signatures_present, report.vault.agent_signatures_verified
+    )
+    lines.append(
+        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'])}"
+    )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
         lines.append(f"    [{f.code}] {f.message}")
@@ -119,6 +203,11 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "outOfBand": result.key_provenance.out_of_band,
             "embedded": result.key_provenance.embedded,
         },
+        "optionalChecks": dict(result.optional_checks),
+        "agentSignatures": {
+            "present": result.agent_signatures.present,
+            "verified": result.agent_signatures.verified,
+        },
     }
     if result.broken_at is not None:
         out["brokenAt"] = {
@@ -147,6 +236,10 @@ def _format_export_text(result: VerifyExportResult) -> str:
     lines.append(
         f"  key provenance    : out-of-band={prov.out_of_band} embedded={prov.embedded}"
     )
+    lines.append(
+        "  agent signatures  : "
+        f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check)}"
+    )
     if result.broken_at is not None:
         lines.append(
             f"  broken at pos {result.broken_at.position}: [{result.broken_at.code}] "
@@ -168,10 +261,18 @@ def run_cli(argv: Sequence[str]) -> int:
     quiet: bool = args.quiet
     report_format: str = args.report_format
 
+    agent_keys: list[dict[str, Any]] | None = None
+    if args.agent_keys is not None:
+        loaded = load_agent_keys(args.agent_keys)
+        if isinstance(loaded, str):
+            print(loaded, file=sys.stderr)
+            return _EXIT_USAGE
+        agent_keys = loaded
+
     # Directory -> full-vault dump.
     if os.path.isdir(target):
         try:
-            report = verify_dump(load_dump(target))
+            report = verify_dump(load_dump(target), agent_keys=agent_keys)
         except DumpLoadError as err:
             print(str(err), file=sys.stderr)
             return _EXIT_USAGE
@@ -202,7 +303,7 @@ def run_cli(argv: Sequence[str]) -> int:
         )
         return _EXIT_USAGE
 
-    result = verify_export(parsed)
+    result = verify_export(parsed, agent_keys=agent_keys)
     if not quiet:
         if report_format == "json":
             print(json.dumps(_export_to_json(result), indent=2))

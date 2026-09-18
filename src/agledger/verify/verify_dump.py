@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from agledger.verify.types import (
@@ -41,10 +42,15 @@ from agledger.verify.types import (
 # merkle_root / verify_cose_sign1 primitives. Reused here verbatim: the dump
 # verifier adds only the dump-structural passes the per-entry walk does not model.
 from agledger.verify.verify_export import (
+    AgentSignatureCounts,
+    CheckApplicability,
     KeyCache,
     RegisteredKey,
     as_mapping,
+    build_agent_key_registry,
+    check_agent_signature,
     merkle_root,
+    optional_checks_report,
     verify_cose_sign1,
     verify_entry,
 )
@@ -181,15 +187,25 @@ def _normalize_entry(e: DumpRow) -> dict[str, Any]:
     }
 
 
-def _collect_chain_failures(scope_id: str, normalized: list[dict[str, Any]], keys: KeyCache,
-                            failures: list[Failure]) -> None:
+def _collect_chain_failures(
+    scope_id: str,
+    normalized: list[dict[str, Any]],
+    keys: KeyCache,
+    failures: list[Failure],
+    agent_keys: Mapping[str, Any] | None = None,
+    agent_counts: AgentSignatureCounts | None = None,
+    agent_check: list[CheckApplicability] | None = None,
+    applied: set[str] | None = None,
+) -> None:
     """Walk one chain group via the shared per-entry body and flatten any invalid
     entry into a Failure. The dump passes NO key-policy options (all dump keys
     are embedded). previousHash advances even on a failed entry, matching the
     export walk and verify-core."""
     prev_payload_hash: str | None = None
     for i, entry in enumerate(normalized):
-        result = verify_entry(entry, i + 1, prev_payload_hash, keys, None, False)
+        result = verify_entry(entry, i + 1, prev_payload_hash, keys, None, False, applied)
+        if result.valid and agent_counts is not None and agent_check is not None:
+            result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
         if not result.valid and result.code is not None:
             failures.append(
                 Failure(
@@ -293,11 +309,22 @@ def verify_vault_chains(
     checkpoints: list[DumpRow],
     signing_keys: list[DumpRow],
     keys: KeyCache | None = None,
+    *,
+    agent_keys: Sequence[Mapping[str, Any]] | None = None,
 ) -> VaultChainsReport:
     """Verify the audit_vault chains + checkpoint cross-check. Pass a prebuilt
     ``keys`` registry to share it (and its lazy key-DER cache) with the
-    org-reads pass; otherwise one is built from ``signing_keys``."""
+    org-reads pass; otherwise one is built from ``signing_keys``.
+
+    ``agent_keys`` are Ed25519 JWKs of agent certs, as on
+    :func:`~agledger.verify.verify_export`; the dump does not carry them. Every
+    chain walk re-verifies the sealed agent signatures whose cert thumbprint
+    matches one. Anything that is not an Ed25519 JWK raises ``TypeError``."""
     failures: list[Failure] = []
+    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
+    agent_counts = AgentSignatureCounts()
+    agent_check: list[CheckApplicability] = ["skipped_no_input"]
+    applied: set[str] = set()
 
     # Empty-vault fail-closed: zero vault entries must NOT verify clean.
     if len(entries) == 0:
@@ -337,7 +364,9 @@ def verify_vault_chains(
 
     for chain_key, rows in by_chain.items():
         normalized = [_normalize_entry(e) for e in rows]
-        _collect_chain_failures(chain_key, normalized, keys, failures)
+        _collect_chain_failures(
+            chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied
+        )
     _verify_vault_checkpoints(by_chain, checkpoints, keys, failures)
 
     return VaultChainsReport(
@@ -345,6 +374,11 @@ def verify_vault_chains(
         entry_count=len(entries),
         checkpoint_count=len(checkpoints),
         failures=failures,
+        agent_signatures_present=agent_counts.present,
+        agent_signatures_verified=agent_counts.verified,
+        optional_checks=optional_checks_report(
+            applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
+        ),
     )
 
 
@@ -541,14 +575,20 @@ def verify_org_admin_reads_chains(
     )
 
 
-def verify_dump(dump: Dump) -> VerifyReport:
+def verify_dump(dump: Dump, *, agent_keys: Sequence[Mapping[str, Any]] | None = None) -> VerifyReport:
     """Verify a full-vault dump. Runs the vault-chain pass and the
-    org_admin_reads pass independently and ANDs their verdicts."""
+    org_admin_reads pass independently and ANDs their verdicts.
+
+    ``agent_keys``: Ed25519 JWKs of agent certs. Where an entry's signed
+    payload carries an engine-validated agent signature whose cert thumbprint
+    matches one, it is re-verified offline in every chain walk; one that does
+    not verify fails ``CHAIN_AGENT_SIGNATURE_INVALID``. Without them the check
+    reports ``skipped_no_input`` and no verdict changes."""
     # Build the signing-key registry once and share it across both passes; they
     # draw from the same keys, so this also shares the lazy key-DER cache.
     keys = _build_vault_key_registry(dump.signing_keys)
     vault = verify_vault_chains(
-        dump.vault_entries, dump.vault_checkpoints, dump.signing_keys, keys
+        dump.vault_entries, dump.vault_checkpoints, dump.signing_keys, keys, agent_keys=agent_keys
     )
     org_admin_reads = verify_org_admin_reads_chains(
         dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys, keys
