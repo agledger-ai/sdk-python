@@ -318,6 +318,151 @@ def test_a_token_source_that_returns_no_jwt_is_a_configuration_error():
         client.request("GET", "/v1/auth/me")
 
 
+# --- a token source that hands back a token it already gave ---
+
+
+class FileLikeIdp:
+    """A projected token file: the same token until the platform rotates it."""
+
+    def __init__(self, *, jti: bool = True) -> None:
+        self.generation = 1
+        self.calls = 0
+        self.jti = jti
+
+    def rotate(self) -> None:
+        self.generation += 1
+
+    def __call__(self) -> str:
+        self.calls += 1
+        if self.jti:
+            return _jwt("workload-7", f"file-{self.generation}")
+        header = _b64url(json.dumps({"alg": "RS256"}).encode())
+        payload = _b64url(json.dumps({"sub": "workload-7", "gen": self.generation}).encode())
+        return f"{header}.{payload}.{_b64url(b'sig')}"
+
+
+class JtiServer:
+    """The exchange as the Server runs it: a token carrying a jti is taken once."""
+
+    def __init__(self, lifetime_seconds: int = 120) -> None:
+        self.recorder = ExchangeRecorder(lifetime_seconds)
+        self.seen: set[str] = set()
+        self.refused = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        token = json.loads(request.content)["oidcToken"]
+        claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+        if "jti" in claims and claims["jti"] in self.seen:
+            self.refused += 1
+            return httpx.Response(409, json={
+                "message": "This OIDC token id has already been exchanged",
+                "code": "CONFLICT",
+                "recoveryHint": "Fetch a fresh token from your IdP.",
+            })
+        if "jti" in claims:
+            self.seen.add(claims["jti"])
+        return self.recorder(request)
+
+
+@respx.mock
+def test_a_scheduled_refresh_that_gets_the_same_token_keeps_the_valid_cert(clock: list[float]):
+    server = JtiServer(lifetime_seconds=120)
+    exchange = respx.post(EXCHANGE).mock(side_effect=server)
+    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
+    idp = FileLikeIdp()
+    client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=idp), base_url=BASE)
+
+    client.request("GET", "/v1/auth/me")
+    clock[0] += 70  # past the refresh point, inside the 120s lifetime
+    client.request("GET", "/v1/auth/me")
+    assert exchange.call_count == 1, "an unchanged token with a jti is not sent again"
+    assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
+
+    idp.rotate()  # the platform writes a new token to the file
+    client.request("GET", "/v1/auth/me")
+    assert exchange.call_count == 2
+    assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-2"
+
+
+@respx.mock
+def test_a_scheduled_refresh_refused_as_already_exchanged_keeps_the_valid_cert(clock: list[float]):
+    # A token source that returns a token the Server has seen, but that this
+    # credential never sent (another process exchanged it first).
+    respx.post(EXCHANGE).mock(side_effect=[
+        _cert_response(1, 120),
+        httpx.Response(409, json={"message": "This OIDC token id has already been exchanged"}),
+        _cert_response(2, 120),
+    ])
+    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
+    client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE)
+
+    client.request("GET", "/v1/auth/me")
+    clock[0] += 70
+    client.request("GET", "/v1/auth/me")  # the 409 is absorbed
+    assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
+    client.request("GET", "/v1/auth/me")  # and the next request tries again
+    assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-2"
+
+
+@respx.mock
+def test_an_already_exchanged_token_after_expiry_raises_saying_so(clock: list[float]):
+    server = JtiServer(lifetime_seconds=120)
+    respx.post(EXCHANGE).mock(side_effect=server)
+    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
+    client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FileLikeIdp()), base_url=BASE)
+
+    client.request("GET", "/v1/auth/me")
+    clock[0] += 121  # the cert has expired and the file still holds the old token
+    with pytest.raises(OidcCertExchangeError) as info:
+        client.request("GET", "/v1/auth/me")
+    assert info.value.status == 409
+    assert "already exchanged" in str(info.value)
+    assert "must return a new token" in str(info.value)
+    assert me.call_count == 1
+
+
+@respx.mock
+def test_an_already_exchanged_token_on_a_401_raises_saying_so():
+    server = JtiServer()
+    respx.post(EXCHANGE).mock(side_effect=server)
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={"message": "revoked"}))
+    client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FileLikeIdp()), base_url=BASE)
+
+    with pytest.raises(OidcCertExchangeError, match="must return a new token"):
+        client.request("GET", "/v1/auth/me")
+    assert server.refused == 1
+
+
+@respx.mock
+def test_a_token_without_a_jti_is_exchanged_again_at_the_refresh_point(clock: list[float]):
+    # With no jti the Server does not deduplicate, so the same token renews.
+    server = JtiServer(lifetime_seconds=120)
+    exchange = respx.post(EXCHANGE).mock(side_effect=server)
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
+    client = AgledgerClient(
+        bearer_token=oidc_cert_credential(get_oidc_token=FileLikeIdp(jti=False)), base_url=BASE
+    )
+    client.request("GET", "/v1/auth/me")
+    clock[0] += 70
+    client.request("GET", "/v1/auth/me")
+    assert exchange.call_count == 2
+    assert server.refused == 0
+
+
+@respx.mock
+async def test_async_a_scheduled_refresh_that_gets_the_same_token_keeps_the_valid_cert(clock: list[float]):
+    exchange = respx.post(EXCHANGE).mock(side_effect=JtiServer(lifetime_seconds=120))
+    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
+    async with AsyncAgledgerClient(
+        bearer_token=async_oidc_cert_credential(get_oidc_token=FileLikeIdp()), base_url=BASE
+    ) as client:
+        await client.request("GET", "/v1/auth/me")
+        clock[0] += 70
+        await client.request("GET", "/v1/auth/me")
+    assert exchange.call_count == 1
+    assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
+
+
 # --- concurrency ---
 
 

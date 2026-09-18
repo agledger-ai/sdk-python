@@ -116,10 +116,15 @@ me = client.auth.get_me()
 print(me.auth_type, me.owner_id)  # ephemeral_cert <agent id>
 ```
 
-The function is called once per exchange. The Server accepts a token carrying a
-`jti` only once, so return one that has not been exchanged before: a token file
-works when it holds a new token by each renewal; otherwise have the function
-request a fresh token from your provider.
+The function is called once per exchange and must return a new token, with a
+new `jti`, each time: the Server accepts a token id once and refuses it again
+with 409. A projected token file changes only when the platform rotates it, so
+if a scheduled renewal gets back the token already used, the credential keeps
+its current certificate while it is still valid and tries again on a later
+request. Once the certificate has expired, an unchanged token raises
+`OidcCertExchangeError` saying the token source must mint a new token. If your
+platform rotates the file less often than the certificate lifetime, have the
+function request a fresh token from your provider instead.
 `agent_id=` binds the certificate to a named agent; without it the Server binds
 from the token or, if the issuer allows it, creates the agent. A refused
 exchange raises `OidcCertExchangeError` carrying the Server's `recovery_hint`,
