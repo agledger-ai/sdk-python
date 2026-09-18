@@ -4,7 +4,7 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [1.12.0] - 2026-09-18
 
 Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload identity: an agent can authenticate with a short-lived certificate obtained from its own identity provider instead of an API key.
 
@@ -46,6 +46,7 @@ Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload 
 
 ### Changed
 
+- `LICENSE` follows SDK License Template 1.9: section 1 says AGLedger LLC does not receive, inspect or use the data you process through your deployment and collects no product usage information from it; section 7 names AGLedger and Settlement Signal as trademarks of AGLedger LLC; section 8 refers to issued or pending U.S. patents.
 - **The payload binding compares with JSON types kept apart**, as `@agledger/verify-core` does: a row that rewrote `true` as `1` no longer binds, which Python's `==` allowed. **An agent key the host runtime refuses to load** (an OpenSSL FIPS provider) is reported per entry as `CHAIN_UNSUPPORTED_ALGORITHM`, instead of raising out of `verify_export`, `verify_dump` and `agledger-verify`. With `--agent-keys` given but matching none of the signatures, the CLI no longer tells the caller to pass `--agent-keys`. `Webhook.secret` no longer appears in the model's `repr`.
 
 - **The offline verifier binds the row copy of `on_behalf_of` and `traceparent` to what the entry signed.** The payload binding check removed both from each side before comparing, so a rewritten or added delegation block or trace id in an export entry's `payload` (or a dump row's) still verified. A row copy the engine would have lifted (an object `on_behalf_of`, a W3C v00 `traceparent`) must now equal the signed `predicate.on_behalf_of` / `predicate.traceparent`, or the entry fails `CHAIN_PAYLOAD_BINDING_MISMATCH`; any other shape under those keys is ignored, as the engine ignores it. A row without them is fine: the engine also signs an `on_behalf_of` built from authentication that never reaches the row. Mirrors `@agledger/verify-core`.
