@@ -775,7 +775,13 @@ def verify_entry(
             dict(cast("Mapping[str, Any]", row_payload)),
         )
         decoded = _strip_envelope_extensions(predicate) if predicate is not None else None
-        if decoded is None or rebuilt is None or rebuilt != decoded:
+        if (
+            predicate is None
+            or decoded is None
+            or rebuilt is None
+            or rebuilt != decoded
+            or not envelope_extensions_match(cast("Mapping[str, Any]", row_payload), predicate)
+        ):
             return EntryVerificationResult(
                 position=position,
                 valid=False,
@@ -988,6 +994,38 @@ def _decode_predicate(payload_bstr: bytes) -> dict[str, Any] | None:
     if not isinstance(predicate, dict):
         return None
     return cast("dict[str, Any]", predicate)
+
+
+_TRACEPARENT = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
+
+
+def envelope_extensions_match(row_payload: Mapping[str, Any], signed_predicate: Mapping[str, Any]) -> bool:
+    """Whether the envelope extensions a row's payload carries are the ones the
+    entry signed. Mirrors verify-core ``envelopeExtensionsMatch``.
+
+    When a writer puts ``on_behalf_of`` (an object) or ``traceparent`` (a W3C
+    v00 string; any other value is dropped) at the top level of the row
+    payload, the engine lifts it into ``predicate.on_behalf_of`` /
+    ``predicate.traceparent``, so a row copy must equal the signed value. The
+    row copy is what a reader of an export or dump sees, and
+    :func:`_strip_envelope_extensions` takes both sides out of the predicate
+    comparison, so without this check a rewritten or added row copy would
+    still verify.
+
+    A row without them is not a mismatch: the engine also signs an
+    ``on_behalf_of`` built from the request's authentication rather than from
+    the payload, and that one never reaches the row payload. Its identity is
+    held to the row's actor columns by the OIDC-actor check instead."""
+    if "on_behalf_of" in row_payload:
+        obo = row_payload["on_behalf_of"]
+        if not isinstance(obo, Mapping) or obo != signed_predicate.get("on_behalf_of"):
+            return False
+    traceparent = row_payload.get("traceparent")
+    return not (
+        isinstance(traceparent, str)
+        and _TRACEPARENT.match(traceparent)
+        and traceparent != signed_predicate.get("traceparent")
+    )
 
 
 def _strip_envelope_extensions(predicate: dict[str, Any]) -> dict[str, Any]:
