@@ -90,7 +90,7 @@ An agent can run with no AGLedger secret at rest. The operator registers your
 identity provider as a trusted issuer; the agent then trades a short-lived token
 from that provider for a certificate the Server signs, bound to a key pair the
 SDK generates in memory. `oidc_cert_credential` does the exchange, renews the
-certificate at half its lifetime (and once more if the Server answers 401), and
+certificate at half its lifetime (and once more if the Server refuses it), and
 signs every request body with the bound key, so each chain entry the agent
 writes carries the agent's signature as well as the Server's.
 
@@ -121,7 +121,9 @@ new `jti`, each time: the Server accepts a token id once and refuses it again
 with 409. A projected token file changes only when the platform rotates it, so
 if a scheduled renewal gets back the token already used, the credential keeps
 its current certificate while it is still valid and tries again on a later
-request. Once the certificate has expired, an unchanged token raises
+request. The same holds for any failed renewal (the provider down, a 5xx or
+429 from the Server): the request goes out on the certificate still in hand.
+Once the certificate has expired, an unchanged token raises
 `OidcCertExchangeError` saying the token source must mint a new token. If your
 platform rotates the file less often than the certificate lifetime, have the
 function request a fresh token from your provider instead.

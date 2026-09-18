@@ -192,7 +192,7 @@ def _collect_chain_failures(
     normalized: list[dict[str, Any]],
     keys: KeyCache,
     failures: list[Failure],
-    agent_keys: Mapping[str, Any] | None = None,
+    agent_keys: Mapping[str, bytes] | None = None,
     agent_counts: AgentSignatureCounts | None = None,
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,

@@ -269,7 +269,9 @@ def on_behalf_of_headers(on_behalf_of: str | None) -> dict[str, str]:
 def _checked_token(token: object) -> str:
     if not isinstance(token, str) or not token:
         raise ConfigurationError(
-            f"bearer_token produced {type(token).__name__} {token!r}; expected a non-empty string."
+            # The type only, never the value: a wrong type is often the token
+            # itself (bytes read off a file), and this message ends up in logs.
+            f"bearer_token produced {type(token).__name__}; expected a non-empty string."
         )
     return token
 
@@ -372,6 +374,26 @@ class HttpClient:
             return {}
         return self._credential.sign_body(body)
 
+    def _cert_still_accepted(self, token: str | None) -> bool:
+        """Whether the Server still accepts the bearer a request was just
+        refused with. A 401 is not always about the credential: the Server also
+        answers 401 for an ``AGLedger-On-Behalf-Of`` token that does not
+        validate and for an ``X-Agent-Signature`` that does not verify, and a
+        re-exchange fixes neither. One ``GET /v1/auth/me`` with the same bearer
+        tells them apart; the 401 then surfaces as the Server sent it. Any
+        answer other than a 2xx, or no answer, reads as the cert refused."""
+        if token is None:
+            return False
+        try:
+            probe = self._client.get(
+                f"{self._base_url}/v1/auth/me",
+                headers={**_base_headers("GET"), "Authorization": f"Bearer {token}"},
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError:
+            return False
+        return 200 <= probe.status_code < 300
+
     def close(self) -> None:
         """Close the underlying HTTP client if we own it."""
         if self._owns_client:
@@ -436,7 +458,12 @@ class HttpClient:
 
             self._capture_response_meta(response)
 
-            if response.status_code == 401 and refreshable and not refreshed:
+            if (
+                response.status_code == 401
+                and refreshable
+                and not refreshed
+                and not self._cert_still_accepted(sent_token)
+            ):
                 refreshed = True
                 force_refresh = True
                 rejected_token = sent_token
@@ -660,6 +687,20 @@ class AsyncHttpClient:
             return {}
         return self._credential.sign_body(body)
 
+    async def _cert_still_accepted(self, token: str | None) -> bool:
+        """Async twin of :meth:`HttpClient._cert_still_accepted`."""
+        if token is None:
+            return False
+        try:
+            probe = await self._client.get(
+                f"{self._base_url}/v1/auth/me",
+                headers={**_base_headers("GET"), "Authorization": f"Bearer {token}"},
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError:
+            return False
+        return 200 <= probe.status_code < 300
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
@@ -716,7 +757,12 @@ class AsyncHttpClient:
 
             self._capture_response_meta(response)
 
-            if response.status_code == 401 and refreshable and not refreshed:
+            if (
+                response.status_code == 401
+                and refreshable
+                and not refreshed
+                and not await self._cert_still_accepted(sent_token)
+            ):
                 refreshed = True
                 force_refresh = True
                 rejected_token = sent_token

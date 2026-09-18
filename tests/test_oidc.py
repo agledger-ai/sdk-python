@@ -212,12 +212,15 @@ def test_refresh_fraction_out_of_range_is_refused(fraction: float):
 def test_a_401_forces_exactly_one_re_exchange_and_one_retry():
     recorder = ExchangeRecorder()
     respx.post(EXCHANGE).mock(side_effect=recorder)
-    me = respx.get(f"{BASE}/v1/auth/me").mock(
+    me = respx.get(f"{BASE}/v1/records/r").mock(
         side_effect=[httpx.Response(401, json={"message": "cert revoked"}), httpx.Response(200, json={"ok": 1})]
     )
+    # The probe that tells a cert refusal from any other 401: the Server
+    # refuses the cert there too.
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={}))
     client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE)
 
-    assert client.request("GET", "/v1/auth/me") == {"ok": 1}
+    assert client.request("GET", "/v1/records/r") == {"ok": 1}
     assert len(recorder.bodies) == 2
     assert [c.request.headers["authorization"] for c in me.calls] == [
         "Bearer cert-jws-1",
@@ -229,13 +232,14 @@ def test_a_401_forces_exactly_one_re_exchange_and_one_retry():
 def test_a_second_401_surfaces_as_an_authentication_error():
     recorder = ExchangeRecorder()
     respx.post(EXCHANGE).mock(side_effect=recorder)
-    me = respx.get(f"{BASE}/v1/auth/me").mock(
+    me = respx.get(f"{BASE}/v1/records/r").mock(
         return_value=httpx.Response(401, json={"message": "no", "code": "UNAUTHORIZED"})
     )
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={}))
     client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE)
 
     with pytest.raises(AuthenticationError):
-        client.request("GET", "/v1/auth/me")
+        client.request("GET", "/v1/records/r")
     assert len(recorder.bodies) == 2
     assert me.call_count == 2
 
@@ -375,12 +379,15 @@ def test_a_scheduled_refresh_that_gets_the_same_token_keeps_the_valid_cert(clock
     client.request("GET", "/v1/auth/me")
     clock[0] += 70  # past the refresh point, inside the 120s lifetime
     client.request("GET", "/v1/auth/me")
-    assert exchange.call_count == 1, "an unchanged token with a jti is not sent again"
+    assert server.refused == 1, "the unchanged token was refused as already exchanged"
     assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
 
     idp.rotate()  # the platform writes a new token to the file
     client.request("GET", "/v1/auth/me")
-    assert exchange.call_count == 2
+    assert exchange.call_count == 2, "nothing is asked again before the recheck delay"
+    clock[0] += 13  # a quarter of the 50s left
+    client.request("GET", "/v1/auth/me")
+    assert exchange.call_count == 3
     assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-2"
 
 
@@ -400,7 +407,8 @@ def test_a_scheduled_refresh_refused_as_already_exchanged_keeps_the_valid_cert(c
     clock[0] += 70
     client.request("GET", "/v1/auth/me")  # the 409 is absorbed
     assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
-    client.request("GET", "/v1/auth/me")  # and the next request tries again
+    clock[0] += 13  # past the recheck delay
+    client.request("GET", "/v1/auth/me")  # and a later request tries again
     assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-2"
 
 
@@ -459,7 +467,7 @@ async def test_async_a_scheduled_refresh_that_gets_the_same_token_keeps_the_vali
         await client.request("GET", "/v1/auth/me")
         clock[0] += 70
         await client.request("GET", "/v1/auth/me")
-    assert exchange.call_count == 1
+    assert exchange.call_count == 2, "sent, refused 409, and the valid cert kept"
     assert me.calls.last.request.headers["authorization"] == "Bearer cert-jws-1"
 
 
@@ -558,13 +566,14 @@ async def test_async_concurrent_requests_share_one_exchange():
 async def test_async_a_401_forces_one_re_exchange():
     recorder = ExchangeRecorder()
     respx.post(EXCHANGE).mock(side_effect=recorder)
-    respx.get(f"{BASE}/v1/auth/me").mock(
+    respx.get(f"{BASE}/v1/records/r").mock(
         side_effect=[httpx.Response(401, json={}), httpx.Response(200, json={"ok": 1})]
     )
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={}))
     async with AsyncAgledgerClient(
         bearer_token=async_oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE
     ) as client:
-        assert await client.request("GET", "/v1/auth/me") == {"ok": 1}
+        assert await client.request("GET", "/v1/records/r") == {"ok": 1}
     assert len(recorder.bodies) == 2
 
 

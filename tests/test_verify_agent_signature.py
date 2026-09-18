@@ -315,10 +315,12 @@ def test_a_rewritten_validated_flag_fails_the_binding():
     _binding_broken(doc)
 
 
-def test_a_row_copy_that_is_not_an_object_fails_the_binding():
+def test_a_row_copy_that_is_not_an_object_is_ignored():
+    # The engine lifts only an object on_behalf_of, so a genuine older row
+    # holding another shape signed nothing for it (verify-core bf5d379).
     doc = _load("export-cert-lifecycle.json")
     _first_with_obo(doc)["on_behalf_of"] = "forged"
-    _binding_broken(doc)
+    assert verify_export(doc).valid
 
 
 def test_a_row_without_the_block_still_verifies():

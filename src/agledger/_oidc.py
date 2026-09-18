@@ -22,7 +22,8 @@ import json
 import threading
 import time
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from concurrent.futures import Future
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -124,10 +125,17 @@ def _parse_instant(value: object) -> float | None:
         return None
 
 
+# After a scheduled refresh fails while the cert still works, ask again after
+# this long, or a quarter of the remaining lifetime if that is shorter, and
+# never sooner than a second. Matches the TypeScript SDK.
+_RECHECK_MAX_SECONDS = 30.0
+_RECHECK_MIN_SECONDS = 1.0
+
+
 @dataclass(frozen=True)
 class _Cert:
-    cert_jws: str
-    cert: dict[str, Any]
+    cert_jws: str = field(repr=False)
+    cert: dict[str, Any] = field(repr=False)
     refresh_at: float
     """Monotonic instant at which to exchange again."""
     expires_at: float
@@ -147,11 +155,6 @@ class _CertState:
         self._agent_id = agent_id
         self._refresh_fraction = refresh_fraction
         self._current: _Cert | None = None
-        # A digest of the last OIDC token sent to the exchange, whether or not
-        # the Server took it. The Server takes a token carrying a jti once, so
-        # sending it again is a guaranteed 409. A digest, so the credential
-        # holds no copy of a bearer token between exchanges.
-        self._last_sent_digest: bytes | None = None
         raw = self._key.public_key().public_bytes_raw()
         self._public_key_jwk = {
             "kty": "OKP",
@@ -172,39 +175,44 @@ class _CertState:
         exchange binds. The private half never leaves the object."""
         return dict(self._public_key_jwk)
 
-    def _needs_exchange(self, force_refresh: bool, rejected_token: str | None) -> bool:
+    def _refused(self, force_refresh: bool, rejected_token: str | None) -> bool:
+        """Whether the Server refused the cert this credential holds. Several
+        requests in flight on one stale cert all come back 401; once one of them
+        has refreshed, the rest take the new cert rather than exchanging again."""
         current = self._current
-        if current is None:
-            return True
-        if force_refresh:
-            # Another request already refreshed past the cert the Server refused
-            # (several in flight on one stale cert all come back 401), so this
-            # one takes that cert rather than exchanging again.
-            return rejected_token is None or current.cert_jws == rejected_token
-        return _monotonic() >= current.refresh_at
+        return (
+            current is not None
+            and force_refresh
+            and (rejected_token is None or rejected_token == current.cert_jws)
+        )
 
-    def _cert_still_valid(self) -> bool:
-        return self._current is not None and _monotonic() < self._current.expires_at
+    def _usable(self, refused: bool) -> str | None:
+        current = self._current
+        if current is not None and not refused and _monotonic() < current.refresh_at:
+            return current.cert_jws
+        return None
+
+    def _keep_after_failure(self, forced: bool) -> str | None:
+        """A scheduled refresh failed: the token source raised, the IdP or the
+        Server was unreachable, or the Server answered 5xx, 429 or 409. While
+        the cert in hand still works, requests keep going out on it, and the
+        exchange is tried again after a short recheck delay. A forced exchange
+        (the Server refused the cert) or one after expiry has nothing to fall
+        back on, so it fails."""
+        current = self._current
+        now = _monotonic()
+        if forced or current is None or now >= current.expires_at:
+            return None
+        delay = max(_RECHECK_MIN_SECONDS, min(_RECHECK_MAX_SECONDS, (current.expires_at - now) / 4))
+        self._current = replace(current, refresh_at=now + delay)
+        return current.cert_jws
 
     def _checked_token(self, oidc_token: object) -> str:
-        if not isinstance(oidc_token, str) or not oidc_token:
+        if not isinstance(oidc_token, str) or not oidc_token.strip():
             raise ConfigurationError(
                 f"get_oidc_token returned {type(oidc_token).__name__}; expected a non-empty JWT string."
             )
         return oidc_token.strip()
-
-    def _can_keep_current(self, token: str, force_refresh: bool) -> bool:
-        """A scheduled refresh whose token source handed back the token this
-        credential already sent. A token carrying a ``jti`` would only be
-        refused, so while the cert is still good, keep using it and try again
-        on a later request. A projected token file that the platform rotates
-        less often than the cert renews does exactly this."""
-        return (
-            not force_refresh
-            and hashlib.sha256(token.encode()).digest() == self._last_sent_digest
-            and "jti" in _claims_of(token)
-            and self._cert_still_valid()
-        )
 
     def _exchange_body(self, token: str) -> bytes:
         proof = self._key.sign(f"{_POP_CONTEXT}{_claims_of(token)['sub']}".encode())
@@ -215,17 +223,9 @@ class _CertState:
         }
         if self._agent_id is not None:
             body["agentId"] = self._agent_id
-        self._last_sent_digest = hashlib.sha256(token.encode()).digest()
         return encode_json(body)
 
-    def _accept(self, response: httpx.Response, sent_at: float, token: str, force_refresh: bool) -> str:
-        if response.status_code == 409 and not force_refresh and self._cert_still_valid():
-            # A scheduled refresh the Server refused because this token was
-            # already exchanged. The cert in hand is still good, so the request
-            # goes out on it; a later request tries again with whatever the
-            # token source returns then.
-            assert self._current is not None
-            return self._current.cert_jws
+    def _accept(self, response: httpx.Response, token: str) -> str:
         if response.status_code >= 400:
             source = build_error(response)
             if response.status_code == 409:
@@ -247,27 +247,36 @@ class _CertState:
                 recovery_hint=_scrub(source.recovery_hint, token),
                 type=source.type,
             )
-        raw_payload: Any = response.json()
+        try:
+            raw_payload: Any = response.json()
+        except ValueError:
+            raw_payload = None
         payload = cast("dict[str, Any]", raw_payload) if isinstance(raw_payload, dict) else {}
         cert_jws: object = payload.get("certJws")
         cert: object = payload.get("cert")
-        if not isinstance(cert_jws, str) or not isinstance(cert, dict):
-            raise OidcCertExchangeError(
-                response.status_code,
-                message="OIDC cert exchange returned no certJws; the Server response is not the documented shape.",
-            )
-        cert_fields = dict(cast("dict[str, Any]", cert))
+        cert_fields = dict(cast("dict[str, Any]", cert)) if isinstance(cert, dict) else {}
         issued = _parse_instant(cert_fields.get("issuedAt"))
         expires = _parse_instant(cert_fields.get("expiresAt"))
-        # The lifetime comes from the Server's own two timestamps, and is laid
-        # onto this host's monotonic clock from the moment the exchange was
-        # sent. A skewed wall clock here moves neither.
-        lifetime = max(expires - issued, 0.0) if issued is not None and expires is not None else 0.0
+        if not isinstance(cert_jws, str) or issued is None or expires is None:
+            raise OidcCertExchangeError(
+                response.status_code,
+                code="invalid_exchange_response",
+                message=(
+                    "OIDC cert exchange failed: the response carried no certJws or no cert "
+                    "validity window."
+                ),
+            )
+        # The lifetime comes from the Server's own two timestamps and is laid
+        # onto this host's monotonic clock from the moment the cert arrived, so
+        # clock skew against the Server can neither make a fresh cert look
+        # stale nor an expired one look fresh.
+        lifetime = max(expires - issued, 0.0)
+        received = _monotonic()
         self._current = _Cert(
             cert_jws=cert_jws,
             cert=cert_fields,
-            refresh_at=sent_at + self._refresh_fraction * lifetime,
-            expires_at=sent_at + lifetime,
+            refresh_at=received + self._refresh_fraction * lifetime,
+            expires_at=received + lifetime,
         )
         return cert_jws
 
@@ -301,7 +310,8 @@ class OidcCertCredential(_CertState):
     """A :class:`~agledger.BearerCredential` backed by the OIDC cert exchange.
 
     Build it with :func:`oidc_cert_credential`. Thread-safe: concurrent requests
-    that find the cert due for refresh share one exchange."""
+    that find the cert due for refresh share one exchange, and share its
+    failure too."""
 
     def __init__(
         self,
@@ -312,31 +322,58 @@ class OidcCertCredential(_CertState):
         super().__init__(agent_id, refresh_fraction)
         self._get_oidc_token = get_oidc_token
         self._lock = threading.Lock()
+        self._inflight: Future[str] | None = None
 
     def get_token(self, context: CredentialContext) -> str:
         """The current ``certJws``, exchanging first when there is none, when
         the refresh point has passed, or when ``context.force_refresh`` says
-        the Server refused the last one."""
+        the Server refused the one this credential holds."""
         with self._lock:
-            if not self._needs_exchange(context.force_refresh, context.rejected_token):
-                assert self._current is not None
-                return self._current.cert_jws
+            inflight = self._inflight
+            if inflight is None:
+                refused = self._refused(context.force_refresh, context.rejected_token)
+                usable = self._usable(refused)
+                if usable is not None:
+                    return usable
+                inflight = self._inflight = Future()
+                owner = True
+            else:
+                refused = False
+                owner = False
+        if not owner:
+            return inflight.result()
+        try:
+            token = self._exchange(context, refused)
+        except BaseException as err:
+            inflight.set_exception(err)
+            raise
+        else:
+            inflight.set_result(token)
+            return token
+        finally:
+            with self._lock:
+                self._inflight = None
+
+    def _exchange(self, context: CredentialContext, forced: bool) -> str:
+        try:
             token = self._checked_token(self._get_oidc_token())
-            if self._can_keep_current(token, context.force_refresh):
-                assert self._current is not None
-                return self._current.cert_jws
             body = self._exchange_body(token)
-            sent_at = _monotonic()
             response = context.http_client.post(
                 f"{context.base_url}{EXCHANGE_PATH}", content=body, headers=_exchange_headers()
             )
-            return self._accept(response, sent_at, token, context.force_refresh)
+            return self._accept(response, token)
+        except Exception:
+            kept = self._keep_after_failure(forced)
+            if kept is not None:
+                return kept
+            raise
 
 
 class AsyncOidcCertCredential(_CertState):
     """An :class:`~agledger.AsyncBearerCredential` backed by the OIDC cert
     exchange. Build it with :func:`async_oidc_cert_credential`. Task-safe:
-    concurrent requests that find the cert due for refresh share one exchange."""
+    concurrent requests that find the cert due for refresh share one exchange,
+    and share its failure too."""
 
     def __init__(
         self,
@@ -346,27 +383,44 @@ class AsyncOidcCertCredential(_CertState):
     ) -> None:
         super().__init__(agent_id, refresh_fraction)
         self._get_oidc_token = get_oidc_token
-        self._lock = asyncio.Lock()
+        self._inflight: asyncio.Task[str] | None = None
 
     async def get_token(self, context: AsyncCredentialContext) -> str:
         """Async twin of :meth:`OidcCertCredential.get_token`."""
-        async with self._lock:
-            if not self._needs_exchange(context.force_refresh, context.rejected_token):
-                assert self._current is not None
-                return self._current.cert_jws
+        inflight = self._inflight
+        if inflight is None:
+            refused = self._refused(context.force_refresh, context.rejected_token)
+            usable = self._usable(refused)
+            if usable is not None:
+                return usable
+            inflight = self._inflight = asyncio.ensure_future(self._exchange(context, refused))
+            inflight.add_done_callback(self._clear_inflight)
+        # Shielded, so one cancelled caller does not cancel the exchange the
+        # others are waiting on.
+        return await asyncio.shield(inflight)
+
+    def _clear_inflight(self, task: asyncio.Task[str]) -> None:
+        if self._inflight is task:
+            self._inflight = None
+        if not task.cancelled():
+            task.exception()  # retrieved, so an unawaited failure is not logged
+
+    async def _exchange(self, context: AsyncCredentialContext, forced: bool) -> str:
+        try:
             fetched = self._get_oidc_token()
             if inspect.isawaitable(fetched):
                 fetched = await fetched
             token = self._checked_token(fetched)
-            if self._can_keep_current(token, context.force_refresh):
-                assert self._current is not None
-                return self._current.cert_jws
             body = self._exchange_body(token)
-            sent_at = _monotonic()
             response = await context.http_client.post(
                 f"{context.base_url}{EXCHANGE_PATH}", content=body, headers=_exchange_headers()
             )
-            return self._accept(response, sent_at, token, context.force_refresh)
+            return self._accept(response, token)
+        except Exception:
+            kept = self._keep_after_failure(forced)
+            if kept is not None:
+                return kept
+            raise
 
 
 def oidc_cert_credential(
@@ -391,12 +445,15 @@ def oidc_cert_credential(
 
     ``get_oidc_token`` is called on every exchange and must return a new
     token, with a new ``jti``, each time: the Server takes each OIDC token id
-    once and refuses a second exchange with 409. If a scheduled refresh gets
-    back the token already sent, or the Server refuses it as already exchanged,
-    the credential keeps using its current cert while that cert is still valid
-    and tries again on a later request. Once the cert has expired, or after
-    the Server refused it with a 401, a token that was already exchanged raises
-    :class:`OidcCertExchangeError` saying so.
+    once and refuses a second exchange with 409.
+
+    A scheduled refresh that fails (the token source raises, the IdP or the
+    Server is unreachable, or the Server answers 5xx, 429 or 409) does not fail
+    the request while the current cert is still valid: the request goes out on
+    that cert and the exchange is tried again shortly. Once the cert has
+    expired, or after the Server refused it with a 401, a failed exchange
+    raises; a 409 there says the token source returned a token that was
+    already exchanged.
 
     ``agent_id`` binds the cert to one agent in the trusted issuer's org. Omit
     it to let the Server bind from the token's mapped ``agent_id`` claim, an

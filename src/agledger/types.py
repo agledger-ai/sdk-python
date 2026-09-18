@@ -874,7 +874,7 @@ class Webhook(BaseModel):
 
     Verify ``ed25519`` deliveries with ``verify_rfc9421`` from ``agledger.webhooks``.
     """
-    secret: str | None = None
+    secret: str | None = Field(None, repr=False)
     """Only present on creation/rotation of an ``hmac`` subscription (one-time). Absent for ``ed25519``."""
     secret_grace_active: bool | None = Field(None, alias="secretGraceActive")
     """Whether a secret grace period is active after rotation."""
