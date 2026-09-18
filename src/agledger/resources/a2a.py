@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from agledger._http import AsyncHttpClient, HttpClient
+from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.types import AgentCard
 
 
@@ -17,18 +17,21 @@ class A2AResource:
         """Fetch the platform's AgentCard for A2A discovery."""
         return AgentCard.model_validate(self._http.get("/.well-known/agent-card.json"))
 
-    def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Dispatch a JSON-RPC 2.0 request to the A2A endpoint."""
-        return self._http.post("/a2a", json=request)
+    def dispatch(self, request: dict[str, Any], *, on_behalf_of: str | None = None) -> dict[str, Any]:
+        """Dispatch a JSON-RPC 2.0 request to the A2A endpoint.
 
-    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
+        ``records.create``."""
+        return self._http.post("/a2a", json=request, headers=on_behalf_of_headers(on_behalf_of))
+
+    def call(
+        self, method: str, params: dict[str, Any] | None = None, *, on_behalf_of: str | None = None
+    ) -> dict[str, Any]:
         """Convenience: call a named A2A method with params. Auto-generates JSON-RPC envelope."""
-        return self.dispatch({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": str(uuid.uuid4()),
-        })
+        return self.dispatch(
+            {"jsonrpc": "2.0", "method": method, "params": params, "id": str(uuid.uuid4())},
+            on_behalf_of=on_behalf_of,
+        )
 
 
 class AsyncA2AResource:
@@ -39,16 +42,16 @@ class AsyncA2AResource:
         """Fetch the platform's AgentCard for A2A discovery."""
         return AgentCard.model_validate(await self._http.get("/.well-known/agent-card.json"))
 
-    async def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def dispatch(self, request: dict[str, Any], *, on_behalf_of: str | None = None) -> dict[str, Any]:
         """Dispatch a JSON-RPC 2.0 request to the A2A endpoint."""
-        return await self._http.post("/a2a", json=request)
+        return await self._http.post("/a2a", json=request, headers=on_behalf_of_headers(on_behalf_of))
 
-    async def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def call(
+        self, method: str, params: dict[str, Any] | None = None, *, on_behalf_of: str | None = None
+    ) -> dict[str, Any]:
         """Convenience: call a named A2A method with params. Auto-generates JSON-RPC envelope."""
-        return await self.dispatch({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": str(uuid.uuid4()),
-        })
+        return await self.dispatch(
+            {"jsonrpc": "2.0", "method": method, "params": params, "id": str(uuid.uuid4())},
+            on_behalf_of=on_behalf_of,
+        )
 

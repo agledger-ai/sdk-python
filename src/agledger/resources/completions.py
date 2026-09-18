@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from agledger._http import AsyncHttpClient, HttpClient
+from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.types import Completion, Page
 
 
@@ -20,6 +20,7 @@ class CompletionsResource:
         evidence: dict[str, Any],
         evidence_hash: str | None = None,
         idempotency_key: str | None = None,
+        on_behalf_of: str | None = None,
     ) -> Completion:
         """Submit a Completion (evidence of completion) for a Record.
 
@@ -29,11 +30,18 @@ class CompletionsResource:
         cannot compute it). To carry AI-agent rationale, declare a field in your
         Type's ``completionSchema`` and put it inside ``evidence``; the server
         rejects unknown root-level keys.
+
+        ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
+        ``records.create``.
         """
         body: dict[str, Any] = {"evidence": evidence}
         if evidence_hash is not None: body["evidenceHash"] = evidence_hash
         if idempotency_key is not None: body["idempotencyKey"] = idempotency_key
-        return Completion.model_validate(self._http.post(f"/v1/records/{record_id}/completions", json=body))
+        return Completion.model_validate(
+            self._http.post(
+                f"/v1/records/{record_id}/completions", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
+        )
 
     def get(self, record_id: str, completion_id: str) -> Completion:
         return Completion.model_validate(self._http.get(f"/v1/records/{record_id}/completions/{completion_id}"))
@@ -66,6 +74,7 @@ class AsyncCompletionsResource:
         evidence: dict[str, Any],
         evidence_hash: str | None = None,
         idempotency_key: str | None = None,
+        on_behalf_of: str | None = None,
     ) -> Completion:
         """Submit a Completion (evidence of completion) for a Record.
 
@@ -77,7 +86,11 @@ class AsyncCompletionsResource:
         body: dict[str, Any] = {"evidence": evidence}
         if evidence_hash is not None: body["evidenceHash"] = evidence_hash
         if idempotency_key is not None: body["idempotencyKey"] = idempotency_key
-        return Completion.model_validate(await self._http.post(f"/v1/records/{record_id}/completions", json=body))
+        return Completion.model_validate(
+            await self._http.post(
+                f"/v1/records/{record_id}/completions", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
+        )
 
     async def get(self, record_id: str, completion_id: str) -> Completion:
         return Completion.model_validate(await self._http.get(f"/v1/records/{record_id}/completions/{completion_id}"))

@@ -123,6 +123,8 @@ def _api_key_filters(
     limit: int | None,
     offset: int | None,
     cursor: str | None,
+    last_used_before: str | None = None,
+    never_used: bool | None = None,
 ) -> dict[str, Any]:
     """Build the ``GET /v1/admin/api-keys`` querystring from snake_case kwargs.
 
@@ -139,10 +141,41 @@ def _api_key_filters(
     if created_before is not None: params["createdBefore"] = created_before
     if expires_before is not None: params["expiresBefore"] = expires_before
     if never_expires is not None: params["neverExpires"] = never_expires
+    if last_used_before is not None: params["lastUsedBefore"] = last_used_before
+    if never_used is not None: params["neverUsed"] = never_used
     if limit is not None: params["limit"] = limit
     if offset is not None: params["offset"] = offset
     if cursor is not None: params["cursor"] = cursor
     return params
+
+
+def _api_key_update_body(params: dict[str, Any]) -> dict[str, Any]:
+    """``PATCH /v1/admin/api-keys/{keyId}``: snake_case kwargs to the wire body.
+
+    ``allowed_ips=None`` is kept and sent as null, because null is how the
+    route is told to remove the restriction."""
+    mapping = {"is_active": "isActive", "scope_profile": "scopeProfile", "allowed_ips": "allowedIps"}
+    return {mapping.get(k, k): v for k, v in params.items()}
+
+
+def _bulk_revoke_body(
+    key_ids: list[str] | None,
+    owner_id: str | None,
+    role: str | None,
+    created_before: str | None,
+    last_used_before: str | None,
+    never_used: bool | None,
+    reason: str | None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if key_ids is not None: body["keyIds"] = key_ids
+    if owner_id is not None: body["ownerId"] = owner_id
+    if role is not None: body["role"] = role
+    if created_before is not None: body["createdBefore"] = created_before
+    if last_used_before is not None: body["lastUsedBefore"] = last_used_before
+    if never_used is not None: body["neverUsed"] = never_used
+    if reason is not None: body["reason"] = reason
+    return body
 
 
 def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
@@ -150,9 +183,10 @@ def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
 
     A ``None`` value means "leave this field alone" and is dropped, so an
     unpassed keyword and an explicitly passed ``None`` are the same request.
-    Two fields (``allowedAlgs`` and ``autoProvisionScopeProfile``) also accept a
-    literal null on the wire, which clears them, and this builder cannot express
-    that. Send the null through the raw request escape hatch::
+    Three fields (``allowedAlgs``, ``autoProvisionScopeProfile`` and
+    ``subjectAllowlist``) also accept a literal null on the wire, which clears
+    them, and this builder cannot express that. Send the null through the raw
+    request escape hatch::
 
         client.request(
             "PATCH",
@@ -173,6 +207,8 @@ def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
         "auto_provision_agents": "autoProvisionAgents",
         "auto_provision_scope_profile": "autoProvisionScopeProfile",
         "auto_provision_max_agents": "autoProvisionMaxAgents",
+        "jti_single_use": "jtiSingleUse",
+        "subject_allowlist": "subjectAllowlist",
         "label": "label",
         "enabled": "enabled",
     }
@@ -205,6 +241,8 @@ class AdminTrustedIssuersResource:
         auto_provision_agents: bool | None = None,
         auto_provision_scope_profile: str | None = None,
         auto_provision_max_agents: int | None = None,
+        jti_single_use: bool | None = None,
+        subject_allowlist: list[str] | None = None,
         label: str | None = None,
         enabled: bool | None = None,
     ) -> dict[str, Any]:
@@ -216,7 +254,15 @@ class AdminTrustedIssuersResource:
         profile is also the scope ceiling for every cert minted from the issuer,
         so clearing the flag stops new agents without lifting the ceiling off
         the ones already created. ``auto_provision_max_agents`` caps how many
-        this issuer may create (default 1000)."""
+        this issuer may create (default 1000).
+
+        ``jti_single_use`` makes an admin OIDC bearer this issuer validates
+        good for one request per token id: a second presentation is refused
+        with 401. A client using a function-form ``bearer_token`` against such
+        an issuer must mint a fresh token on every call, which the SDK allows
+        for by calling the function per request and caching nothing.
+        ``subject_allowlist`` admits only the listed token subjects (matched
+        exactly against ``sub``); None, the default, admits any."""
         body = _trusted_issuer_body(
             {
                 "issuer_url": issuer_url,
@@ -231,6 +277,8 @@ class AdminTrustedIssuersResource:
                 "auto_provision_agents": auto_provision_agents,
                 "auto_provision_scope_profile": auto_provision_scope_profile,
                 "auto_provision_max_agents": auto_provision_max_agents,
+                "jti_single_use": jti_single_use,
+                "subject_allowlist": subject_allowlist,
                 "label": label,
                 "enabled": enabled,
             }
@@ -300,9 +348,10 @@ class AdminResource:
     ) -> dict[str, Any]:
         """Create a new org.
 
-        Dev/test only: ``POST /v1/admin/orgs`` is not registered in production
-        (dropped from the canonical OpenAPI spec in API v1.0.1) and 404s there.
-        Provision production orgs via the operator ``provisioning/`` YAML.
+        Only on a Server running multi-org: the route is registered only
+        there, is absent from the published OpenAPI, and 404s on a
+        single-org install, which is the default. Provision orgs there through
+        the operator ``provisioning/`` YAML.
         """
         body: dict[str, Any] = {}
         if name is not None: body["name"] = name
@@ -464,6 +513,8 @@ class AdminResource:
         created_before: str | None = None,
         expires_before: str | None = None,
         never_expires: bool | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -474,10 +525,17 @@ class AdminResource:
         Both modes cap at ``limit`` (default 200) and report truncation through
         ``hasMore``, so a key audit that reads ``data`` and stops under-reports
         on a large install. Use :meth:`list_all_api_keys`.
+
+        ``last_used_before`` and ``never_used`` find dormant keys: the first
+        matches keys whose last authenticated request landed before an instant
+        (never-used keys are not matched), the second keys that have or have
+        not ever authenticated. Pair ``never_used=True`` with
+        ``created_before`` for keys minted long ago and never used.
         """
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor
+            expires_before, never_expires, limit, offset, cursor,
+            last_used_before=last_used_before, never_used=never_used,
         )
         return self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -492,6 +550,8 @@ class AdminResource:
         created_before: str | None = None,
         expires_before: str | None = None,
         never_expires: bool | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -511,7 +571,8 @@ class AdminResource:
         """
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor
+            expires_before, never_expires, limit, offset, cursor,
+            last_used_before=last_used_before, never_used=never_used,
         )
         yield from self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages)
 
@@ -525,9 +586,15 @@ class AdminResource:
         scopes: list[str] | None = None,
         scope_profile: str | None = None,
         expires_at: str | None = None,
-        environment: str | None = None,
+        allowed_ips: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Create an API key."""
+        """Create an API key.
+
+        ``allowed_ips`` restricts where the key may be used from: addresses or
+        CIDR blocks, IPv4 or IPv6 (``203.0.113.7``, ``10.0.0.0/8``). A request
+        from outside every entry is refused with 403 ``IP_NOT_ALLOWED``. Omit
+        ``expires_at`` to take the install default (90 days for admin and
+        agent keys, none for platform keys)."""
         body: dict[str, Any] = {
             "role": role,
             "ownerId": owner_id,
@@ -537,28 +604,48 @@ class AdminResource:
         if scopes is not None: body["scopes"] = scopes
         if scope_profile is not None: body["scopeProfile"] = scope_profile
         if expires_at is not None: body["expiresAt"] = expires_at
-        if environment is not None: body["environment"] = environment
+        if allowed_ips is not None: body["allowedIps"] = allowed_ips
         return self._http.post("/v1/admin/api-keys", json=body)
 
     def update_api_key(self, key_id: str, **params: Any) -> dict[str, Any]:
-        """Update an API key's status or scopes.
+        """Update an API key's status, scopes or IP allow-list.
 
-        The API accepts only ``is_active`` (→ ``isActive``), ``reason``,
-        ``scopes``, and ``scope_profile`` (→ ``scopeProfile``) here. ``label``,
-        ``expires_at``, and ``allowed_ips`` are settable only at create time;
-        the server rejects them on update (``additionalProperties: false``)."""
-        # Snake-to-camel for the fields the PATCH route actually accepts.
-        mapping = {"is_active": "isActive", "scope_profile": "scopeProfile"}
-        body = {mapping.get(k, k): v for k, v in params.items()}
+        The API accepts ``is_active`` (→ ``isActive``), ``reason``, ``scopes``,
+        ``scope_profile`` (→ ``scopeProfile``) and ``allowed_ips``
+        (→ ``allowedIps``) here. ``allowed_ips`` replaces the whole list;
+        ``None`` or ``[]`` removes the restriction. ``label`` and
+        ``expires_at`` are settable only at create time, and the Server refuses
+        them on update (``additionalProperties: false``)."""
+        body = _api_key_update_body(params)
         return self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
     def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
         """Enable or disable an API key. Convenience wrapper around update_api_key."""
         return self._http.patch(f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active})
 
-    def bulk_revoke_api_keys(self, key_ids: list[str]) -> dict[str, Any]:
-        """Revoke multiple API keys at once."""
-        return self._http.post("/v1/admin/api-keys/bulk-revoke", json={"keyIds": key_ids})
+    def bulk_revoke_api_keys(
+        self,
+        key_ids: list[str] | None = None,
+        *,
+        owner_id: str | None = None,
+        role: str | None = None,
+        created_before: str | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Revoke API keys in one call: by id (at most 100), or every key
+        matching the filters.
+
+        ``last_used_before`` revokes keys whose last authenticated request
+        landed before an instant. ``never_used=True`` revokes keys that have
+        never authenticated and needs ``created_before`` beside it, which
+        bounds the sweep to keys old enough that never having been used means
+        something. ``reason`` goes on the audit trail."""
+        body = _bulk_revoke_body(
+            key_ids, owner_id, role, created_before, last_used_before, never_used, reason
+        )
+        return self._http.post("/v1/admin/api-keys/bulk-revoke", json=body)
 
     # --- Webhook DLQ ---
 
@@ -768,6 +855,8 @@ class AsyncAdminTrustedIssuersResource:
         auto_provision_agents: bool | None = None,
         auto_provision_scope_profile: str | None = None,
         auto_provision_max_agents: int | None = None,
+        jti_single_use: bool | None = None,
+        subject_allowlist: list[str] | None = None,
         label: str | None = None,
         enabled: bool | None = None,
     ) -> dict[str, Any]:
@@ -779,7 +868,15 @@ class AsyncAdminTrustedIssuersResource:
         profile is also the scope ceiling for every cert minted from the issuer,
         so clearing the flag stops new agents without lifting the ceiling off
         the ones already created. ``auto_provision_max_agents`` caps how many
-        this issuer may create (default 1000)."""
+        this issuer may create (default 1000).
+
+        ``jti_single_use`` makes an admin OIDC bearer this issuer validates
+        good for one request per token id: a second presentation is refused
+        with 401. A client using a function-form ``bearer_token`` against such
+        an issuer must mint a fresh token on every call, which the SDK allows
+        for by calling the function per request and caching nothing.
+        ``subject_allowlist`` admits only the listed token subjects (matched
+        exactly against ``sub``); None, the default, admits any."""
         body = _trusted_issuer_body(
             {
                 "issuer_url": issuer_url,
@@ -794,6 +891,8 @@ class AsyncAdminTrustedIssuersResource:
                 "auto_provision_agents": auto_provision_agents,
                 "auto_provision_scope_profile": auto_provision_scope_profile,
                 "auto_provision_max_agents": auto_provision_max_agents,
+                "jti_single_use": jti_single_use,
+                "subject_allowlist": subject_allowlist,
                 "label": label,
                 "enabled": enabled,
             }
@@ -968,6 +1067,8 @@ class AsyncAdminResource:
         created_before: str | None = None,
         expires_before: str | None = None,
         never_expires: bool | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -976,7 +1077,8 @@ class AsyncAdminResource:
         key on the install. See the sync counterpart for the truncation note."""
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor
+            expires_before, never_expires, limit, offset, cursor,
+            last_used_before=last_used_before, never_used=never_used,
         )
         return await self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -991,6 +1093,8 @@ class AsyncAdminResource:
         created_before: str | None = None,
         expires_before: str | None = None,
         never_expires: bool | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
@@ -1001,7 +1105,8 @@ class AsyncAdminResource:
         them, and why the runaway guard raises."""
         params = _api_key_filters(
             owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor
+            expires_before, never_expires, limit, offset, cursor,
+            last_used_before=last_used_before, never_used=never_used,
         )
         async for item in self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages):
             yield item
@@ -1016,7 +1121,7 @@ class AsyncAdminResource:
         scopes: list[str] | None = None,
         scope_profile: str | None = None,
         expires_at: str | None = None,
-        environment: str | None = None,
+        allowed_ips: list[str] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "role": role,
@@ -1027,20 +1132,34 @@ class AsyncAdminResource:
         if scopes is not None: body["scopes"] = scopes
         if scope_profile is not None: body["scopeProfile"] = scope_profile
         if expires_at is not None: body["expiresAt"] = expires_at
-        if environment is not None: body["environment"] = environment
+        if allowed_ips is not None: body["allowedIps"] = allowed_ips
         return await self._http.post("/v1/admin/api-keys", json=body)
 
     async def update_api_key(self, key_id: str, **params: Any) -> dict[str, Any]:
-        mapping = {"is_active": "isActive", "scope_profile": "scopeProfile",
-                   "expires_at": "expiresAt", "allowed_ips": "allowedIps"}
-        body = {mapping.get(k, k): v for k, v in params.items()}
+        """Update an API key's status, scopes or IP allow-list. See the sync
+        counterpart for the fields the route accepts."""
+        body = _api_key_update_body(params)
         return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
     async def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
         return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active})
 
-    async def bulk_revoke_api_keys(self, key_ids: list[str]) -> dict[str, Any]:
-        return await self._http.post("/v1/admin/api-keys/bulk-revoke", json={"keyIds": key_ids})
+    async def bulk_revoke_api_keys(
+        self,
+        key_ids: list[str] | None = None,
+        *,
+        owner_id: str | None = None,
+        role: str | None = None,
+        created_before: str | None = None,
+        last_used_before: str | None = None,
+        never_used: bool | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Revoke API keys by id or by filter. See the sync counterpart."""
+        body = _bulk_revoke_body(
+            key_ids, owner_id, role, created_before, last_used_before, never_used, reason
+        )
+        return await self._http.post("/v1/admin/api-keys/bulk-revoke", json=body)
 
     async def list_dlq(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/webhook-dlq", params=params)

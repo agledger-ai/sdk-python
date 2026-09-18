@@ -75,9 +75,22 @@ COVERED = sorted(set(SDK_LITERALS) & set(PINNED))
 # Named Literals with no pinned API enum to check against. Each is deliberate:
 #   AcceptanceStatus    the spec declares it ``type: ["null", "string"]``
 #   ApiKeyRole          key roles are an SDK concept, not a served enum
+#   AuditChainFailure,  nullable enums (``None`` is a member on the wire). The
+#   AuditChainIntegrityReason
+#                       TypeScript SDK spells them with ``| null``, which its
+#                       union parser cannot pin, so the shared snapshot cannot
+#                       carry them. test_v1_8_0_contract.py pins their members
+#                       against the 1.8.0 spec instead.
 #   RecordType          customer-registered, so the API cannot enumerate it
 #   RiskClassification  EU AI Act tiers plus ``unclassified``, an SDK addition
-UNCOVERED = ["AcceptanceStatus", "ApiKeyRole", "RecordType", "RiskClassification"]
+UNCOVERED = [
+    "AcceptanceStatus",
+    "ApiKeyRole",
+    "AuditChainFailure",
+    "AuditChainIntegrityReason",
+    "RecordType",
+    "RiskClassification",
+]
 
 
 def test_every_literal_is_pinned_or_explicitly_uncovered() -> None:

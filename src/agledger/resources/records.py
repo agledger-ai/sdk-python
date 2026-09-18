@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-from agledger._http import AsyncHttpClient, HttpClient
+from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.record_lifecycle import get_valid_transitions
 from agledger.types import (
     BulkCreateResult,
@@ -92,6 +92,7 @@ class RecordsResource:
         auto_activate: bool | None = None,
         constraint_inheritance: str | None = None,
         enforcement_overrides: dict[str, Any] | None = None,
+        on_behalf_of: str | None = None,
     ) -> RecordRow:
         """Create a Record. Admin keys pass ``principal_agent_id``; agent keys default
         it to the authenticated agent.
@@ -108,6 +109,14 @@ class RecordsResource:
         the org set one). It is immutable once created, and reaching the cap
         refuses the next resubmit with a 422 and leaves the Record where it was,
         so the principal can still render a verdict, cancel or dispute.
+
+        ``on_behalf_of`` is an RFC 8693 delegation token (the token-exchange
+        result your IdP issued, as a compact JWS), sent as the
+        ``AGLedger-On-Behalf-Of`` header beside your own credential when the
+        work is done for a person or another party. The engine validates it
+        against a trusted issuer whose ``applies_to`` is ``principal`` or
+        ``any`` and seals ``predicate.on_behalf_of`` into the signed chain
+        entry.
         """
         body: dict[str, Any] = {"type": type, "criteria": criteria}
         if publisher is not None: body["publisher"] = publisher
@@ -140,7 +149,9 @@ class RecordsResource:
         if auto_activate is not None: body["autoActivate"] = auto_activate
         if constraint_inheritance is not None: body["constraintInheritance"] = constraint_inheritance
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
-        return RecordRow.model_validate(self._http.post("/v1/records", json=body))
+        return RecordRow.model_validate(
+            self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
+        )
 
     def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
         """Get a Record by ID.
@@ -313,13 +324,20 @@ class RecordsResource:
         """Update a Record's mutable fields."""
         return RecordRow.model_validate(self._http.patch(f"/v1/records/{record_id}", json=params))
 
-    def transition(self, record_id: str, action: str, reason: str | None = None) -> RecordRow:
+    def transition(
+        self, record_id: str, action: str, reason: str | None = None, *, on_behalf_of: str | None = None
+    ) -> RecordRow:
         """Transition a Record to a new state. Read ``next_actions`` on the Record
-        response for the exact set valid right now."""
+        response for the exact set valid right now. ``on_behalf_of`` is sent as
+        the ``AGLedger-On-Behalf-Of`` header, as on :meth:`create`."""
         body: dict[str, Any] = {"action": action}
         if reason:
             body["reason"] = reason
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/transition", json=body))
+        return RecordRow.model_validate(
+            self._http.post(
+                f"/v1/records/{record_id}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
+        )
 
     def cancel(self, record_id: str, reason: str | None = None) -> RecordRow:
         """Cancel a Record."""
@@ -410,8 +428,11 @@ class RecordsResource:
         checks: dict[str, Any] | None = None,
         notes: str | None = None,
         reason: str | None = None,
+        on_behalf_of: str | None = None,
     ) -> VerdictResult:
-        """Submit the principal verdict (accept or reject) on a Completion."""
+        """Submit the principal verdict (accept or reject) on a Completion.
+        ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
+        ``records.create``."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
         if checks is not None:
             body["checks"] = checks
@@ -420,7 +441,9 @@ class RecordsResource:
         if reason is not None:
             body["reason"] = reason
         return VerdictResult.model_validate(
-            self._http.post(f"/v1/records/{record_id}/verdict", json=body)
+            self._http.post(
+                f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
         )
 
     def my_verdict_statistics(self) -> VerdictStatistics:
@@ -531,9 +554,11 @@ class AsyncRecordsResource:
         auto_activate: bool | None = None,
         constraint_inheritance: str | None = None,
         enforcement_overrides: dict[str, Any] | None = None,
+        on_behalf_of: str | None = None,
     ) -> RecordRow:
         """Create a Record. ``max_revisions`` caps the rework cycles it allows;
-        omit it to inherit the org default."""
+        omit it to inherit the org default. ``on_behalf_of`` is sent as the
+        ``AGLedger-On-Behalf-Of`` header; see the sync counterpart."""
         body: dict[str, Any] = {"type": type, "criteria": criteria}
         if publisher is not None: body["publisher"] = publisher
         if principal_agent_id is not None: body["principalAgentId"] = principal_agent_id
@@ -565,7 +590,9 @@ class AsyncRecordsResource:
         if auto_activate is not None: body["autoActivate"] = auto_activate
         if constraint_inheritance is not None: body["constraintInheritance"] = constraint_inheritance
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
-        return RecordRow.model_validate(await self._http.post("/v1/records", json=body))
+        return RecordRow.model_validate(
+            await self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
+        )
 
     async def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
         """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain."""
@@ -735,11 +762,15 @@ class AsyncRecordsResource:
     async def update(self, record_id: str, **params: Any) -> RecordRow:
         return RecordRow.model_validate(await self._http.patch(f"/v1/records/{record_id}", json=params))
 
-    async def transition(self, record_id: str, action: str, reason: str | None = None) -> RecordRow:
+    async def transition(
+        self, record_id: str, action: str, reason: str | None = None, *, on_behalf_of: str | None = None
+    ) -> RecordRow:
         body: dict[str, Any] = {"action": action}
         if reason: body["reason"] = reason
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/transition", json=body)
+            await self._http.post(
+                f"/v1/records/{record_id}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
         )
 
     async def cancel(self, record_id: str, reason: str | None = None) -> RecordRow:
@@ -820,8 +851,11 @@ class AsyncRecordsResource:
         checks: dict[str, Any] | None = None,
         notes: str | None = None,
         reason: str | None = None,
+        on_behalf_of: str | None = None,
     ) -> VerdictResult:
-        """Submit the principal verdict (accept or reject) on a Completion."""
+        """Submit the principal verdict (accept or reject) on a Completion.
+        ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
+        ``records.create``."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
         if checks is not None:
             body["checks"] = checks
@@ -830,7 +864,9 @@ class AsyncRecordsResource:
         if reason is not None:
             body["reason"] = reason
         return VerdictResult.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/verdict", json=body)
+            await self._http.post(
+                f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
+            )
         )
 
     async def my_verdict_statistics(self) -> VerdictStatistics:
