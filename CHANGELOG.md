@@ -38,6 +38,8 @@ Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload 
 
 ### Changed
 
+- **The offline verifier binds the row copy of `on_behalf_of` and `traceparent` to what the entry signed.** The payload binding check removed both from each side before comparing, so a rewritten or added delegation block or trace id in an export entry's `payload` (or a dump row's) still verified. A row copy that is present must now equal the signed `predicate.on_behalf_of` / `predicate.traceparent`, or the entry fails `CHAIN_PAYLOAD_BINDING_MISMATCH`. A row without them is fine: the engine also signs an `on_behalf_of` built from authentication that never reaches the row. Mirrors `@agledger/verify-core`.
+
 - **`chainIntegrityReason` and `chainIntegrityDetail.failure` on an audit export are open unions now.** They were closed `Literal`s, so an export carrying a reason this SDK did not list failed to parse at all. A value added by a newer Server now reads as a plain string.
 
 - The missing-credential error names both options: "No credential provided. Pass api_key or bearer_token, or set AGLEDGER_API_KEY." It is still an `AuthenticationError`.

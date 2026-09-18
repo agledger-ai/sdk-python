@@ -275,3 +275,115 @@ def test_the_check_never_runs_without_agent_keys():
     result = _verify(doc)
     assert result.valid
     assert result.agent_signature_check == "skipped_no_input"
+
+
+# --- envelope extensions in the row payload are bound to the signed predicate ---
+# Mirror of verify-core's envelope-extension-binding.test.ts, on the same live
+# fixtures. A row copy of on_behalf_of / traceparent is what a reader sees, and
+# the predicate comparison strips both sides of it, so a copy that is present
+# is bound to the signed predicate separately.
+
+
+def _first_with_obo(doc: dict[str, Any]) -> dict[str, Any]:
+    entry = next(e for e in doc["entries"] if (e.get("payload") or {}).get("on_behalf_of"))
+    return entry["payload"]
+
+
+@pytest.mark.parametrize(
+    "name", ["export-cert-lifecycle.json", "export-delegated-bound.json", "export-delegated-unbound.json"]
+)
+def test_envelope_fixture_verifies_untouched(name: str):
+    assert verify_export(_load(name)).valid
+
+
+def _binding_broken(doc: dict[str, Any]) -> None:
+    result = verify_export(doc)
+    assert not result.valid
+    assert result.broken_at is not None and result.broken_at.code == "CHAIN_PAYLOAD_BINDING_MISMATCH"
+
+
+def test_a_rewritten_on_behalf_of_subject_fails_the_binding():
+    doc = _load("export-cert-lifecycle.json")
+    _first_with_obo(doc)["on_behalf_of"]["oidc"]["sub"] = "someone-else"
+    _binding_broken(doc)
+
+
+def test_a_rewritten_validated_flag_fails_the_binding():
+    doc = _load("export-delegated-bound.json")
+    obo = _first_with_obo(doc)["on_behalf_of"]
+    obo["validated"] = not obo["validated"]
+    _binding_broken(doc)
+
+
+def test_a_row_copy_that_is_not_an_object_fails_the_binding():
+    doc = _load("export-cert-lifecycle.json")
+    _first_with_obo(doc)["on_behalf_of"] = "forged"
+    _binding_broken(doc)
+
+
+def test_a_row_without_the_block_still_verifies():
+    # The engine also signs an on_behalf_of from authentication that never
+    # reaches the row.
+    doc = _load("export-cert-lifecycle.json")
+    del _first_with_obo(doc)["on_behalf_of"]
+    assert verify_export(doc).valid
+
+
+def test_an_on_behalf_of_block_added_to_an_entry_that_signed_none_fails_the_binding():
+    doc = _load("export-lifecycle.json")
+    entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("on_behalf_of"))
+    entry["payload"]["on_behalf_of"] = {"oidc": {"iss": "https://idp.example", "sub": "forged"}, "validated": True}
+    _binding_broken(doc)
+
+
+def test_an_added_traceparent_fails_the_binding():
+    doc = _load("export-lifecycle.json")
+    entry = next(e for e in doc["entries"] if e.get("payload"))
+    entry["payload"]["traceparent"] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    _binding_broken(doc)
+
+
+def test_a_malformed_traceparent_the_engine_would_have_dropped_does_not_break_the_entry():
+    doc = _load("export-lifecycle.json")
+    entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("traceparent"))
+    entry["payload"]["traceparent"] = "not-a-traceparent"
+    assert verify_export(doc).valid
+
+
+def test_the_dump_path_runs_the_same_envelope_binding():
+    # The dump verifier walks each chain through the same verify_entry, fed the
+    # raw vault row's payload, so a rewritten row copy fails there too.
+    from agledger.verify.verify_dump import (  # pyright: ignore[reportPrivateUsage]
+        _collect_chain_failures,
+        _normalize_entry,
+    )
+    from agledger.verify.verify_export import (  # pyright: ignore[reportPrivateUsage]
+        _build_key_registry,
+    )
+
+    doc = _load("export-cert-lifecycle.json")
+    keys = _build_key_registry(doc["exportMetadata"], None)
+
+    def rows() -> list[dict[str, Any]]:
+        return [
+            _normalize_entry({
+                "chain_position": e["chainPosition"],
+                "payload_hash": e["integrity"]["payloadHash"],
+                "previous_hash": e["integrity"]["previousHash"],
+                "cose_sign1": e["integrity"]["coseSign1"],
+                "signing_key_id": e["integrity"]["signingKeyId"],
+                "payload": e["payload"],
+                "entry_type": e["entryType"],
+                "record_id": e.get("recordId"),
+                "created_at": e.get("createdAt"),
+            })
+            for e in doc["entries"]
+        ]
+
+    clean: list[Any] = []
+    _collect_chain_failures("rec", rows(), keys, clean)
+    assert clean == []
+    _first_with_obo(doc)["on_behalf_of"]["oidc"]["sub"] = "someone-else"
+    tampered: list[Any] = []
+    _collect_chain_failures("rec", rows(), keys, tampered)
+    assert [f.code for f in tampered] == ["CHAIN_PAYLOAD_BINDING_MISMATCH"]
