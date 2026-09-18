@@ -198,6 +198,15 @@ def _verify(doc: dict[str, Any], *, agent_keys: list[dict[str, str]] | None = No
     return verify_export(doc, public_keys={KEY_ID: vault_key}, agent_keys=agent_keys)
 
 
+def test_an_unpadded_standard_base64_signature_verifies():
+    # The Server accepts the signature with or without its '==' padding.
+    unpadded = _agent_sign(AGENT, CONTENT_HEX).rstrip("=")
+    doc = _sealed(signature={"alg": "EdDSA", "content_hash": f"sha256:{CONTENT_HEX}", "signature": unpadded})
+    result = _verify(doc, agent_keys=[_jwk_of(AGENT)])
+    assert result.valid
+    assert result.agent_signatures.verified == 1
+
+
 def test_a_good_sealed_signature_verifies():
     result = _verify(_sealed(), agent_keys=[_jwk_of(AGENT)])
     assert result.valid
@@ -231,10 +240,15 @@ def test_a_signature_over_a_different_content_hash_fails():
     [
         {"alg": "ES256", "content_hash": f"sha256:{CONTENT_HEX}", "signature": _agent_sign(AGENT, CONTENT_HEX)},
         {"alg": "EdDSA", "content_hash": CONTENT_HEX, "signature": _agent_sign(AGENT, CONTENT_HEX)},
+        # base64url, not standard base64. Forced to carry a url-alphabet
+        # character: a random signature has none about one time in fifteen, and
+        # then its base64url form is the unpadded standard form, which verifies.
         {
             "alg": "EdDSA",
             "content_hash": f"sha256:{CONTENT_HEX}",
-            "signature": base64.urlsafe_b64encode(base64.b64decode(_agent_sign(AGENT, CONTENT_HEX))).rstrip(b"=").decode(),
+            "signature": "-" + base64.urlsafe_b64encode(
+                base64.b64decode(_agent_sign(AGENT, CONTENT_HEX))
+            ).rstrip(b"=").decode()[1:],
         },
         {"alg": "EdDSA", "content_hash": f"sha256:{CONTENT_HEX}", "signature": 42},
     ],
