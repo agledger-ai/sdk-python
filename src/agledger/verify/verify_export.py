@@ -1073,7 +1073,8 @@ def verify_agent_signature(
         return "malformed"
     if not isinstance(signature, str) or not _STANDARD_BASE64_64_BYTES.match(signature):
         return "malformed"
-    signature_bytes = base64.b64decode(signature)
+    # The pattern admits the unpadded form, which the Server accepts too.
+    signature_bytes = base64.b64decode(signature + "=" * (-len(signature) % 4))
     if len(signature_bytes) != 64:
         return "malformed"
     if not runtime_can_compute("Ed25519"):
