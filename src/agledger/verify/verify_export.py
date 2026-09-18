@@ -838,7 +838,7 @@ def verify_entry(
             predicate is None
             or decoded is None
             or rebuilt is None
-            or rebuilt != decoded
+            or not deep_equal(rebuilt, decoded)
             or not envelope_extensions_match(cast("Mapping[str, Any]", row_payload), predicate)
         ):
             return EntryVerificationResult(
@@ -1057,6 +1057,33 @@ def _decode_predicate(payload_bstr: bytes) -> dict[str, Any] | None:
     return cast("dict[str, Any]", predicate)
 
 
+_ABSENT = object()
+
+
+def deep_equal(a: object, b: object) -> bool:
+    """Structural equality with JSON types kept apart, as verify-core's
+    ``deepEqual`` compares. Python's ``==`` would let ``True`` equal ``1`` and
+    a list equal nothing a CBOR decoder hands back as a tuple, so a row that
+    rewrote a boolean as a number would still bind."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b  # one JSON number type
+    if isinstance(a, Mapping) and isinstance(b, Mapping):
+        am, bm = cast("Mapping[Any, Any]", a), cast("Mapping[Any, Any]", b)
+        return am.keys() == bm.keys() and all(deep_equal(am[k], bm[k]) for k in am)
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        al, bl = cast("Sequence[Any]", a), cast("Sequence[Any]", b)
+        return len(al) == len(bl) and all(deep_equal(x, y) for x, y in zip(al, bl, strict=True))
+    if a is None or b is None:
+        return a is b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    if isinstance(a, (bytes, bytearray)) and isinstance(b, (bytes, bytearray)):
+        return bytes(a) == bytes(b)
+    return False
+
+
 _TRACEPARENT = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 
@@ -1073,14 +1100,19 @@ def envelope_extensions_match(row_payload: Mapping[str, Any], signed_predicate: 
     comparison, so without this check a rewritten or added row copy would
     still verify.
 
+    Anything else under those keys is ignored, as the engine ignores it: it
+    lifts only an object ``on_behalf_of`` and a v00 ``traceparent``, so a
+    genuine older row holding another shape signed nothing for it.
+
     A row without them is not a mismatch: the engine also signs an
     ``on_behalf_of`` built from the request's authentication rather than from
     the payload, and that one never reaches the row payload. Its identity is
     held to the row's actor columns by the OIDC-actor check instead."""
-    if "on_behalf_of" in row_payload:
-        obo = row_payload["on_behalf_of"]
-        if not isinstance(obo, Mapping) or obo != signed_predicate.get("on_behalf_of"):
-            return False
+    obo: object = row_payload.get("on_behalf_of")
+    if isinstance(obo, Mapping) and not deep_equal(
+        cast("Mapping[str, Any]", obo), signed_predicate.get("on_behalf_of", _ABSENT)
+    ):
+        return False
     traceparent = row_payload.get("traceparent")
     return not (
         isinstance(traceparent, str)
@@ -1130,14 +1162,17 @@ def ed25519_jwk_thumbprint(jwk: object) -> str | None:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def build_agent_key_registry(jwks: object) -> dict[str, _Ed25519PublicKey]:
+def build_agent_key_registry(jwks: object) -> dict[str, bytes]:
     """Index agent cert keys by the thumbprint an entry seals as
     ``predicate.on_behalf_of.cert.thumbprint``. A key supplied for the wrong
     cert matches nothing and is never checked against an entry. Raises
     ``TypeError`` on anything that is not an Ed25519 public-key JWK."""
     if isinstance(jwks, (str, bytes)) or not isinstance(jwks, Sequence):
         raise TypeError('agent_keys must be a list of Ed25519 JWKs ({"kty": "OKP", "crv": "Ed25519", "x": ...}).')
-    registry: dict[str, _Ed25519PublicKey] = {}
+    # Raw key bytes, loaded per check: a host whose runtime refuses Ed25519
+    # (an OpenSSL FIPS provider) refuses the load too, and that must come back
+    # as an unchecked entry, not as an exception out of the verifier.
+    registry: dict[str, bytes] = {}
     for i, jwk in enumerate(cast("Sequence[object]", jwks)):
         thumbprint = ed25519_jwk_thumbprint(jwk)
         if thumbprint is None:
@@ -1147,7 +1182,7 @@ def build_agent_key_registry(jwks: object) -> dict[str, _Ed25519PublicKey]:
                 "publicKeyJwk sent at cert exchange (also the cnf.jwk claim inside the certJws)."
             )
         x = cast("Mapping[str, str]", jwk)["x"]
-        registry[thumbprint] = _Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(x + "="))
+        registry[thumbprint] = base64.urlsafe_b64decode(x + "=")
     return registry
 
 
@@ -1155,7 +1190,7 @@ AgentSignatureOutcome = Literal["ok", "invalid", "malformed", "unsupported"]
 
 
 def verify_agent_signature(
-    public_key: _Ed25519PublicKey, alg: object, content_hash: object, signature: object
+    public_key: bytes, alg: object, content_hash: object, signature: object
 ) -> AgentSignatureOutcome:
     """Verify a sealed agent signature against the cert's Ed25519 key.
 
@@ -1179,7 +1214,13 @@ def verify_agent_signature(
     if not runtime_can_compute("Ed25519"):
         return "unsupported"
     try:
-        public_key.verify(signature_bytes, f"{AGENT_SIGNATURE_CONTEXT}{match.group(1)}".encode())
+        key = _Ed25519PublicKey.from_public_bytes(public_key)
+    except Exception:
+        # The bytes were validated as a 32-byte Ed25519 key when the registry
+        # was built, so a refusal here is the runtime's, not tamper evidence.
+        return "unsupported"
+    try:
+        key.verify(signature_bytes, f"{AGENT_SIGNATURE_CONTEXT}{match.group(1)}".encode())
     except _InvalidSignature:
         return "invalid"
     except Exception:
@@ -1190,7 +1231,7 @@ def verify_agent_signature(
 def check_agent_signature(
     entry: Mapping[str, Any],
     result: EntryVerificationResult,
-    agent_keys: Mapping[str, _Ed25519PublicKey] | None,
+    agent_keys: Mapping[str, bytes] | None,
     counts: AgentSignatureCounts,
     applied: list[CheckApplicability],
 ) -> EntryVerificationResult:

@@ -19,7 +19,7 @@ an awaitable and the credential's ``get_token`` is a coroutine.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -41,7 +41,7 @@ class CredentialContext:
     holds a token other than ``rejected_token``. The client asks at most once
     per request, and a second 401 reaches the caller as
     :class:`~agledger.AuthenticationError`."""
-    rejected_token: str | None = None
+    rejected_token: str | None = field(default=None, repr=False)
     """The token the Server refused, when ``force_refresh`` is set. Several
     requests in flight on one stale token all come back 401; comparing against
     this lets a credential refresh once for all of them."""
@@ -54,7 +54,7 @@ class AsyncCredentialContext:
     base_url: str
     http_client: httpx.AsyncClient
     force_refresh: bool
-    rejected_token: str | None = None
+    rejected_token: str | None = field(default=None, repr=False)
 
 
 @runtime_checkable

@@ -126,7 +126,9 @@ def load_agent_keys(path: str) -> list[dict[str, Any]] | str:
     return cast("list[dict[str, Any]]", jwks)
 
 
-def _agent_signature_summary(counts: AgentSignatureCounts, check: CheckApplicability) -> str:
+def _agent_signature_summary(
+    counts: AgentSignatureCounts, check: CheckApplicability, keys_given: bool
+) -> str:
     """One line on the agent-signature check. ``present > verified`` on a
     passing report means some signatures were not re-checked, never that they
     failed; the line says so rather than leaving a bare ratio to be misread."""
@@ -141,6 +143,11 @@ def _agent_signature_summary(counts: AgentSignatureCounts, check: CheckApplicabi
         return f"{base} (checked)"
     if counts.present == 0:
         return f"{base} (none on the chain)"
+    if keys_given:
+        return (
+            f"{base} (NOT checked: no supplied key matches their certs, or each is a "
+            "caller-asserted identity)"
+        )
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
@@ -148,7 +155,7 @@ def _looks_like_audit_export(value: Any) -> bool:
     return isinstance(value, dict) and "exportMetadata" in value and "entries" in value
 
 
-def _format_dump_text(report: VerifyReport) -> str:
+def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
     lines: list[str] = []
     status = "PASS" if report.ok else "FAIL"
     lines.append(f"[{status}] AGLedger offline verification (dump)")
@@ -161,7 +168,7 @@ def _format_dump_text(report: VerifyReport) -> str:
         report.vault.agent_signatures_present, report.vault.agent_signatures_verified
     )
     lines.append(
-        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'])}"
+        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given)}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
@@ -218,7 +225,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
     return out
 
 
-def _format_export_text(result: VerifyExportResult) -> str:
+def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
     lines: list[str] = []
     status = "PASS" if result.valid else "FAIL"
     lines.append(f"[{status}] AGLedger offline verification (audit-export)")
@@ -238,7 +245,7 @@ def _format_export_text(result: VerifyExportResult) -> str:
     )
     lines.append(
         "  agent signatures  : "
-        f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check)}"
+        f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given)}"
     )
     if result.broken_at is not None:
         lines.append(
@@ -280,7 +287,7 @@ def run_cli(argv: Sequence[str]) -> int:
             if report_format == "json":
                 print(json.dumps(report.to_json(), indent=2))
             else:
-                print(_format_dump_text(report))
+                print(_format_dump_text(report, agent_keys is not None))
         return _EXIT_OK if report.ok else _EXIT_VERIFICATION_FAILED
 
     # File -> parse JSON, branch on exportMetadata.
@@ -308,7 +315,7 @@ def run_cli(argv: Sequence[str]) -> int:
         if report_format == "json":
             print(json.dumps(_export_to_json(result), indent=2))
         else:
-            print(_format_export_text(result))
+            print(_format_export_text(result, agent_keys is not None))
     return _EXIT_OK if result.valid else _EXIT_VERIFICATION_FAILED
 
 
