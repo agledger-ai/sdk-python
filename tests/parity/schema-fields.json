@@ -339,7 +339,7 @@
       "url"
     ]
   },
-  "enumCount": 38,
+  "enumCount": 42,
   "enums": {
     "AgentClass": {
       "values": [
@@ -351,6 +351,52 @@
       "specSites": [
         "paths//v1/agents/{id}/patch/requestBody/content/application/json/schema/properties/agentClass",
         "paths//v1/agents/{id}/get/responses/200/content/application/json/schema/properties/agentClass"
+      ]
+    },
+    "AuditChainFailureCode": {
+      "values": [
+        "agent_signature_invalid",
+        "audit_vault_truncated",
+        "cert_actor_drift",
+        "cert_expired",
+        "cert_missing",
+        "cert_window_drift",
+        "checkpoint_anchor_mismatch",
+        "oidc_actor_drift",
+        "payload_drift",
+        "payload_hash_mismatch",
+        "previous_hash_mismatch",
+        "signature_invalid",
+        "signing_key_drift",
+        "signing_key_unknown",
+        "unsupported_algorithm"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/chainIntegrityDetail/properties/failure",
+        "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/exportMetadata/properties/chainIntegrityDetail/properties/failure"
+      ]
+    },
+    "AuditChainIntegrityReasonCode": {
+      "values": [
+        "agent_signature_invalid",
+        "audit_vault_empty",
+        "audit_vault_row_missing_for_checkpoint",
+        "cert_actor_drift",
+        "cert_expired",
+        "cert_missing",
+        "cert_window_drift",
+        "chain_broken_at",
+        "checkpoint_hash_mismatch",
+        "oidc_actor_drift",
+        "payload_drift",
+        "signature_invalid",
+        "signing_key_drift",
+        "signing_key_unknown",
+        "unsupported_algorithm"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/chainIntegrityReason",
+        "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/exportMetadata/properties/chainIntegrityReason"
       ]
     },
     "AutoProvisionScopeProfile": {
@@ -610,6 +656,17 @@
         "components/schemas/RecordRow/properties/gateMode"
       ]
     },
+    "LicenseNoticeKind": {
+      "values": [
+        "dev-external",
+        "error",
+        "unlicensed"
+      ],
+      "specSites": [
+        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/notice/properties/kind",
+        "paths//v1/conformance/get/responses/200/content/application/json/schema/properties/license/properties/notice"
+      ]
+    },
     "LicenseTier": {
       "values": [
         "developer",
@@ -617,7 +674,25 @@
         "unlicensed"
       ],
       "specSites": [
-        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/tier"
+        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/tier",
+        "paths//v1/admin/license/reload/post/responses/200/content/application/json/schema/properties/tier"
+      ]
+    },
+    "LicenseValidity": {
+      "values": [
+        "instance_mismatch",
+        "invalid_format",
+        "invalid_signature",
+        "lapsed",
+        "marketplace_unreachable",
+        "unlicensed",
+        "valid",
+        "version_too_new"
+      ],
+      "specSites": [
+        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/validity",
+        "paths//v1/admin/license/get/responses/200/content/application/json/schema/properties/notice/properties/validity",
+        "paths//v1/conformance/get/responses/200/content/application/json/schema/properties/license/properties/validity"
       ]
     },
     "OperatingMode": {

@@ -17,8 +17,8 @@ import respx
 from agledger import (
     AgledgerClient,
     AsyncAgledgerClient,
-    AuditChainFailure,
-    AuditChainIntegrityReason,
+    AuditChainFailureCode,
+    AuditChainIntegrityReasonCode,
     ConflictError,
     UnprocessableError,
 )
@@ -246,9 +246,9 @@ def test_conformance_reports_license_state():
 
 # --- chain integrity reasons ---
 
-# Every member the 1.8.0 spec declares at each site, minus null. Pinned here
-# because the members are nullable on the wire and so cannot ride the shared
-# enum snapshot (see test_enum_parity.py).
+# Every member the 1.8.0 spec declares at each site, minus null. The shared
+# enum snapshot pins these too; this states the cert_window_drift addition
+# where a reader of this wave's deltas will look for it.
 SPEC_1_8_0_CHAIN_INTEGRITY_REASON = {
     "agent_signature_invalid", "audit_vault_empty", "audit_vault_row_missing_for_checkpoint",
     "cert_actor_drift", "cert_expired", "cert_missing", "cert_window_drift", "chain_broken_at",
@@ -273,8 +273,8 @@ def _members(alias: object) -> set[str]:
 
 
 def test_chain_integrity_unions_match_the_spec():
-    assert _members(AuditChainIntegrityReason) == SPEC_1_8_0_CHAIN_INTEGRITY_REASON
-    assert _members(AuditChainFailure) == SPEC_1_8_0_CHAIN_FAILURE
+    assert _members(AuditChainIntegrityReasonCode) == SPEC_1_8_0_CHAIN_INTEGRITY_REASON
+    assert _members(AuditChainFailureCode) == SPEC_1_8_0_CHAIN_FAILURE
 
 
 def _export(reason: str, failure: str) -> dict[str, object]:
