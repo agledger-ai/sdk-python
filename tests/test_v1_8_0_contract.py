@@ -352,3 +352,91 @@ async def test_async_on_behalf_of():
     async with AsyncAgledgerClient(api_key="k", base_url=BASE) as client:
         await client.records.create(type="notarize-generic-v1", criteria={}, on_behalf_of=OBO)
     assert create.calls.last.request.headers["agledger-on-behalf-of"] == OBO
+
+
+# --- fields and routes the Server never served ---
+# Each payload below is the shape the 1.8.0 Server returned live.
+
+
+@respx.mock
+def test_verification_keys_carry_the_envelope_and_per_key_verifier_floor():
+    respx.get(f"{BASE}/v1/verification-keys").mock(return_value=httpx.Response(200, json={
+        "data": [{
+            "keyId": "4b2f0b6374460c76", "algorithm": "Ed25519", "publicKey": "MCow", "publicKeyRaw": "raw",
+            "status": "active", "activatedAt": "2026-09-18T06:29:52.325Z", "retiredAt": None,
+            "coseAlgorithm": -8, "minVerifierVersion": "1.0.0",
+        }],
+        "envelope": "COSE_Sign1", "payloadFormat": "application/vnd.in-toto+cbor",
+        "canonicalization": "RFC8949-CDE", "coseAlgorithm": -8, "signatureAlgorithm": "Ed25519",
+        "signatureInputTemplate": "Sig_structure = ...",
+    }))
+    keys = _client().verification_keys.list()
+    assert (keys.envelope, keys.payload_format, keys.cose_algorithm) == (
+        "COSE_Sign1", "application/vnd.in-toto+cbor", -8,
+    )
+    assert keys.data[0].min_verifier_version == "1.0.0"
+    assert keys.data[0].cose_algorithm == -8
+    assert "hash_algorithm" not in type(keys).model_fields
+
+
+@respx.mock
+def test_webhook_ping_reports_what_the_route_returns():
+    respx.post(f"{BASE}/v1/webhooks/wh-1/ping").mock(return_value=httpx.Response(200, json={
+        "statusCode": 502, "body": "bad gateway", "durationMs": 41, "success": False,
+        "deliveryId": "d-1", "httpStatus": 502, "latencyMs": 41, "nextSteps": [],
+    }))
+    result = _client().webhooks.ping("wh-1")
+    assert (result.status_code, result.duration_ms, result.body, result.delivery_id) == (502, 41, "bad gateway", "d-1")
+    assert "response_time_ms" not in type(result).model_fields
+
+
+def test_models_no_longer_declare_fields_the_server_never_sent():
+    from agledger import (
+        AuditExportEntry,
+        ComplianceExport,
+        HealthResponse,
+        StatusResponse,
+    )
+
+    assert not {"uptime", "database"} & set(HealthResponse.model_fields)
+    assert "active_incidents" not in StatusResponse.model_fields
+    assert not {"id", "format"} & set(ComplianceExport.model_fields)
+    assert not {"position", "timestamp", "actor"} & set(AuditExportEntry.model_fields)
+
+
+@respx.mock
+def test_rate_limit_exemptions_use_only_registered_routes():
+    put = respx.put(f"{BASE}/v1/admin/rate-limit-exemptions/agt-1").mock(
+        return_value=httpx.Response(200, json={"ownerId": "agt-1", "exempt": True, "nextSteps": []})
+    )
+    client = _client()
+    assert client.admin.set_rate_limit_exemption("agt-1")["exempt"] is True
+    assert put.calls.last.request.content == b""
+    # GET /v1/admin/rate-limit-exemptions/{ownerId} was never registered.
+    assert not hasattr(client.admin, "get_rate_limit_exemption")
+
+
+@respx.mock
+def test_predicates_get_uses_the_literal_v1_path():
+    route = respx.get(f"{BASE}/predicates/record-state/v1").mock(
+        return_value=httpx.Response(200, json={"$schema": "https://json-schema.org/draft/2019-09/schema"})
+    )
+    assert "$schema" in _client().predicates.get("record-state")
+    assert route.called
+
+
+@respx.mock
+def test_reference_lookup_is_a_page_of_matches_and_walks_every_page():
+    route = respx.get(f"{BASE}/v1/references").mock(side_effect=[
+        httpx.Response(200, json={
+            "data": [{"entityType": "record", "entityId": "rec-1", "reference": {"refId": "PO-1"}}],
+            "hasMore": True, "nextCursor": "c2",
+        }),
+        httpx.Response(200, json={
+            "data": [{"entityType": "agent", "entityId": "agt-1", "reference": {"refId": "PO-1"}}],
+            "hasMore": False,
+        }),
+    ])
+    matches = list(_client().references.lookup_all(system="erp", ref_type="po", ref_id="PO-1"))
+    assert [m["entityId"] for m in matches] == ["rec-1", "agt-1"]
+    assert route.calls[1].request.url.params["cursor"] == "c2"

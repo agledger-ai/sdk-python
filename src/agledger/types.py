@@ -938,37 +938,22 @@ class ComplianceRecord(BaseModel):
     attested_by: str = Field(alias="attestedBy")
     attested_at: str = Field(alias="attestedAt")
     created_at: str = Field(alias="createdAt")
-
-
-class AuditActor(BaseModel):
-    """Actor envelope embedded in canonical audit payloads."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
-
-    actor_key_id: str | None = None
-    actor_role: str | None = None
-    actor_owner_id: str | None = None
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls, on the write that returns this."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this call logged, when
+    an org admin read a Record it is not a party to."""
 
 
 class AuditExportEntry(BaseModel):
-    """Per-record audit-vault entry as it lands on the wire.
-
-    The engine emits ``chainPosition`` + ``createdAt`` (v0.25.x and later);
-    ``position`` + ``timestamp`` are the pre-v0.25 names, kept for backward
-    compatibility with old exports. Either side may be absent on a given wire,
-    so both are typed optional: consumers should prefer the canonical names
-    and fall back to the legacy ones."""
+    """Per-record audit-vault entry as it lands on the wire."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
     chain_position: int | None = Field(None, alias="chainPosition")
-    """Per-record monotonic chain position (1-indexed). Canonical field on current exports."""
-    position: int | None = None
-    """Pre-v0.25 alias for ``chain_position``: kept so old exports still parse."""
+    """Per-record monotonic chain position (1-indexed)."""
     created_at: str | None = Field(None, alias="createdAt")
-    """Canonical entry timestamp (engine v0.25+)."""
-    timestamp: str | None = None
-    """Pre-v0.25 alias for ``created_at``."""
+    """Entry timestamp."""
     record_id: str | None = Field(None, alias="recordId")
     actor_id: str | None = Field(None, alias="actorId")
     actor_role: str | None = Field(None, alias="actorRole")
@@ -987,8 +972,6 @@ class AuditExportEntry(BaseModel):
     transitioned"). Display PROJECTION: NOT signature-covered; the canonical machine-readable name
     stays in ``entry_type``. Replaced the pre-launch ``description`` placeholder (engine v0.26.x+)."""
     payload: dict[str, Any]
-    actor: AuditActor | None = None
-    """Optional ``_actor`` envelope surfaced from the canonical payload."""
     evidence: dict[str, Any] | None = None
     """Completion evidence body, present only when the export was fetched with
     ``evidence=True`` AND this is a COMPLETION_SUBMITTED entry. UNSIGNED
@@ -1120,6 +1103,9 @@ class AuditExportMetadata(BaseModel):
     """`RFC8949-CDE` since 2.0: deterministic CBOR per RFC 8949 §4.2.1."""
     signing_public_key: str | None = Field(None, alias="signingPublicKey")
     signing_public_keys: dict[str, str] | None = Field(None, alias="signingPublicKeys")
+    signing_key_windows: dict[str, dict[str, Any]] | None = Field(None, alias="signingKeyWindows")
+    """keyId to ``{activatedAt, retiredAt}``: the input for the offline
+    verifier's temporal key-validity check."""
 
 
 class VaultCheckpoint(BaseModel):
@@ -1152,6 +1138,15 @@ class RecordAuditExport(BaseModel):
 
     export_metadata: AuditExportMetadata = Field(alias="exportMetadata")
     entries: list[AuditExportEntry] = Field(default_factory=list[AuditExportEntry])
+    verification_guide: dict[str, Any] | None = Field(None, alias="verificationGuide")
+    """How to verify this export offline, step by step. ``unsignedFields``
+    names the fields in the export that no signature covers."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this export logged,
+    when an org admin exported a Record it is not a party to."""
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls. The integrity fields the Server also mirrors
+    at the top level are read from ``export_metadata``."""
 
 
 class AuditStreamResult(BaseModel):
@@ -1202,6 +1197,8 @@ class OrgReadsCheckpoint(BaseModel):
     witness_signature: str | None = Field(None, alias="witnessSignature")
     witness_key_id: str | None = Field(None, alias="witnessKeyId")
     witness_cosigned_at: str | None = Field(None, alias="witnessCosignedAt")
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls, on the co-sign response only."""
 
 
 class OrgReadsInclusionProof(BaseModel):
@@ -1504,13 +1501,6 @@ class HealthResponse(BaseModel):
 
     status: str
     version: str | None = None
-    #: Deprecated. ``GET /health`` declares only ``status``, ``version`` and
-    #: ``timestamp``, and the Server strips what its response schema does not
-    #: declare, so these two never arrive. Kept so callers keep working.
-    #: Process uptime and database state are on ``admin.get_system_health()``,
-    #: where ``database`` is an object, not a string.
-    uptime: float | None = None
-    database: str | None = None
     timestamp: str
 
 
@@ -1527,7 +1517,6 @@ class StatusResponse(BaseModel):
 
     status: str
     components: list[StatusComponent] = []
-    active_incidents: list[dict[str, Any]] = Field(default=[], alias="activeIncidents")
     uptime: float
     timestamp: str
 
@@ -1734,7 +1723,17 @@ class WebhookTestResult(BaseModel):
 
     success: bool
     status_code: int | None = Field(None, alias="statusCode")
-    response_time_ms: int | None = Field(None, alias="responseTimeMs")
+    """HTTP status from the endpoint, 0 when the connection failed."""
+    http_status: int | None = Field(None, alias="httpStatus")
+    """Alias of ``status_code``."""
+    body: str | None = None
+    """Response body from the endpoint, truncated to 1024 characters."""
+    duration_ms: int | None = Field(None, alias="durationMs")
+    """Round-trip duration in milliseconds."""
+    latency_ms: int | None = Field(None, alias="latencyMs")
+    """Alias of ``duration_ms``."""
+    delivery_id: str | None = Field(None, alias="deliveryId")
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
 
 
 class AgentCapabilities(BaseModel):
@@ -1742,15 +1741,15 @@ class AgentCapabilities(BaseModel):
 
     agent_id: str = Field(alias="agentId")
     capabilities: list[str] = []
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls, on the write that returns this."""
 
 
 class ComplianceExport(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
 
-    id: str | None = None
     export_id: str | None = Field(None, alias="exportId")
     status: str
-    format: str | None = None
     created_at: str | None = Field(None, alias="createdAt")
     expires_at: str | None = Field(None, alias="expiresAt")
     download_url: str | None = Field(None, alias="downloadUrl")
@@ -1768,6 +1767,7 @@ class ComplianceExport(BaseModel):
     #: ``record_count`` unless ``truncated``. Header twin on a download:
     #: ``X-AGLedger-Export-Total-Records``.
     total_records: int | None = Field(None, alias="totalRecords")
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
 
 
 class AiImpactAssessment(BaseModel):
@@ -1780,6 +1780,11 @@ class AiImpactAssessment(BaseModel):
     human_oversight: dict[str, Any] | None = Field(None, alias="humanOversight")
     testing_results: dict[str, Any] | None = Field(None, alias="testingResults")
     created_at: str = Field(alias="createdAt")
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls, on the write that returns this."""
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+    """Inclusion-proof coordinates of the org-admin read this call logged, when
+    an org admin read a Record it is not a party to."""
 
 
 class VerificationKey(BaseModel):
@@ -1798,6 +1803,11 @@ class VerificationKey(BaseModel):
     """May be a full ISO timestamp (engine ≥ v0.26.x) or a bare date string
     (older builds). Optional so the model parses either way."""
     retired_at: str | None = Field(None, alias="retiredAt")
+    cose_algorithm: int | None = Field(None, alias="coseAlgorithm")
+    """The COSE ``alg`` this key signs under (``-8`` EdDSA, ``-7`` ES256)."""
+    min_verifier_version: str | None = Field(None, alias="minVerifierVersion")
+    """The lowest verifier release that can check signatures under this key.
+    An older verifier reports them as unsupported, not as tampered."""
 
 
 class VerificationKeysResponse(BaseModel):
@@ -1807,9 +1817,12 @@ class VerificationKeysResponse(BaseModel):
 
     data: list[VerificationKey]
     canonicalization: str
-    hash_algorithm: str | None = Field(None, alias="hashAlgorithm")
-    """Optional: not emitted by every server build. Engines that
-    emit it set ``"SHA-256"``; absent means the implicit COSE/Ed25519 default."""
+    envelope: str | None = None
+    """The signed envelope format of each chain entry (COSE_Sign1)."""
+    payload_format: str | None = Field(None, alias="payloadFormat")
+    """The payload format inside the envelope (an in-toto v1 Statement)."""
+    cose_algorithm: int | None = Field(None, alias="coseAlgorithm")
+    """COSE ``alg`` of the active signing key."""
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")
     """Template for the canonical signature-input string (v0.25.x)."""

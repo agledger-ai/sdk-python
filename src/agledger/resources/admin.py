@@ -731,19 +731,18 @@ class AdminResource:
     # --- Rate-limit exemptions ---
 
     def list_rate_limit_exemptions(self) -> dict[str, Any]:
-        """List all owner-level rate-limit exemptions."""
+        """List the owners exempt from rate limiting: ``{"data": [ownerId, ...],
+        "total"}``. Check one owner with ``owner_id in result["data"]``; there
+        is no per-owner read route."""
         return self._http.get("/v1/admin/rate-limit-exemptions")
 
-    def get_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
-        """Get a specific owner's rate-limit exemption."""
-        return self._http.get(f"/v1/admin/rate-limit-exemptions/{owner_id}")
-
-    def set_rate_limit_exemption(self, owner_id: str, **params: Any) -> dict[str, Any]:
-        """Grant rate-limit exemption to an owner."""
-        return self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}", json=params or {})
+    def set_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
+        """Exempt an owner (agent or org id) from rate limiting. Idempotent.
+        Returns ``{"ownerId", "exempt", "nextSteps"}``."""
+        return self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}")
 
     def delete_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
-        """Remove rate-limit exemption from an owner."""
+        """Remove an owner's rate-limit exemption. Idempotent."""
         return self._http.delete(f"/v1/admin/rate-limit-exemptions/{owner_id}")
 
 
@@ -1218,11 +1217,8 @@ class AsyncAdminResource:
     async def list_rate_limit_exemptions(self) -> dict[str, Any]:
         return await self._http.get("/v1/admin/rate-limit-exemptions")
 
-    async def get_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/admin/rate-limit-exemptions/{owner_id}")
-
-    async def set_rate_limit_exemption(self, owner_id: str, **params: Any) -> dict[str, Any]:
-        return await self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}", json=params or {})
+    async def set_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
+        return await self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}")
 
     async def delete_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
         return await self._http.delete(f"/v1/admin/rate-limit-exemptions/{owner_id}")

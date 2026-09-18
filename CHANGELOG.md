@@ -36,6 +36,10 @@ Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload 
 
 - **`LicenseValidity` and `LicenseNoticeKind`** name the values the license state carries, on `ConformanceLicense` and on the license responses.
 
+- **`references.lookup()` returns the page of matches the route serves** (`{"data": [{"entityType", "entityId", "reference"}], "hasMore", "nextCursor"}`) and takes `limit` and `cursor`; `references.lookup_all()` walks every page. **`predicates.get()`** always requests the literal `v1` path, the only version the Server publishes. **`RecordAuditExport`** gains `verification_guide`, `record_read` and `next_steps`, and **`AuditExportMetadata`** gains `signing_key_windows`. `next_steps` and `record_read` are added where the route returns them: `AgentCapabilities`, `AiImpactAssessment`, `ComplianceRecord`, `ComplianceExport` and the org-reads checkpoint co-sign.
+
+- **A test resolves every route each resource method calls against the route snapshot**, so a method that reaches a route the Server does not register fails the suite. That is how `get_rate_limit_exemption` and the versioned `predicates.get` path were found.
+
 ### Changed
 
 - **The offline verifier binds the row copy of `on_behalf_of` and `traceparent` to what the entry signed.** The payload binding check removed both from each side before comparing, so a rewritten or added delegation block or trace id in an export entry's `payload` (or a dump row's) still verified. A row copy that is present must now equal the signed `predicate.on_behalf_of` / `predicate.traceparent`, or the entry fails `CHAIN_PAYLOAD_BINDING_MISMATCH`. A row without them is fine: the engine also signs an `on_behalf_of` built from authentication that never reaches the row. Mirrors `@agledger/verify-core`.
@@ -46,8 +50,16 @@ Reconciled against the AGLedger API 1.8.0 release candidate. Adds OIDC workload 
 
 - `get_ndjson` (the SIEM stream) now records `last_request_id` and `rate_limit_info` like every other call.
 
-### Removed
+### Removed (the Server never sent the field or served the route)
 
+A sweep of every resource method's return model against the response schema of the route it calls, confirmed against a live 1.8.0 Server, found these. Each was a field that always read `None` or a call that always failed.
+
+- **`admin.get_rate_limit_exemption()` is removed.** `GET /v1/admin/rate-limit-exemptions/{ownerId}` does not exist, so every call was a 404. `list_rate_limit_exemptions()` returns `{"data": [ownerId, ...], "total"}`; check one owner with `owner_id in result["data"]`. `set_rate_limit_exemption(owner_id)` no longer takes keyword arguments, since the route takes no body.
+- **`VerificationKeysResponse.hash_algorithm` is removed**; it gains `envelope`, `payload_format` and `cose_algorithm`, and each `VerificationKey` gains `cose_algorithm` and `min_verifier_version`.
+- **`HealthResponse.uptime` and `.database`, and `StatusResponse.active_incidents`, are removed.** Process uptime and database state are on `admin.get_system_health()`.
+- **`ComplianceExport.id` and `.format` are removed.** The export id is `export_id`.
+- **`WebhookTestResult.response_time_ms` is removed**; it gains `duration_ms`, `latency_ms`, `http_status`, `body`, `delivery_id` and `next_steps`, which `webhooks.ping()` returns.
+- **`AuditExportEntry.position`, `.timestamp` and `.actor`, and the `AuditActor` model, are removed.** They were pre-0.25 names no Server of this line sends; read `chain_position`, `created_at` and the `actor_*` fields. The offline verifier still reads a legacy `position` key in raw export JSON.
 - **`create_api_key(environment=)`.** The Server refuses the field with a 400, and it was never read by anything: a key belongs to one Server's database, so the label named nothing.
 
 ### Fixed

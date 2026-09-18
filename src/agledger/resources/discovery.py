@@ -38,7 +38,8 @@ class DiscoveryResource:
         return ConformanceResponse.model_validate(self._http.get("/v1/conformance"))
 
     def get_lifecycle(self) -> dict[str, Any]:
-        """Return the Record lifecycle definition (states + transitions)."""
+        """Return the lifecycle definitions: ``{"record": ..., "dispute": ...}``,
+        each with its ``states`` (valid transitions, actions, terminal)."""
         return self._http.get("/lifecycle")
 
 
