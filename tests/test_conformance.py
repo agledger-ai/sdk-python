@@ -110,6 +110,12 @@ def test_conformance_vector(vector: dict[str, Any]) -> None:
         kwargs["require_key_id"] = options["requireKeyId"]
     if options.get("requireOutOfBandKeys"):
         kwargs["require_out_of_band_keys"] = True
+    # Unmapped, a vector expecting CHAIN_AGENT_SIGNATURE_INVALID runs with no
+    # agent keys, the check reports skipped_no_input, the export passes, and
+    # the suite fails on a vector that was never actually exercised.
+    agent_keys_file = options.get("agentKeysFile")
+    if agent_keys_file:
+        kwargs["agent_keys"] = json.loads((_CONFORMANCE_DIR / agent_keys_file).read_text())
 
     export_data = json.loads((_CONFORMANCE_DIR / vector["file"]).read_text())
     result = verify_export(export_data, **kwargs)

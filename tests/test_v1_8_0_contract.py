@@ -248,18 +248,22 @@ def test_conformance_reports_license_state():
 
 # Every member the 1.8.0 spec declares at each site, minus null. The shared
 # enum snapshot pins these too; this states the cert_window_drift addition
-# where a reader of this wave's deltas will look for it.
+# where a reader of this wave's deltas will look for it, and the checkpoint
+# and key-window codes the engine added after the wave was first packed.
 SPEC_1_8_0_CHAIN_INTEGRITY_REASON = {
     "agent_signature_invalid", "audit_vault_empty", "audit_vault_row_missing_for_checkpoint",
     "cert_actor_drift", "cert_expired", "cert_missing", "cert_window_drift", "chain_broken_at",
-    "checkpoint_hash_mismatch", "oidc_actor_drift", "payload_drift", "signature_invalid",
-    "signing_key_drift", "signing_key_unknown", "unsupported_algorithm",
+    "checkpoint_claim_mismatch", "checkpoint_hash_mismatch", "checkpoint_key_unknown",
+    "checkpoint_signature_invalid", "key_expired", "key_not_yet_active", "oidc_actor_drift",
+    "payload_drift", "signature_invalid", "signing_key_drift", "signing_key_unknown",
+    "signing_key_unpublished", "unsupported_algorithm",
 }
 SPEC_1_8_0_CHAIN_FAILURE = {
     "agent_signature_invalid", "audit_vault_truncated", "cert_actor_drift", "cert_expired",
-    "cert_missing", "cert_window_drift", "checkpoint_anchor_mismatch", "oidc_actor_drift",
-    "payload_drift", "payload_hash_mismatch", "previous_hash_mismatch", "signature_invalid",
-    "signing_key_drift", "signing_key_unknown", "unsupported_algorithm",
+    "cert_missing", "cert_window_drift", "checkpoint_anchor_mismatch", "key_expired",
+    "key_not_yet_active", "oidc_actor_drift", "payload_drift", "payload_hash_mismatch",
+    "previous_hash_mismatch", "signature_invalid", "signing_key_drift", "signing_key_unknown",
+    "signing_key_unpublished", "unsupported_algorithm",
 }
 
 

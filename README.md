@@ -374,6 +374,7 @@ agledger-verify audit-export.json             # single record export
 agledger-verify ./vault-dump-dir -f json      # machine-readable report
 agledger-verify ./vault-dump-dir --quiet      # exit code only
 agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check agent signatures
+agledger-verify audit-export.json --keys verification-keys.json --require-out-of-band-keys
 ```
 
 `--agent-keys` takes a JSON file of agent certificate keys: one JWK, a list, a
@@ -382,6 +383,18 @@ agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check 
 on an `/audit-export` file; in code, pass `agent_keys=` to `verify_dump` or
 `verify_export`. Both reports say which input-gated checks ran
 (`optional_checks`) and how many agent signatures were present and verified.
+
+Without `--keys`, an `/audit-export` file is verified against the signing keys
+carried inside that same export, and the report says so (`key provenance :
+out-of-band=0`). That proves internal consistency, not independence: anyone who
+re-signs the chain with their own embedded key also passes. For an independent
+audit, save `GET /v1/verification-keys` and pass it as `--keys` (the `{keyId:
+...}` map, a `[{keyId, publicKey}]` list, or the raw response envelope all
+work), with `--require-out-of-band-keys` to refuse the embedded ones outright
+and `--require-key-id <id>` to pin the key every entry must reference. The three
+key-policy flags apply to an `/audit-export` file only; a dump directory carries
+its own signed key history and rejects them. In code they are the `public_keys`,
+`require_out_of_band_keys` and `require_key_id` arguments to `verify_export`.
 
 Exit codes: `0` clean, `1` verification failure, `2` usage/IO error (so a missing
 file is never mistaken for tamper). Every failure carries an actionable next step

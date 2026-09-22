@@ -362,6 +362,8 @@
         "cert_missing",
         "cert_window_drift",
         "checkpoint_anchor_mismatch",
+        "key_expired",
+        "key_not_yet_active",
         "oidc_actor_drift",
         "payload_drift",
         "payload_hash_mismatch",
@@ -369,6 +371,7 @@
         "signature_invalid",
         "signing_key_drift",
         "signing_key_unknown",
+        "signing_key_unpublished",
         "unsupported_algorithm"
       ],
       "specSites": [
@@ -386,12 +389,18 @@
         "cert_missing",
         "cert_window_drift",
         "chain_broken_at",
+        "checkpoint_claim_mismatch",
         "checkpoint_hash_mismatch",
+        "checkpoint_key_unknown",
+        "checkpoint_signature_invalid",
+        "key_expired",
+        "key_not_yet_active",
         "oidc_actor_drift",
         "payload_drift",
         "signature_invalid",
         "signing_key_drift",
         "signing_key_unknown",
+        "signing_key_unpublished",
         "unsupported_algorithm"
       ],
       "specSites": [
