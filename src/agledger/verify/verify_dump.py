@@ -184,6 +184,13 @@ def _normalize_entry(e: DumpRow) -> dict[str, Any]:
             "sub": e.get("actor_oidc_sub"),
             "synthesized": e.get("actor_oidc_synthesized"),
         },
+        # The actor columns a report displays as "who did this" are
+        # signature-covered (CWT_Claims label 15 -> -65539), so they are
+        # cross-checked rather than taken on trust. Required in the dump shape,
+        # so this check is always applicable on the dump path.
+        "actorId": e.get("actor_key_id"),
+        "actorRole": e.get("actor_role"),
+        "actorOwnerId": e.get("actor_owner_id"),
     }
 
 

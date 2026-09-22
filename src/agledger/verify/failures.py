@@ -60,6 +60,7 @@ FailureCode = Literal[
     "CHAIN_ALG_MISMATCH",
     "CHAIN_UNSUPPORTED_ALGORITHM",
     "CHAIN_SIGNING_KEY_DRIFT",
+    "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
     "CHAIN_AGENT_SIGNATURE_INVALID",
     # --- vault checkpoints ---
     "CHECKPOINT_ROW_MISSING",
@@ -172,6 +173,14 @@ _SUGGESTIONS: dict[str, str] = {
         "kid in the COSE protected header. The column is a denormalized convenience and was "
         "rewritten after signing (possibly to point verification at another key). Trust the "
         "signed kid; treat the row as tampered."
+    ),
+    "CHAIN_ACTOR_ATTRIBUTION_MISMATCH": (
+        "The entry's actorId / actorOwnerId columns name a different actor than the "
+        "signature-covered actor claim in the COSE protected header (CWT_Claims label 15, "
+        "private label -65539). The columns are the projection a report displays and they "
+        "were rewritten after signing, re-attributing the action to another actor. Trust "
+        "the signed claim; treat the row as tampered and re-obtain the export from the "
+        "operator."
     ),
     "CHAIN_AGENT_SIGNATURE_INVALID": (
         "The agent signature sealed in predicate.on_behalf_of.agent_signature does not "
