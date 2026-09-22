@@ -73,12 +73,19 @@ class VaultChainsReport:
     checked (no key for their cert, or a caller-asserted identity)."""
     optional_checks: dict[str, Literal["applied", "skipped_no_input"]] = field(
         default_factory=lambda: dict.fromkeys(
-            ("payload_binding", "oidc_actor", "key_temporal", "agent_signature"), "skipped_no_input"
+            (
+                "payload_binding",
+                "oidc_actor",
+                "actor_attribution",
+                "key_temporal",
+                "agent_signature",
+            ),
+            "skipped_no_input",
         )
     )
     """Which input-gated checks ran: ``payload_binding``, ``oidc_actor``,
-    ``key_temporal`` and ``agent_signature``, each ``applied`` once it ran on
-    any chain, so "not checked anywhere" never reads as "passed". Mirrors the
+    ``actor_attribution``, ``key_temporal`` and ``agent_signature``, each
+    ``applied`` once it ran on any chain, so "not checked anywhere" never reads as "passed". Mirrors the
     ``@agledger/verify`` report."""
 
     def to_json(self) -> dict[str, Any]:

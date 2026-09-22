@@ -116,6 +116,14 @@ _COSE_HEADER_KID = 4
 _AGLEDGER_LABEL_CHAIN = -65537
 _CHAIN_SUBLABEL_POSITION = 1
 _CHAIN_SUBLABEL_PREVIOUS_HASH = 2
+# The actor identity claim is nested inside CWT_Claims (RFC 9597, label 15)
+# rather than sitting at the outer header level: the engine keeps the outer
+# level to IANA-known labels plus chain mechanics.
+_COSE_HEADER_CWT_CLAIMS = 15
+_AGLEDGER_LABEL_ACTOR = -65539
+_ACTOR_SUBLABEL_KEY_ID = 1
+_ACTOR_SUBLABEL_ROLE = 2
+_ACTOR_SUBLABEL_OWNER_ID = 3
 
 
 def as_mapping(value: Any) -> Mapping[str, Any]:
@@ -171,7 +179,13 @@ class KeyProvenance:
 #: ``CheckApplicability``: ``skipped_no_input`` is never a pass.
 CheckApplicability = Literal["applied", "skipped_no_input"]
 
-OPTIONAL_CHECKS = ("payload_binding", "oidc_actor", "key_temporal", "agent_signature")
+OPTIONAL_CHECKS = (
+    "payload_binding",
+    "oidc_actor",
+    "actor_attribution",
+    "key_temporal",
+    "agent_signature",
+)
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
 
@@ -809,6 +823,48 @@ def verify_entry(
                 f"(position={position}, prev={previous_hash or 'null'})."
             ),
         )
+
+    # Actor attribution: the row's actorId / actorRole / actorOwnerId columns
+    # are the projection a report displays as "who did this", and the export's
+    # own guide names them as the trustworthy attribution while listing only
+    # actorDisplayName / actorOwnerType / humanReadableLabel as unsigned. They
+    # are signature-covered at CWT_Claims label 15 -> private label -65539, so
+    # a rewritten column re-attributes the action to another actor and must not
+    # verify. Same shape as the signed-kid check below: compare, and skip only
+    # when one side is absent (an older engine, or an artifact without the
+    # columns).
+    row_actor_id = entry.get("actorId")
+    row_actor_role = entry.get("actorRole")
+    row_actor_owner_id = entry.get("actorOwnerId")
+    if (
+        isinstance(row_actor_id, str)
+        or isinstance(row_actor_role, str)
+        or isinstance(row_actor_owner_id, str)
+    ):
+        actor_claim = _extract_actor_claim(parts[0])
+        if actor_claim is not None:
+            if applied_checks is not None:
+                applied_checks.add("actor_attribution")
+            signed_key_id, signed_role, signed_owner_id = actor_claim
+            mismatches: list[str] = []
+            if isinstance(row_actor_id, str) and row_actor_id != signed_key_id:
+                mismatches.append(f"actorId={row_actor_id} vs signed {signed_key_id}")
+            if isinstance(row_actor_owner_id, str) and row_actor_owner_id != signed_owner_id:
+                mismatches.append(
+                    f"actorOwnerId={row_actor_owner_id} vs signed {signed_owner_id}"
+                )
+            if isinstance(row_actor_role, str) and row_actor_role != signed_role:
+                mismatches.append(f"actorRole={row_actor_role} vs signed {signed_role}")
+            if mismatches:
+                return EntryVerificationResult(
+                    position=position,
+                    valid=False,
+                    code="CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
+                    detail=(
+                        "Row actor columns diverge from the signature-covered "
+                        f"actor claim ({'; '.join(mismatches)})."
+                    ),
+                )
 
     # Binding-integrity (verificationGuide step 4): when the export carries the
     # denormalized row ``payload`` (engine ≥ v0.26.x), re-decode the predicate
@@ -1511,6 +1567,50 @@ def _extract_chain_claim(protected_bstr: bytes) -> tuple[int, str | None] | None
     if not isinstance(prev, (bytes, bytearray)):
         return None
     return position, bytes(prev).hex()
+
+
+def _bytes_to_uuid(raw: bytes) -> str | None:
+    """16 raw bytes to canonical lowercase-hyphenated UUID; ``None`` otherwise."""
+    if len(raw) != 16:
+        return None
+    hexed = raw.hex()
+    return f"{hexed[:8]}-{hexed[8:12]}-{hexed[12:16]}-{hexed[16:20]}-{hexed[20:]}"
+
+
+def _extract_actor_claim(protected_bstr: bytes) -> tuple[str, str, str] | None:
+    """Extract the actor identity claim (label -65539, nested in CWT_Claims at
+    label 15) from the COSE protected header. Returns
+    ``(key_id, role, owner_id)`` with both ids in canonical UUID form, or
+    ``None`` on any structural failure, so an envelope that never carried the
+    claim is skipped rather than failed.
+    """
+    try:
+        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+    except Exception:
+        return None
+    if not isinstance(header_obj, dict):
+        return None
+    cwt = cast("Mapping[Any, Any]", header_obj).get(_COSE_HEADER_CWT_CLAIMS)
+    if not isinstance(cwt, dict):
+        return None
+    actor = cast("Mapping[Any, Any]", cwt).get(_AGLEDGER_LABEL_ACTOR)
+    if not isinstance(actor, dict):
+        return None
+    actor_map = cast("Mapping[Any, Any]", actor)
+    key_id_raw = actor_map.get(_ACTOR_SUBLABEL_KEY_ID)
+    role = actor_map.get(_ACTOR_SUBLABEL_ROLE)
+    owner_id_raw = actor_map.get(_ACTOR_SUBLABEL_OWNER_ID)
+    if not isinstance(key_id_raw, (bytes, bytearray)):
+        return None
+    if not isinstance(owner_id_raw, (bytes, bytearray)):
+        return None
+    if not isinstance(role, str):
+        return None
+    key_id = _bytes_to_uuid(bytes(key_id_raw))
+    owner_id = _bytes_to_uuid(bytes(owner_id_raw))
+    if key_id is None or owner_id is None:
+        return None
+    return key_id, role, owner_id
 
 
 def _extract_header_alg(protected_bstr: bytes) -> int | None:
