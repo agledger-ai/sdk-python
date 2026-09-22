@@ -13,7 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class NextStep(BaseModel):
     """A suggested next API call: guides agents through the lifecycle."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     action: str
     """What to do next."""
@@ -83,7 +85,9 @@ may add verdicts; code generic over ``Verdict`` then composes through
 EuAiActRiskTier = Literal["unacceptable", "high", "limited", "minimal"]
 """EU AI Act risk tier (Article 5 prohibited -> Annex III high -> Article 50
 limited -> minimal). An AI impact assessment always asserts one of these."""
-RiskClassification = Literal["unacceptable", "high", "limited", "minimal", "unclassified"]
+RiskClassification = Literal[
+    "unacceptable", "high", "limited", "minimal", "unclassified"
+]
 """Record-column risk classification: the canonical tiers plus the notary
 sentinel ``unclassified`` (the create-time default, nothing asserted yet)."""
 EuAiActDomain = Literal[
@@ -126,11 +130,12 @@ that still typed it sent a guaranteed 400. The name exists in both SDKs so the
 two speak the same vocabulary."""
 
 
-
 class SignedStatement(BaseModel):
     """Inline tamper-evident head of a Record's audit chain (the Signed Statement at chainPosition)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     chain_position: int = Field(alias="chainPosition")
     """Per-Record monotonic chain position of the head Signed Statement (1-indexed)."""
@@ -155,7 +160,9 @@ class SignedStatement(BaseModel):
 class RecordReadCompletion(BaseModel):
     """SCITT-style inclusion-proof completion record for org-admin cross-party reads."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     leaf_index: int = Field(alias="leafIndex")
     leaf_hash: str = Field(alias="leafHash")
@@ -165,7 +172,9 @@ class RecordReadCompletion(BaseModel):
 class EntityReference(BaseModel):
     """An external entity reference attached to a Record."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     system: str
@@ -200,7 +209,9 @@ class CoSignPeerLeg(BaseModel):
     is a fan-out outcome no single peer can hold, so it exists only on the
     rollup."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     peer_hub_id: str = Field(alias="peerHubId")
     """The peer this leg was addressed to."""
@@ -219,7 +230,9 @@ class SettlementSignalSummary(BaseModel):
     """Settlement Signal projected onto a Record: the SETTLE/HOLD/RELEASE
     recommendation bound to the terminal verdict, plus federation delivery state."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     recommendation: Literal["SETTLE", "HOLD", "RELEASE"]
     """The settlement recommendation bound to the terminal verdict."""
@@ -270,7 +283,9 @@ class SettlementSignalSummary(BaseModel):
 class RecordIntegrity(BaseModel):
     """Tamper-evidence result attached to a Record read with ``integrity=True``."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     verified: bool
     """True iff the audit chain re-verifies AND the served row matches what the chain asserts.
@@ -278,7 +293,10 @@ class RecordIntegrity(BaseModel):
     False ⇒ this body may not match the signed evidence; read the audit-export as the source of truth.
     """
     integrity_level: Literal[
-        "hash_chain_only", "hash_chain_partial_signatures", "hash_chain_and_signatures", "invalid"
+        "hash_chain_only",
+        "hash_chain_partial_signatures",
+        "hash_chain_and_signatures",
+        "invalid",
     ] = Field(alias="integrityLevel")
     """Strength of the chain verification: whether every entry was signed or only hash-linked."""
     reason: str | None = None
@@ -301,7 +319,9 @@ class RecordIntegrity(BaseModel):
 class RecordRow(BaseModel):
     """A Record: a registered commitment between a principal and a performer."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     """Unique Record ID (UUID)."""
@@ -333,13 +353,17 @@ class RecordRow(BaseModel):
     """Operating mode: cleartext (default) or encrypted."""
     gate_mode: GateMode | str | None = Field(None, alias="gateMode")
     """Gate mode: auto (auto-settles against the principal's pre-configured predicates) or principal (engine advisory pass, then the principal renders accept/reject). Either way the verdict is the principal's; AGLedger holds the signed decision and never renders it."""
-    risk_classification: RiskClassification | str | None = Field(None, alias="riskClassification")
+    risk_classification: RiskClassification | str | None = Field(
+        None, alias="riskClassification"
+    )
     """EU AI Act risk classification."""
     eu_ai_act_domain: str | None = Field(None, alias="euAiActDomain")
     """EU AI Act domain."""
     human_oversight: dict[str, Any] | None = Field(None, alias="humanOversight")
     """Human oversight configuration for EU AI Act compliance."""
-    acceptance_status: AcceptanceStatus | str | None = Field(None, alias="acceptanceStatus")
+    acceptance_status: AcceptanceStatus | str | None = Field(
+        None, alias="acceptanceStatus"
+    )
     """Performer's response to a proposed Record."""
     acceptance_responded_at: str | None = Field(None, alias="acceptanceRespondedAt")
     """ISO 8601 timestamp when performer responded to proposal."""
@@ -409,7 +433,9 @@ class RecordRow(BaseModel):
     """Valid target statuses from current state."""
     completion_hint: dict[str, Any] | None = Field(None, alias="completionHint")
     """Hint for completion evidence fields."""
-    advisory_warnings: list[dict[str, Any]] | None = Field(None, alias="advisoryWarnings")
+    advisory_warnings: list[dict[str, Any]] | None = Field(
+        None, alias="advisoryWarnings"
+    )
     """Advisory enforcement warnings."""
     publisher: str | None = None
     """Publisher label of the registration this Record binds to. With ``type`` and
@@ -444,7 +470,9 @@ class RecordRow(BaseModel):
     """External task ID from the caller's system."""
     depends_on: list[str] | None = Field(None, alias="dependsOn")
     """Record IDs this Record depends on."""
-    enforcement_overrides: dict[str, Any] | None = Field(None, alias="enforcementOverrides")
+    enforcement_overrides: dict[str, Any] | None = Field(
+        None, alias="enforcementOverrides"
+    )
     """Per-field enforcement overrides."""
     metadata: dict[str, Any] | None = None
     """Arbitrary metadata attached to the Record."""
@@ -492,10 +520,12 @@ class RecordRow(BaseModel):
     """Co-signature state, or None when co-sign is not configured."""
     counter_signature: str | None = Field(None, alias="counterSignature")
     """Hex Ed25519 counter-signature from the most recent successful co-sign, or None."""
-    settlement_signal: SettlementSignalSummary | None = Field(None, alias="settlementSignal")
+    settlement_signal: SettlementSignalSummary | None = Field(
+        None, alias="settlementSignal"
+    )
     """Settlement Signal projected onto the Record, or None until a terminal verdict produces one."""
-    federation_status: Literal["pending", "delivered", "partial", "failed"] | None = Field(
-        None, alias="federationStatus"
+    federation_status: Literal["pending", "delivered", "partial", "failed"] | None = (
+        Field(None, alias="federationStatus")
     )
     """Federation delivery status for this Record's outbound state, or None when not federated."""
     shared_to_peers: list[str] | None = Field(None, alias="sharedToPeers")
@@ -509,7 +539,9 @@ class RecordRow(BaseModel):
 class BulkCreateResultItem(BaseModel):
     """One per-record outcome from POST /v1/records/bulk."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     index: int
     status: Literal["created", "replayed", "error"]
@@ -532,7 +564,9 @@ class BulkCreateResultItem(BaseModel):
 
 
 class BulkCreateSummary(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     total: int
     succeeded: int
@@ -542,9 +576,13 @@ class BulkCreateSummary(BaseModel):
 class BulkCreateResult(BaseModel):
     """Response envelope from POST /v1/records/bulk."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
-    results: list[BulkCreateResultItem] = Field(default_factory=list[BulkCreateResultItem])
+    results: list[BulkCreateResultItem] = Field(
+        default_factory=list[BulkCreateResultItem]
+    )
     summary: BulkCreateSummary
 
 
@@ -553,7 +591,9 @@ class CompletionSettlementSignal(BaseModel):
     leaner projection than ``SettlementSignalSummary`` (no federation delivery
     state), carrying just the gate outcome the caller needs at completion time."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     recommendation: Literal["SETTLE", "HOLD", "RELEASE"]
     """The gate decision in GET /v1/records vocabulary: SETTLE, HOLD, or RELEASE."""
@@ -568,7 +608,9 @@ class CompletionSettlementSignal(BaseModel):
 class Completion(BaseModel):
     """A Completion: structured evidence submitted by a performer."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     """Unique completion ID."""
@@ -616,7 +658,9 @@ class Completion(BaseModel):
 class GateEvaluationResult(BaseModel):
     """Result of an on-demand gate evaluation (POST /v1/records/{id}/evaluate)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     record_id: str = Field(alias="recordId")
     completions: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
@@ -629,7 +673,10 @@ class GateEvaluationResult(BaseModel):
 
 
 DisputeStatus = Literal[
-    "EVIDENCE_WINDOW", "PENDING_RESOLUTION", "RESOLVED", "WITHDRAWN",
+    "EVIDENCE_WINDOW",
+    "PENDING_RESOLUTION",
+    "RESOLVED",
+    "WITHDRAWN",
 ]
 """Lifecycle status of a dispute.
 
@@ -671,7 +718,9 @@ never makes it."""
 
 
 class Dispute(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     record_id: str = Field(alias="recordId")
@@ -692,7 +741,9 @@ class Dispute(BaseModel):
 class DisputeEvidence(BaseModel):
     """A single piece of evidence submitted on a dispute."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     dispute_id: str = Field(alias="disputeId")
@@ -708,7 +759,9 @@ class DisputeEvidence(BaseModel):
 class DisputeResponse(BaseModel):
     """Response envelope from GET /v1/records/{id}/dispute: includes both dispute and evidence."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     dispute: Dispute
     evidence: list[DisputeEvidence] = Field(default_factory=list[DisputeEvidence])
@@ -857,7 +910,9 @@ not a queryable event type."""
 
 
 class Webhook(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     url: str
@@ -880,7 +935,9 @@ class Webhook(BaseModel):
     """Whether a secret grace period is active after rotation."""
     secret_grace_expires_at: str | None = Field(None, alias="secretGraceExpiresAt")
     """When the secret grace period expires (ISO 8601), or None."""
-    circuit_state: Literal["closed", "open", "half_open"] | None = Field(None, alias="circuitState")
+    circuit_state: Literal["closed", "open", "half_open"] | None = Field(
+        None, alias="circuitState"
+    )
     """Circuit breaker state: closed (healthy), open (stopped), half_open (testing)."""
     consecutive_failures: int | None = Field(None, alias="consecutiveFailures")
     """Number of consecutive delivery failures."""
@@ -900,7 +957,9 @@ class Webhook(BaseModel):
 
 
 class VerdictResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     record_id: str = Field(alias="recordId")
     completion_id: str = Field(alias="completionId")
@@ -920,7 +979,9 @@ class VerdictStatistics(BaseModel):
     """Own verdict-distribution counters from /v1/records/me/verdict-statistics, decomposed by the
     calling agent's structural role on each counterparty pair (asPrincipal / asPerformer)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     agent_id: str = Field(alias="agentId")
     as_principal: dict[str, Any] = Field(default_factory=dict, alias="asPrincipal")
@@ -928,7 +989,9 @@ class VerdictStatistics(BaseModel):
 
 
 class ComplianceRecord(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     record_id: str = Field(alias="recordId")
@@ -948,7 +1011,9 @@ class ComplianceRecord(BaseModel):
 class AuditExportEntry(BaseModel):
     """Per-record audit-vault entry as it lands on the wire."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     chain_position: int | None = Field(None, alias="chainPosition")
     """Per-record monotonic chain position (1-indexed)."""
@@ -991,6 +1056,12 @@ AuditChainIntegrityReasonCode = (
         "audit_vault_empty",
         "audit_vault_row_missing_for_checkpoint",
         "checkpoint_hash_mismatch",
+        # A checkpoint's own signature did not verify / it names a key the
+        # registry cannot resolve / its signed claims do not match the row it
+        # covers. The entry chain can be intact while its anchoring is not.
+        "checkpoint_signature_invalid",
+        "checkpoint_key_unknown",
+        "checkpoint_claim_mismatch",
         "payload_drift",
         "oidc_actor_drift",
         "cert_actor_drift",
@@ -1008,6 +1079,13 @@ AuditChainIntegrityReasonCode = (
         "signature_invalid",
         "signing_key_unknown",
         "signing_key_drift",
+        # The entry falls outside its signing key's published window, or the
+        # key was never published: signed after retiredAt / stamped before
+        # activatedAt / resolved to a key absent from /v1/verification-keys.
+        # The signature may be good; the key's right to have signed then is not.
+        "key_expired",
+        "key_not_yet_active",
+        "signing_key_unpublished",
         # Signed under a COSE algorithm this engine build cannot verify. Not a
         # tamper signal: check minVerifierVersion on the key.
         "unsupported_algorithm",
@@ -1039,6 +1117,13 @@ AuditChainFailureCode = (
         "signature_invalid",
         "signing_key_unknown",
         "signing_key_drift",
+        # The entry falls outside its signing key's published window, or the
+        # key was never published: signed after retiredAt / stamped before
+        # activatedAt / resolved to a key absent from /v1/verification-keys.
+        # The signature may be good; the key's right to have signed then is not.
+        "key_expired",
+        "key_not_yet_active",
+        "signing_key_unpublished",
         "unsupported_algorithm",
     ]
     | str
@@ -1050,7 +1135,9 @@ AuditChainFailureCode = (
 class AuditChainIntegrityDetail(BaseModel):
     """Localizes a chain-integrity failure. Null on a clean chain."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     broken_at_position: int | None = Field(None, alias="brokenAtPosition")
     broken_at_entry_id: str | None = Field(None, alias="brokenAtEntryId")
@@ -1064,7 +1151,9 @@ class AuditChainIntegrityDetail(BaseModel):
 class AuditSignatureCoverage(BaseModel):
     """Per-entry signature coverage on the export envelope."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     signed: int
     unsigned: int
@@ -1074,20 +1163,30 @@ class AuditSignatureCoverage(BaseModel):
 class AuditExportMetadata(BaseModel):
     """Metadata envelope on a record audit export: mirrors TS RecordAuditExport.exportMetadata."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     record_id: str = Field(alias="recordId")
     org_id: str | None = Field(None, alias="orgId")
     type: str
     """Record Type identifier: a contract type registered for the org."""
-    operating_mode: Literal["cleartext", "encrypted"] | None = Field(None, alias="operatingMode")
+    operating_mode: Literal["cleartext", "encrypted"] | None = Field(
+        None, alias="operatingMode"
+    )
     export_date: str = Field(alias="exportDate")
     total_entries: int = Field(alias="totalEntries")
     expected_entries: int | None = Field(None, alias="expectedEntries")
     chain_integrity: bool = Field(alias="chainIntegrity")
-    chain_integrity_reason: AuditChainIntegrityReasonCode | None = Field(None, alias="chainIntegrityReason")
-    chain_integrity_detail: AuditChainIntegrityDetail | None = Field(None, alias="chainIntegrityDetail")
-    signature_coverage: AuditSignatureCoverage | None = Field(None, alias="signatureCoverage")
+    chain_integrity_reason: AuditChainIntegrityReasonCode | None = Field(
+        None, alias="chainIntegrityReason"
+    )
+    chain_integrity_detail: AuditChainIntegrityDetail | None = Field(
+        None, alias="chainIntegrityDetail"
+    )
+    signature_coverage: AuditSignatureCoverage | None = Field(
+        None, alias="signatureCoverage"
+    )
     integrity_level: (
         Literal[
             "hash_chain_only",
@@ -1103,7 +1202,9 @@ class AuditExportMetadata(BaseModel):
     """`RFC8949-CDE` since 2.0: deterministic CBOR per RFC 8949 §4.2.1."""
     signing_public_key: str | None = Field(None, alias="signingPublicKey")
     signing_public_keys: dict[str, str] | None = Field(None, alias="signingPublicKeys")
-    signing_key_windows: dict[str, dict[str, Any]] | None = Field(None, alias="signingKeyWindows")
+    signing_key_windows: dict[str, dict[str, Any]] | None = Field(
+        None, alias="signingKeyWindows"
+    )
     """keyId to ``{activatedAt, retiredAt}``: the input for the offline
     verifier's temporal key-validity check."""
 
@@ -1111,7 +1212,9 @@ class AuditExportMetadata(BaseModel):
 class VaultCheckpoint(BaseModel):
     """A row from GET /v1/audit-vault/checkpoints: signed Merkle anchor."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     #: The uuid this checkpoint is keyed to. Read ``chain`` before treating it
@@ -1134,7 +1237,9 @@ class VaultCheckpoint(BaseModel):
 class RecordAuditExport(BaseModel):
     """Audit export envelope returned by GET /v1/records/{id}/audit-export."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     export_metadata: AuditExportMetadata = Field(alias="exportMetadata")
     entries: list[AuditExportEntry] = Field(default_factory=list[AuditExportEntry])
@@ -1152,7 +1257,9 @@ class RecordAuditExport(BaseModel):
 class AuditStreamResult(BaseModel):
     """One page of ``GET /v1/siem/stream``."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     events: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
     cursor: str | None = None
@@ -1183,7 +1290,9 @@ class OrgReadsCheckpoint(BaseModel):
     is ``checkpointAt`` (not ``createdAt``) and the signed envelope is
     ``coseSign1Base64`` (not ``sthBytes``/``signature``)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     org_id: str = Field(alias="orgId")
@@ -1207,7 +1316,9 @@ class OrgReadsInclusionProof(BaseModel):
     Wire fields: the audit path array is ``path`` (not ``proof``); there is no
     ``checkpointId`` on the response."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     leaf_index: int = Field(alias="leafIndex")
     leaf_hash: str = Field(alias="leafHash")
@@ -1225,7 +1336,9 @@ class OrgAdminRead(BaseModel):
     yet": no rows here means nothing was logged, whereas rows here with no
     checkpoint mean the sweep has not run over them yet."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     org_id: str = Field(alias="orgId")
@@ -1266,7 +1379,9 @@ class OrgReadsCheckpointing(BaseModel):
     does not carry. :class:`VaultCheckpoint` is a checkpoint row, not a
     schedule, and has neither."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     cron: str
     """Cron the sweep runs on (UTC). Fixed cadence; there is no env knob."""
@@ -1286,7 +1401,9 @@ class DriftWindow(BaseModel):
     The current window is the last ``days`` days; the baseline is the ``days``
     before it, so the two are the same length and adjacent."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     days: int
     current_from: str = Field(alias="currentFrom")
@@ -1298,7 +1415,9 @@ class DriftWindow(BaseModel):
 class DriftBucket(BaseModel):
     """Counts of what an agent did inside one window."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     from_: str = Field(alias="from")
     """Start of the window. Named ``from_`` because ``from`` is a keyword; the
@@ -1336,7 +1455,9 @@ class DriftChange(BaseModel):
     Null where either side is null. There is no ``accepted`` or ``rejected``
     here: the pair is summarized by ``acceptance_rate``."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     records: int
     completions: int
@@ -1349,7 +1470,9 @@ class DriftChange(BaseModel):
 class DriftSeries(BaseModel):
     """One series: the current window, the window before it, and the difference."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     current: DriftBucket
     baseline: DriftBucket
@@ -1371,12 +1494,16 @@ class AgentDrift(BaseModel):
     change as one that moves to 0.6, and both are for whoever watches the agent
     to look into."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     agent_id: str = Field(alias="agentId")
     window: DriftWindow
     overall: DriftSeries
-    by_type: list[DriftTypeSeries] = Field(default_factory=list[DriftTypeSeries], alias="byType")
+    by_type: list[DriftTypeSeries] = Field(
+        default_factory=list[DriftTypeSeries], alias="byType"
+    )
     """One entry per type the agent touched in either window. Always the
     complete set; this listing does not page."""
 
@@ -1392,7 +1519,9 @@ class AgentHistoryEntry(BaseModel):
     """One record in an agent's history: the per-record feed behind the drift
     counts."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     record_id: str = Field(alias="recordId")
     type: str
@@ -1415,7 +1544,9 @@ class AgentHistoryEntry(BaseModel):
 class Event(BaseModel):
     """A platform event (from /v1/events)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     type: str
@@ -1429,7 +1560,9 @@ class Event(BaseModel):
 
 ApiKeyRole = Literal["admin", "agent", "platform"]
 
-AutoProvisionScopeProfile = Literal["agent-full", "agent-readonly", "agent-performer-only"]
+AutoProvisionScopeProfile = Literal[
+    "agent-full", "agent-readonly", "agent-performer-only"
+]
 """The agent scope profiles a trusted issuer may grant to the agents it creates.
 
 Also the scope ceiling for every cert minted from that issuer: the IdP's mapped
@@ -1438,7 +1571,9 @@ wire means no ceiling."""
 
 
 class AccountProfile(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     api_key_id: str = Field(alias="apiKeyId")
     role: ApiKeyRole | str
@@ -1467,7 +1602,9 @@ T = TypeVar("T")
 class Page(BaseModel, Generic[T]):
     """Unified page type for all list endpoints."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     data: list[T]  # type: ignore[type-var]
     has_more: bool = Field(alias="hasMore")
@@ -1497,7 +1634,9 @@ class FleetDriftPage(Page[FleetDriftRow]):
 
 
 class HealthResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     status: str
     version: str | None = None
@@ -1505,7 +1644,9 @@ class HealthResponse(BaseModel):
 
 
 class StatusComponent(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     name: str
     status: str
@@ -1513,7 +1654,9 @@ class StatusComponent(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     status: str
     components: list[StatusComponent] = []
@@ -1555,7 +1698,9 @@ class ConformanceLicense(BaseModel):
     any caller. Nothing is gated on it. The detail is on
     ``admin.get_license()``, which takes a platform key."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     validity: LicenseValidity
     """Outcome of validating the install's license key."""
@@ -1568,7 +1713,9 @@ class ConformanceLicense(BaseModel):
 
 
 class ConformanceResponse(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     capabilities: dict[str, Any] | None = None
     """Feature capability flags: which features are wired on this install (e.g.
@@ -1605,7 +1752,9 @@ class ConformanceResponse(BaseModel):
 
 
 class AgentCard(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     name: str
     description: str | None = None
@@ -1626,7 +1775,9 @@ class AgentProfile(BaseModel):
     ``updatedAt`` on the agent surface. Earlier models required those three and
     crashed every ``agents.get()`` call."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     org_id: str | None = Field(None, alias="orgId")
@@ -1654,7 +1805,9 @@ class AgentDirectoryEntry(BaseModel):
     Use this for peer discovery; for full agent identity use ``agents.get(id)``.
     """
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str
     org_id: str | None = Field(None, alias="orgId")
@@ -1673,7 +1826,9 @@ class AgentDirectoryEntry(BaseModel):
 class GateStatus(BaseModel):
     """Gate status for a Record (GET /v1/records/{id}/gate-status)."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     record_id: str = Field(alias="recordId")
     phase1_status: Literal["pending", "passed", "failed", "not_applicable"] = Field(
@@ -1719,7 +1874,9 @@ class GateStatus(BaseModel):
 
 
 class WebhookTestResult(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     success: bool
     status_code: int | None = Field(None, alias="statusCode")
@@ -1737,7 +1894,9 @@ class WebhookTestResult(BaseModel):
 
 
 class AgentCapabilities(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     agent_id: str = Field(alias="agentId")
     capabilities: list[str] = []
@@ -1746,7 +1905,9 @@ class AgentCapabilities(BaseModel):
 
 
 class ComplianceExport(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     export_id: str | None = Field(None, alias="exportId")
     status: str
@@ -1771,7 +1932,9 @@ class ComplianceExport(BaseModel):
 
 
 class AiImpactAssessment(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     id: str | None = None
     record_id: str = Field(alias="recordId")
@@ -1790,7 +1953,9 @@ class AiImpactAssessment(BaseModel):
 class VerificationKey(BaseModel):
     """A vault signing public key for independent audit chain verification."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     key_id: str = Field(alias="keyId")
     algorithm: str
@@ -1813,7 +1978,9 @@ class VerificationKey(BaseModel):
 class VerificationKeysResponse(BaseModel):
     """Response from GET /v1/verification-keys."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     data: list[VerificationKey]
     canonicalization: str
@@ -1855,7 +2022,9 @@ class FederationPeer(BaseModel):
     Federation is peer to peer: there is no hub, and ``peerHubId`` is only the
     name the identity field kept."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     peer_id: str = Field(alias="peerId")
     """Receiver-local row id of the registration. No admin path takes it."""
@@ -1865,7 +2034,9 @@ class FederationPeer(BaseModel):
     peer_url: str = Field(alias="peerUrl")
     status: FederationPeerStatus
     created_at: str = Field(alias="createdAt")
-    consecutive_delivery_failures: int | None = Field(None, alias="consecutiveDeliveryFailures")
+    consecutive_delivery_failures: int | None = Field(
+        None, alias="consecutiveDeliveryFailures"
+    )
     """Failed delivery attempts since the last success, reset to 0 on a 2xx. Not
     purely a reachability count: a peer that answers and rejects the payload
     counts here too, because the message did not get through either way.
@@ -1882,7 +2053,9 @@ class PeerHandshakeResult(BaseModel):
     """201 from ``POST /federation/v1/peer``: the registration this Server filed
     for the caller, and the keys the caller verifies it with."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
 
     peered: Literal[True]
     """Always true; a refusal is a thrown 4xx, never a ``False`` here."""

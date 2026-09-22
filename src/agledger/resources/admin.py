@@ -53,15 +53,35 @@ class AdminVaultAnchorsResource:
     def list(self, *, record_id: str | None = None) -> dict[str, Any]:
         """List vault anchors."""
         params: dict[str, Any] = {}
-        if record_id is not None: params["recordId"] = record_id
+        if record_id is not None:
+            params["recordId"] = record_id
         return self._http.get("/v1/admin/vault/anchors", params=params)
 
-    def verify(self, *, record_id: str, chain_position: int | None = None) -> dict[str, Any]:
+    def verify(
+        self, *, record_id: str, chain_position: int | None = None
+    ) -> dict[str, Any]:
         """Verify vault trust anchors for a Record."""
         body: dict[str, Any] = {"recordId": record_id}
         if chain_position is not None:
             body["chainPosition"] = chain_position
         return self._http.post("/v1/admin/vault/anchors/verify", json=body)
+
+    def reconcile(
+        self, *, max_keys: int | None = None, deadline_ms: int | None = None
+    ) -> dict[str, Any]:
+        """Walk the anchor bucket against this database.
+
+        The counters cover the whole walk; ``findings`` is a capped sample of
+        it, so a short ``findings`` beside a large ``rewound`` is the cap and
+        not a disagreement. ``truncated`` says the walk stopped on its key cap
+        or its time budget rather than running out of keys.
+        """
+        body: dict[str, Any] = {}
+        if max_keys is not None:
+            body["maxKeys"] = max_keys
+        if deadline_ms is not None:
+            body["deadlineMs"] = deadline_ms
+        return self._http.post("/v1/admin/vault/anchors/reconcile", json=body)
 
 
 class AdminVaultScanResource:
@@ -76,8 +96,10 @@ class AdminVaultScanResource:
     ) -> dict[str, Any]:
         """Start a vault integrity scan job."""
         body: dict[str, Any] = {}
-        if record_ids is not None: body["recordIds"] = record_ids
-        if record_id is not None: body["recordId"] = record_id
+        if record_ids is not None:
+            body["recordIds"] = record_ids
+        if record_id is not None:
+            body["recordId"] = record_id
         return self._http.post("/v1/admin/vault/scan", json=body)
 
     def status(self, job_id: str) -> dict[str, Any]:
@@ -101,6 +123,41 @@ class AdminVaultSigningKeysResource:
         """Rotate the vault signing key."""
         return self._http.post("/v1/admin/vault/signing-keys/rotate", json={})
 
+    def retire(self, key_id: str, *, force: bool | None = None) -> dict[str, Any]:
+        """Retire one signing key by its ``keyId`` (a 16-hex fingerprint, not a
+        UUID). Retiring the only key able to sign is refused, so rotate first.
+        ``force`` skips the quiet period, for a key known to be compromised.
+        """
+        body: dict[str, Any] = {}
+        if force is not None:
+            body["force"] = force
+        return self._http.post(
+            f"/v1/admin/vault/signing-keys/{key_id}/retire", json=body
+        )
+
+
+class AdminVaultRewindResource:
+    """Chain-rewind state. A detected rewind refuses chain writes until an
+    operator acknowledges it, which appends a ``RESTORE_EPOCH`` entry."""
+
+    def __init__(self, http: HttpClient) -> None:
+        self._http = http
+
+    def get(self) -> dict[str, Any]:
+        """Read the chain rewind state. ``blocked`` is true while writes are refused."""
+        return self._http.get("/v1/admin/vault/rewind")
+
+    def acknowledge(self, *, note: str | None = None) -> dict[str, Any]:
+        """Acknowledge a detected chain rewind and lift the write refusal.
+
+        ``note`` records what was reconciled and by whom, and is written into
+        the chain entry this call appends.
+        """
+        body: dict[str, Any] = {}
+        if note is not None:
+            body["note"] = note
+        return self._http.post("/v1/admin/vault/rewind/acknowledge", json=body)
+
 
 class AdminVaultResource:
     """Admin sub-resource for vault inspection and signing-key management."""
@@ -108,7 +165,10 @@ class AdminVaultResource:
     def __init__(self, http: HttpClient) -> None:
         self.anchors: AdminVaultAnchorsResource = AdminVaultAnchorsResource(http)
         self.scan: AdminVaultScanResource = AdminVaultScanResource(http)
-        self.signing_keys: AdminVaultSigningKeysResource = AdminVaultSigningKeysResource(http)
+        self.signing_keys: AdminVaultSigningKeysResource = (
+            AdminVaultSigningKeysResource(http)
+        )
+        self.rewind: AdminVaultRewindResource = AdminVaultRewindResource(http)
 
 
 def _api_key_filters(
@@ -133,19 +193,32 @@ def _api_key_filters(
     passthrough these methods used to be, because it is a single word.
     """
     params: dict[str, Any] = {}
-    if owner_id is not None: params["ownerId"] = owner_id
-    if org_id is not None: params["orgId"] = org_id
-    if owner_type is not None: params["ownerType"] = owner_type
-    if role is not None: params["role"] = role
-    if is_active is not None: params["isActive"] = is_active
-    if created_before is not None: params["createdBefore"] = created_before
-    if expires_before is not None: params["expiresBefore"] = expires_before
-    if never_expires is not None: params["neverExpires"] = never_expires
-    if last_used_before is not None: params["lastUsedBefore"] = last_used_before
-    if never_used is not None: params["neverUsed"] = never_used
-    if limit is not None: params["limit"] = limit
-    if offset is not None: params["offset"] = offset
-    if cursor is not None: params["cursor"] = cursor
+    if owner_id is not None:
+        params["ownerId"] = owner_id
+    if org_id is not None:
+        params["orgId"] = org_id
+    if owner_type is not None:
+        params["ownerType"] = owner_type
+    if role is not None:
+        params["role"] = role
+    if is_active is not None:
+        params["isActive"] = is_active
+    if created_before is not None:
+        params["createdBefore"] = created_before
+    if expires_before is not None:
+        params["expiresBefore"] = expires_before
+    if never_expires is not None:
+        params["neverExpires"] = never_expires
+    if last_used_before is not None:
+        params["lastUsedBefore"] = last_used_before
+    if never_used is not None:
+        params["neverUsed"] = never_used
+    if limit is not None:
+        params["limit"] = limit
+    if offset is not None:
+        params["offset"] = offset
+    if cursor is not None:
+        params["cursor"] = cursor
     return params
 
 
@@ -154,7 +227,11 @@ def _api_key_update_body(params: dict[str, Any]) -> dict[str, Any]:
 
     ``allowed_ips=None`` is kept and sent as null, because null is how the
     route is told to remove the restriction."""
-    mapping = {"is_active": "isActive", "scope_profile": "scopeProfile", "allowed_ips": "allowedIps"}
+    mapping = {
+        "is_active": "isActive",
+        "scope_profile": "scopeProfile",
+        "allowed_ips": "allowedIps",
+    }
     return {mapping.get(k, k): v for k, v in params.items()}
 
 
@@ -168,13 +245,20 @@ def _bulk_revoke_body(
     reason: str | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {}
-    if key_ids is not None: body["keyIds"] = key_ids
-    if owner_id is not None: body["ownerId"] = owner_id
-    if role is not None: body["role"] = role
-    if created_before is not None: body["createdBefore"] = created_before
-    if last_used_before is not None: body["lastUsedBefore"] = last_used_before
-    if never_used is not None: body["neverUsed"] = never_used
-    if reason is not None: body["reason"] = reason
+    if key_ids is not None:
+        body["keyIds"] = key_ids
+    if owner_id is not None:
+        body["ownerId"] = owner_id
+    if role is not None:
+        body["role"] = role
+    if created_before is not None:
+        body["createdBefore"] = created_before
+    if last_used_before is not None:
+        body["lastUsedBefore"] = last_used_before
+    if never_used is not None:
+        body["neverUsed"] = never_used
+    if reason is not None:
+        body["reason"] = reason
     return body
 
 
@@ -303,7 +387,9 @@ class AdminTrustedIssuersResource:
 
     def revoke_certs(self, issuer_id: str) -> dict[str, Any]:
         """Revoke every live ephemeral cert issued under this issuer."""
-        return self._http.post(f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={})
+        return self._http.post(
+            f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={}
+        )
 
 
 class AdminResource:
@@ -313,7 +399,9 @@ class AdminResource:
         self._http = http
         self.records: AdminRecordsResource = AdminRecordsResource(http)
         self.vault: AdminVaultResource = AdminVaultResource(http)
-        self.trusted_issuers: AdminTrustedIssuersResource = AdminTrustedIssuersResource(http)
+        self.trusted_issuers: AdminTrustedIssuersResource = AdminTrustedIssuersResource(
+            http
+        )
 
     # --- Ops summary + ephemeral certs ---
 
@@ -354,9 +442,12 @@ class AdminResource:
         the operator ``provisioning/`` YAML.
         """
         body: dict[str, Any] = {}
-        if name is not None: body["name"] = name
-        if display_name is not None: body["displayName"] = display_name
-        if config is not None: body["config"] = config
+        if name is not None:
+            body["name"] = name
+        if display_name is not None:
+            body["displayName"] = display_name
+        if config is not None:
+            body["config"] = config
         return self._http.post("/v1/admin/orgs", json=body)
 
     def get_org_config(self, org_id: str) -> dict[str, Any]:
@@ -419,12 +510,17 @@ class AdminResource:
         verbatim as the IdP issues it, and is unique per (org, issuer).
         """
         body: dict[str, Any] = {"orgId": org_id, "displayName": display_name}
-        if agent_card_url is not None: body["agentCardUrl"] = agent_card_url
-        if oidc_iss is not None: body["oidcIss"] = oidc_iss
-        if oidc_sub is not None: body["oidcSub"] = oidc_sub
+        if agent_card_url is not None:
+            body["agentCardUrl"] = agent_card_url
+        if oidc_iss is not None:
+            body["oidcIss"] = oidc_iss
+        if oidc_sub is not None:
+            body["oidcSub"] = oidc_sub
         return self._http.post("/v1/admin/agents", json=body)
 
-    def set_capabilities(self, agent_id: str, *, contract_types: list[str]) -> dict[str, Any]:
+    def set_capabilities(
+        self, agent_id: str, *, contract_types: list[str]
+    ) -> dict[str, Any]:
         """Set an agent's Type capabilities (PUT, which replaces all).
 
         Body field is ``contractTypes`` on the wire.
@@ -533,9 +629,19 @@ class AdminResource:
         ``created_before`` for keys minted long ago and never used.
         """
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor,
-            last_used_before=last_used_before, never_used=never_used,
+            owner_id,
+            org_id,
+            owner_type,
+            role,
+            is_active,
+            created_before,
+            expires_before,
+            never_expires,
+            limit,
+            offset,
+            cursor,
+            last_used_before=last_used_before,
+            never_used=never_used,
         )
         return self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -570,11 +676,23 @@ class AdminResource:
         exists to replace. Pass ``max_pages`` to bound it yourself.
         """
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor,
-            last_used_before=last_used_before, never_used=never_used,
+            owner_id,
+            org_id,
+            owner_type,
+            role,
+            is_active,
+            created_before,
+            expires_before,
+            never_expires,
+            limit,
+            offset,
+            cursor,
+            last_used_before=last_used_before,
+            never_used=never_used,
         )
-        yield from self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages)
+        yield from self._http.paginate(
+            "/v1/admin/api-keys", params=params, max_pages=max_pages
+        )
 
     def create_api_key(
         self,
@@ -600,11 +718,16 @@ class AdminResource:
             "ownerId": owner_id,
             "ownerType": owner_type,
         }
-        if label is not None: body["label"] = label
-        if scopes is not None: body["scopes"] = scopes
-        if scope_profile is not None: body["scopeProfile"] = scope_profile
-        if expires_at is not None: body["expiresAt"] = expires_at
-        if allowed_ips is not None: body["allowedIps"] = allowed_ips
+        if label is not None:
+            body["label"] = label
+        if scopes is not None:
+            body["scopes"] = scopes
+        if scope_profile is not None:
+            body["scopeProfile"] = scope_profile
+        if expires_at is not None:
+            body["expiresAt"] = expires_at
+        if allowed_ips is not None:
+            body["allowedIps"] = allowed_ips
         return self._http.post("/v1/admin/api-keys", json=body)
 
     def update_api_key(self, key_id: str, **params: Any) -> dict[str, Any]:
@@ -621,7 +744,9 @@ class AdminResource:
 
     def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
         """Enable or disable an API key. Convenience wrapper around update_api_key."""
-        return self._http.patch(f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active})
+        return self._http.patch(
+            f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
+        )
 
     def bulk_revoke_api_keys(
         self,
@@ -643,7 +768,13 @@ class AdminResource:
         bounds the sweep to keys old enough that never having been used means
         something. ``reason`` goes on the audit trail."""
         body = _bulk_revoke_body(
-            key_ids, owner_id, role, created_before, last_used_before, never_used, reason
+            key_ids,
+            owner_id,
+            role,
+            created_before,
+            last_used_before,
+            never_used,
+            reason,
         )
         return self._http.post("/v1/admin/api-keys/bulk-revoke", json=body)
 
@@ -775,14 +906,28 @@ class AsyncAdminVaultAnchorsResource:
 
     async def list(self, *, record_id: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}
-        if record_id is not None: params["recordId"] = record_id
+        if record_id is not None:
+            params["recordId"] = record_id
         return await self._http.get("/v1/admin/vault/anchors", params=params)
 
-    async def verify(self, *, record_id: str, chain_position: int | None = None) -> dict[str, Any]:
+    async def verify(
+        self, *, record_id: str, chain_position: int | None = None
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {"recordId": record_id}
         if chain_position is not None:
             body["chainPosition"] = chain_position
         return await self._http.post("/v1/admin/vault/anchors/verify", json=body)
+
+    async def reconcile(
+        self, *, max_keys: int | None = None, deadline_ms: int | None = None
+    ) -> dict[str, Any]:
+        """Walk the anchor bucket against this database. See the sync twin."""
+        body: dict[str, Any] = {}
+        if max_keys is not None:
+            body["maxKeys"] = max_keys
+        if deadline_ms is not None:
+            body["deadlineMs"] = deadline_ms
+        return await self._http.post("/v1/admin/vault/anchors/reconcile", json=body)
 
 
 class AsyncAdminVaultScanResource:
@@ -796,8 +941,10 @@ class AsyncAdminVaultScanResource:
         record_id: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {}
-        if record_ids is not None: body["recordIds"] = record_ids
-        if record_id is not None: body["recordId"] = record_id
+        if record_ids is not None:
+            body["recordIds"] = record_ids
+        if record_id is not None:
+            body["recordId"] = record_id
         return await self._http.post("/v1/admin/vault/scan", json=body)
 
     async def status(self, job_id: str) -> dict[str, Any]:
@@ -818,14 +965,44 @@ class AsyncAdminVaultSigningKeysResource:
     async def rotate(self) -> dict[str, Any]:
         return await self._http.post("/v1/admin/vault/signing-keys/rotate", json={})
 
+    async def retire(self, key_id: str, *, force: bool | None = None) -> dict[str, Any]:
+        """Retire one signing key by its ``keyId``. See the sync twin."""
+        body: dict[str, Any] = {}
+        if force is not None:
+            body["force"] = force
+        return await self._http.post(
+            f"/v1/admin/vault/signing-keys/{key_id}/retire", json=body
+        )
+
+
+class AsyncAdminVaultRewindResource:
+    """Chain-rewind state. See :class:`AdminVaultRewindResource`."""
+
+    def __init__(self, http: AsyncHttpClient) -> None:
+        self._http = http
+
+    async def get(self) -> dict[str, Any]:
+        return await self._http.get("/v1/admin/vault/rewind")
+
+    async def acknowledge(self, *, note: str | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if note is not None:
+            body["note"] = note
+        return await self._http.post("/v1/admin/vault/rewind/acknowledge", json=body)
+
 
 class AsyncAdminVaultResource:
     """Admin sub-resource for vault inspection and signing-key management."""
 
     def __init__(self, http: AsyncHttpClient) -> None:
-        self.anchors: AsyncAdminVaultAnchorsResource = AsyncAdminVaultAnchorsResource(http)
+        self.anchors: AsyncAdminVaultAnchorsResource = AsyncAdminVaultAnchorsResource(
+            http
+        )
         self.scan: AsyncAdminVaultScanResource = AsyncAdminVaultScanResource(http)
-        self.signing_keys: AsyncAdminVaultSigningKeysResource = AsyncAdminVaultSigningKeysResource(http)
+        self.signing_keys: AsyncAdminVaultSigningKeysResource = (
+            AsyncAdminVaultSigningKeysResource(http)
+        )
+        self.rewind: AsyncAdminVaultRewindResource = AsyncAdminVaultRewindResource(http)
 
 
 class AsyncAdminTrustedIssuersResource:
@@ -916,7 +1093,9 @@ class AsyncAdminTrustedIssuersResource:
 
     async def revoke_certs(self, issuer_id: str) -> dict[str, Any]:
         """Revoke every live ephemeral cert issued under this issuer."""
-        return await self._http.post(f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={})
+        return await self._http.post(
+            f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={}
+        )
 
 
 class AsyncAdminResource:
@@ -926,7 +1105,9 @@ class AsyncAdminResource:
         self._http = http
         self.records: AsyncAdminRecordsResource = AsyncAdminRecordsResource(http)
         self.vault: AsyncAdminVaultResource = AsyncAdminVaultResource(http)
-        self.trusted_issuers: AsyncAdminTrustedIssuersResource = AsyncAdminTrustedIssuersResource(http)
+        self.trusted_issuers: AsyncAdminTrustedIssuersResource = (
+            AsyncAdminTrustedIssuersResource(http)
+        )
 
     async def get_ops_summary(self) -> dict[str, Any]:
         """Get a consolidated operations snapshot (license, system, queues,
@@ -942,7 +1123,9 @@ class AsyncAdminResource:
 
     async def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:
         """Revoke a single ephemeral signing cert by ID."""
-        return await self._http.post(f"/v1/admin/ephemeral-certs/{cert_id}/revoke", json={})
+        return await self._http.post(
+            f"/v1/admin/ephemeral-certs/{cert_id}/revoke", json={}
+        )
 
     async def list_orgs(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/orgs", params=params)
@@ -955,9 +1138,12 @@ class AsyncAdminResource:
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {}
-        if name is not None: body["name"] = name
-        if display_name is not None: body["displayName"] = display_name
-        if config is not None: body["config"] = config
+        if name is not None:
+            body["name"] = name
+        if display_name is not None:
+            body["displayName"] = display_name
+        if config is not None:
+            body["config"] = config
         return await self._http.post("/v1/admin/orgs", json=body)
 
     async def get_org_config(self, org_id: str) -> dict[str, Any]:
@@ -965,7 +1151,9 @@ class AsyncAdminResource:
         block, ``enforcementDefaults`` and ``enforcementSource``."""
         return await self._http.get(f"/v1/admin/orgs/{org_id}/config")
 
-    async def update_org_config(self, org_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    async def update_org_config(
+        self, org_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Partially update an org's configuration (PATCH semantics). A null on an
         ``enforcement`` field clears the override rather than setting zero."""
         return await self._http.patch(f"/v1/admin/orgs/{org_id}/config", json=config)
@@ -983,12 +1171,17 @@ class AsyncAdminResource:
         oidc_sub: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"orgId": org_id, "displayName": display_name}
-        if agent_card_url is not None: body["agentCardUrl"] = agent_card_url
-        if oidc_iss is not None: body["oidcIss"] = oidc_iss
-        if oidc_sub is not None: body["oidcSub"] = oidc_sub
+        if agent_card_url is not None:
+            body["agentCardUrl"] = agent_card_url
+        if oidc_iss is not None:
+            body["oidcIss"] = oidc_iss
+        if oidc_sub is not None:
+            body["oidcSub"] = oidc_sub
         return await self._http.post("/v1/admin/agents", json=body)
 
-    async def set_capabilities(self, agent_id: str, *, contract_types: list[str]) -> dict[str, Any]:
+    async def set_capabilities(
+        self, agent_id: str, *, contract_types: list[str]
+    ) -> dict[str, Any]:
         return await self._http.put(
             f"/v1/admin/agents/{agent_id}/capabilities",
             json={"contractTypes": contract_types},
@@ -1017,7 +1210,9 @@ class AsyncAdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return await self._http.post(f"/v1/admin/agents/{agent_id}/deactivate", json=body)
+        return await self._http.post(
+            f"/v1/admin/agents/{agent_id}/deactivate", json=body
+        )
 
     async def reactivate_org(
         self,
@@ -1053,7 +1248,9 @@ class AsyncAdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return await self._http.post(f"/v1/admin/agents/{agent_id}/reactivate", json=body)
+        return await self._http.post(
+            f"/v1/admin/agents/{agent_id}/reactivate", json=body
+        )
 
     async def list_api_keys(
         self,
@@ -1075,9 +1272,19 @@ class AsyncAdminResource:
         """List API keys: one owner's when ``owner_id`` is set, otherwise every
         key on the install. See the sync counterpart for the truncation note."""
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor,
-            last_used_before=last_used_before, never_used=never_used,
+            owner_id,
+            org_id,
+            owner_type,
+            role,
+            is_active,
+            created_before,
+            expires_before,
+            never_expires,
+            limit,
+            offset,
+            cursor,
+            last_used_before=last_used_before,
+            never_used=never_used,
         )
         return await self._http.get_page("/v1/admin/api-keys", params=params)
 
@@ -1103,11 +1310,23 @@ class AsyncAdminResource:
         cursor. See the sync counterpart for why the single-owner cursor needs
         them, and why the runaway guard raises."""
         params = _api_key_filters(
-            owner_id, org_id, owner_type, role, is_active, created_before,
-            expires_before, never_expires, limit, offset, cursor,
-            last_used_before=last_used_before, never_used=never_used,
+            owner_id,
+            org_id,
+            owner_type,
+            role,
+            is_active,
+            created_before,
+            expires_before,
+            never_expires,
+            limit,
+            offset,
+            cursor,
+            last_used_before=last_used_before,
+            never_used=never_used,
         )
-        async for item in self._http.paginate("/v1/admin/api-keys", params=params, max_pages=max_pages):
+        async for item in self._http.paginate(
+            "/v1/admin/api-keys", params=params, max_pages=max_pages
+        ):
             yield item
 
     async def create_api_key(
@@ -1127,11 +1346,16 @@ class AsyncAdminResource:
             "ownerId": owner_id,
             "ownerType": owner_type,
         }
-        if label is not None: body["label"] = label
-        if scopes is not None: body["scopes"] = scopes
-        if scope_profile is not None: body["scopeProfile"] = scope_profile
-        if expires_at is not None: body["expiresAt"] = expires_at
-        if allowed_ips is not None: body["allowedIps"] = allowed_ips
+        if label is not None:
+            body["label"] = label
+        if scopes is not None:
+            body["scopes"] = scopes
+        if scope_profile is not None:
+            body["scopeProfile"] = scope_profile
+        if expires_at is not None:
+            body["expiresAt"] = expires_at
+        if allowed_ips is not None:
+            body["allowedIps"] = allowed_ips
         return await self._http.post("/v1/admin/api-keys", json=body)
 
     async def update_api_key(self, key_id: str, **params: Any) -> dict[str, Any]:
@@ -1141,7 +1365,9 @@ class AsyncAdminResource:
         return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
     async def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
-        return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active})
+        return await self._http.patch(
+            f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
+        )
 
     async def bulk_revoke_api_keys(
         self,
@@ -1156,7 +1382,13 @@ class AsyncAdminResource:
     ) -> dict[str, Any]:
         """Revoke API keys by id or by filter. See the sync counterpart."""
         body = _bulk_revoke_body(
-            key_ids, owner_id, role, created_before, last_used_before, never_used, reason
+            key_ids,
+            owner_id,
+            role,
+            created_before,
+            last_used_before,
+            never_used,
+            reason,
         )
         return await self._http.post("/v1/admin/api-keys/bulk-revoke", json=body)
 
@@ -1172,7 +1404,9 @@ class AsyncAdminResource:
     async def get_webhook_health(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/webhooks/health", params=params)
 
-    async def update_circuit_breaker(self, webhook_id: str, *, state: str) -> dict[str, Any]:
+    async def update_circuit_breaker(
+        self, webhook_id: str, *, state: str
+    ) -> dict[str, Any]:
         return await self._http.patch(
             f"/v1/admin/webhooks/{webhook_id}/circuit-breaker",
             json={"state": state},

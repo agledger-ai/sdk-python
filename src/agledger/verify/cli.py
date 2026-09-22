@@ -5,6 +5,12 @@ Auto-detects the single positional argument:
   - a file       -> a single /audit-export JSON document (object with
                     exportMetadata + entries) -> verify_export
 
+The key-policy flags (``--keys``, ``--require-key-id``,
+``--require-out-of-band-keys``) apply to an ``/audit-export`` file only; a dump
+directory carries its own signed key history and rejects them. Without
+``--keys`` an export is verified against the keys carried inside that same
+export, which proves internal consistency and not independence.
+
 Exit codes: 0 clean, 1 verification failure, 2 usage / IO error. (The split of
 usage/IO into its own code refines the TS CLI's 0/1 so a missing file or bad
 argument is never mistaken for a tamper finding.) No network calls are made.
@@ -20,7 +26,7 @@ import argparse
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from agledger.verify.failures import suggestion
@@ -79,6 +85,37 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "-k",
+        "--keys",
+        metavar="FILE",
+        help=(
+            "JSON file holding out-of-band public keys, for an /audit-export file. "
+            "Accepts a {keyId: SPKI-DER-base64} map, a [{keyId, publicKey, ...}] list, "
+            "or the raw GET /v1/verification-keys response envelope (the .data array is "
+            "unwrapped automatically). Merged over any keys embedded in the export. "
+            "Without it an export is verified against its own embedded keys, which is "
+            "internal consistency rather than an independent audit."
+        ),
+    )
+    parser.add_argument(
+        "--require-key-id",
+        metavar="ID",
+        help=(
+            "Require every entry to reference this keyId, rejecting an otherwise-valid "
+            "export signed by a retired or unexpected key "
+            "(else CHAIN_KEY_POLICY_VIOLATION)."
+        ),
+    )
+    parser.add_argument(
+        "--require-out-of-band-keys",
+        action="store_true",
+        help=(
+            "High-assurance: refuse keys embedded in the export. Verifying an export "
+            "against its own embedded keys is not an independent audit; supply keys "
+            "via --keys instead."
+        ),
+    )
+    parser.add_argument(
         "-q",
         "--quiet",
         action="store_true",
@@ -108,22 +145,61 @@ def load_agent_keys(path: str) -> list[dict[str, Any]] | str:
         return f"Cannot read --agent-keys file {path}: {err}"
     if isinstance(raw, list):
         entries: list[Any] = list(cast("list[Any]", raw))
-    elif isinstance(raw, dict) and isinstance(cast("dict[str, Any]", raw).get("keys"), list):
+    elif isinstance(raw, dict) and isinstance(
+        cast("dict[str, Any]", raw).get("keys"), list
+    ):
         entries = list(cast("dict[str, Any]", raw)["keys"])
     else:
         entries = [raw]
     if not entries:
         return f"The --agent-keys file {path} holds no keys. {_AGENT_KEYS_SHAPE}"
     jwks: list[Any] = [
-        cast("dict[str, Any]", e)["publicKeyJwk"] if isinstance(e, dict) and "publicKeyJwk" in e else e
+        cast("dict[str, Any]", e)["publicKeyJwk"]
+        if isinstance(e, dict) and "publicKeyJwk" in e
+        else e
         for e in entries
     ]
     try:
         build_agent_key_registry(jwks)
     except TypeError as err:
-        message = str(err).replace("agent_keys[", "entry ", 1).replace("] is not", " is not", 1)
+        message = (
+            str(err)
+            .replace("agent_keys[", "entry ", 1)
+            .replace("] is not", " is not", 1)
+        )
         return f"Invalid --agent-keys file {path}: {message}\n{_AGENT_KEYS_SHAPE}"
     return cast("list[dict[str, Any]]", jwks)
+
+
+_KEYS_SHAPE = (
+    'The --keys file must be a {"keyId": "<SPKI-DER-base64>"} map or a list of '
+    '{"keyId", "publicKey"} entries (the .data list from GET /v1/verification-keys).'
+)
+
+
+def load_out_of_band_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
+    """Read a ``--keys`` file into the shape ``verify_export`` accepts, or
+    return the usage-error message. A ``GET /v1/verification-keys`` response is
+    unwrapped to its ``data`` list so the file can be saved verbatim; every
+    other shape passes through, and ``verify_export`` validates it at the
+    out-of-band-key boundary. Mirrors ``unwrapKeys`` in ``@agledger/verify``."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw: Any = json.load(fh)
+    except OSError as err:
+        return f"Cannot read --keys file {path}: {err}"
+    except ValueError as err:
+        return f"Invalid JSON in {path}: {err}"
+    if isinstance(raw, dict) and isinstance(
+        cast("dict[str, Any]", raw).get("data"), list
+    ):
+        return cast("list[Any]", cast("dict[str, Any]", raw)["data"])
+    if isinstance(raw, (dict, list)):
+        return cast("Mapping[str, Any] | list[Any]", raw)
+    return (
+        f"Invalid --keys file {path}: expected a JSON object or array, got "
+        f"{type(raw).__name__}.\n{_KEYS_SHAPE}"
+    )
 
 
 def _agent_signature_summary(
@@ -243,6 +319,15 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
     lines.append(
         f"  key provenance    : out-of-band={prov.out_of_band} embedded={prov.embedded}"
     )
+    # A PASS earned only against keys the export itself carries is not an
+    # independent verification: a full re-sign plus key swap would also pass.
+    # Say so beside the headline rather than leaving it encoded in the counters.
+    if result.valid and prov.out_of_band == 0 and prov.embedded > 0:
+        lines.append(
+            "  WARNING           : verified only against keys embedded in the export "
+            "itself. This proves internal consistency, not independence; supply --keys "
+            "(and --require-out-of-band-keys) with keys obtained out of band."
+        )
     lines.append(
         "  agent signatures  : "
         f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given)}"
@@ -268,6 +353,12 @@ def run_cli(argv: Sequence[str]) -> int:
     quiet: bool = args.quiet
     report_format: str = args.report_format
 
+    require_key_id: str | None = args.require_key_id
+    require_out_of_band_keys: bool = args.require_out_of_band_keys
+    has_key_policy_flags = (
+        args.keys is not None or require_key_id is not None or require_out_of_band_keys
+    )
+
     agent_keys: list[dict[str, Any]] | None = None
     if args.agent_keys is not None:
         loaded = load_agent_keys(args.agent_keys)
@@ -278,6 +369,17 @@ def run_cli(argv: Sequence[str]) -> int:
 
     # Directory -> full-vault dump.
     if os.path.isdir(target):
+        # A dump carries its own signed key history, so an out-of-band key set
+        # has nothing to override and a silent no-op would read as an audit
+        # that honoured the policy. Mirrors @agledger/verify.
+        if has_key_policy_flags:
+            print(
+                "--keys / --require-key-id / --require-out-of-band-keys apply to "
+                "/audit-export files only; a dump directory carries its own signed "
+                "key history (vault_signing_keys.ndjson).",
+                file=sys.stderr,
+            )
+            return _EXIT_USAGE
         try:
             report = verify_dump(load_dump(target), agent_keys=agent_keys)
         except DumpLoadError as err:
@@ -310,7 +412,28 @@ def run_cli(argv: Sequence[str]) -> int:
         )
         return _EXIT_USAGE
 
-    result = verify_export(parsed, agent_keys=agent_keys)
+    public_keys: Mapping[str, Any] | list[Any] | None = None
+    if args.keys is not None:
+        loaded_keys = load_out_of_band_keys(args.keys)
+        if isinstance(loaded_keys, str):
+            print(loaded_keys, file=sys.stderr)
+            return _EXIT_USAGE
+        public_keys = loaded_keys
+
+    # verify_export raises TypeError at the out-of-band-key boundary when the
+    # file's shape is wrong ({keyId: 42}, [null]). Surface it as a usage error
+    # rather than an uncaught traceback, so a bad file never reads as a verdict.
+    try:
+        result = verify_export(
+            parsed,
+            public_keys=public_keys,
+            require_key_id=require_key_id,
+            require_out_of_band_keys=require_out_of_band_keys,
+            agent_keys=agent_keys,
+        )
+    except TypeError as err:
+        print(f"{err}\n{_KEYS_SHAPE}", file=sys.stderr)
+        return _EXIT_USAGE
     if not quiet:
         if report_format == "json":
             print(json.dumps(_export_to_json(result), indent=2))
