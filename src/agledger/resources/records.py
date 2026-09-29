@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import Any, Literal, overload
 
 from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.record_lifecycle import get_valid_transitions
@@ -13,9 +13,28 @@ from agledger.types import (
     Page,
     RecordAuditExport,
     RecordRow,
+    RecordRowCompact,
+    RecordRowCompactPage,
     VerdictResult,
     VerdictStatistics,
 )
+
+RecordView = Literal["full", "compact"]
+"""The ``view`` a record read takes. ``full`` (the default) is the whole
+Record; ``compact`` leaves out every top-level field whose value is null and
+trims each ``nextSteps`` entry to ``action``, ``method`` and ``href``."""
+
+def _parse_page(raw: dict[str, Any], view: RecordView | None) -> Page[RecordRow] | RecordRowCompactPage:
+    if view == "compact":
+        return RecordRowCompactPage.model_validate(raw)
+    raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
+    return Page[RecordRow].model_validate(raw)
+
+
+def _parse_row(raw: Any, view: RecordView | None) -> RecordRow | RecordRowCompact:
+    if view == "compact":
+        return RecordRowCompact.model_validate(raw)
+    return RecordRow.model_validate(raw)
 
 
 def _build_list_params(
@@ -23,7 +42,8 @@ def _build_list_params(
     performer_agent_id: str | None, role: str | None, from_: str | None,
     to: str | None, has_dispute: bool | None, dispute_status: DisputeStatus | str | None,
     imported: bool | None, source: str | None, actionable: bool | None,
-    limit: int | None, cursor: str | None,
+    limit: int | None, cursor: str | None, offset: int | None = None,
+    view: RecordView | None = None,
 ) -> dict[str, Any]:
     """Assemble the query params for GET /v1/records, mapping snake_case to the wire names."""
     return {
@@ -42,7 +62,9 @@ def _build_list_params(
             ("source", source),
             ("actionable", actionable),
             ("limit", limit),
+            ("offset", offset),
             ("cursor", cursor),
+            ("view", view),
         )
         if value is not None
     }
@@ -153,14 +175,74 @@ class RecordsResource:
             self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
         )
 
-    def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
+    @overload
+    def get(
+        self, record_id: str, *, integrity: bool | None = None, view: Literal["full"] | None = None
+    ) -> RecordRow: ...
+
+    @overload
+    def get(
+        self, record_id: str, *, integrity: bool | None = None, view: Literal["compact"]
+    ) -> RecordRowCompact: ...
+
+    def get(
+        self, record_id: str, *, integrity: bool | None = None, view: RecordView | None = None
+    ) -> RecordRow | RecordRowCompact:
         """Get a Record by ID.
 
         Pass ``integrity=True`` to re-verify the audit chain and cross-check the
         served row against it; the result is on ``RecordRow.integrity``.
+
+        ``view="compact"`` returns a :class:`RecordRowCompact`, which leaves out
+        every top-level null field and trims each ``next_steps`` entry to
+        ``action``, ``method`` and ``href``.
         """
-        params = {"integrity": integrity} if integrity is not None else None
-        return RecordRow.model_validate(self._http.get(f"/v1/records/{record_id}", params=params))
+        params = {k: v for k, v in (("integrity", integrity), ("view", view)) if v is not None}
+        return _parse_row(self._http.get(f"/v1/records/{record_id}", params=params or None), view)
+
+    @overload
+    def list(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["full"] | None = None,
+    ) -> Page[RecordRow]: ...
+
+    @overload
+    def list(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["compact"],
+    ) -> RecordRowCompactPage: ...
 
     def list(
         self,
@@ -178,8 +260,10 @@ class RecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
+        offset: int | None = None,
         cursor: str | None = None,
-    ) -> Page[RecordRow]:
+        view: RecordView | None = None,
+    ) -> Page[RecordRow] | RecordRowCompactPage:
         """List Records with optional filters.
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
@@ -189,14 +273,17 @@ class RecordsResource:
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``view="compact"`` returns a :class:`RecordRowCompactPage`, whose rows
+        leave out every top-level null field and whose ``next_steps`` entries
+        carry only ``action``, ``method`` and ``href``.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, cursor,
+            offset, view,
         )
-        raw = self._http.get_page("/v1/records", params=params)
-        raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
-        return Page[RecordRow].model_validate(raw)
+        return _parse_page(self._http.get_page("/v1/records", params=params), view)
 
     def list_all(
         self,
@@ -235,6 +322,7 @@ class RecordsResource:
         for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield RecordRow.model_validate(item)
 
+    @overload
     def search(
         self,
         *,
@@ -270,7 +358,85 @@ class RecordsResource:
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
-    ) -> Page[RecordRow]:
+        view: Literal["full"] | None = None,
+    ) -> Page[RecordRow]: ...
+
+    @overload
+    def search(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["compact"],
+    ) -> RecordRowCompactPage: ...
+
+    def search(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: RecordView | None = None,
+    ) -> Page[RecordRow] | RecordRowCompactPage:
         """Search Records with advanced filters.
 
         ``role='performer'`` / ``role='principal'`` narrows the calling agent's
@@ -282,6 +448,10 @@ class RecordsResource:
         one, and the search querystring rejects unknown properties, so offering it
         produced a 400. On an admin or platform key the replacement for it is
         ``performer_agent_id``, not ``role``.
+
+        ``view="compact"`` returns a :class:`RecordRowCompactPage`, whose rows
+        leave out every top-level null field and whose ``next_steps`` entries
+        carry only ``action``, ``method`` and ``href``.
         """
         params: dict[str, Any] = {}
         if org_id is not None: params["orgId"] = org_id
@@ -316,9 +486,8 @@ class RecordsResource:
         if limit is not None: params["limit"] = limit
         if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
-        raw = self._http.get_page("/v1/records/search", params=params)
-        raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
-        return Page[RecordRow].model_validate(raw)
+        if view is not None: params["view"] = view
+        return _parse_page(self._http.get_page("/v1/records/search", params=params), view)
 
     def update(self, record_id: str, **params: Any) -> RecordRow:
         """Update a Record's mutable fields."""
@@ -594,12 +763,67 @@ class AsyncRecordsResource:
             await self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
         )
 
-    async def get(self, record_id: str, *, integrity: bool | None = None) -> RecordRow:
-        """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain."""
-        params = {"integrity": integrity} if integrity is not None else None
-        return RecordRow.model_validate(
-            await self._http.get(f"/v1/records/{record_id}", params=params)
-        )
+    @overload
+    async def get(
+        self, record_id: str, *, integrity: bool | None = None, view: Literal["full"] | None = None
+    ) -> RecordRow: ...
+
+    @overload
+    async def get(
+        self, record_id: str, *, integrity: bool | None = None, view: Literal["compact"]
+    ) -> RecordRowCompact: ...
+
+    async def get(
+        self, record_id: str, *, integrity: bool | None = None, view: RecordView | None = None
+    ) -> RecordRow | RecordRowCompact:
+        """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain,
+        ``view="compact"`` for a :class:`RecordRowCompact`."""
+        params = {k: v for k, v in (("integrity", integrity), ("view", view)) if v is not None}
+        return _parse_row(await self._http.get(f"/v1/records/{record_id}", params=params or None), view)
+
+    @overload
+    async def list(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["full"] | None = None,
+    ) -> Page[RecordRow]: ...
+
+    @overload
+    async def list(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["compact"],
+    ) -> RecordRowCompactPage: ...
 
     async def list(
         self,
@@ -617,8 +841,10 @@ class AsyncRecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
+        offset: int | None = None,
         cursor: str | None = None,
-    ) -> Page[RecordRow]:
+        view: RecordView | None = None,
+    ) -> Page[RecordRow] | RecordRowCompactPage:
         """List Records with optional filters.
 
         ``actionable=True`` returns the agent-recovery set: every Record whose next
@@ -628,14 +854,17 @@ class AsyncRecordsResource:
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``view="compact"`` returns a :class:`RecordRowCompactPage`, whose rows
+        leave out every top-level null field and whose ``next_steps`` entries
+        carry only ``action``, ``method`` and ``href``.
         """
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, cursor,
+            offset, view,
         )
-        raw = await self._http.get_page("/v1/records", params=params)
-        raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
-        return Page[RecordRow].model_validate(raw)
+        return _parse_page(await self._http.get_page("/v1/records", params=params), view)
 
     async def list_all(
         self,
@@ -674,6 +903,7 @@ class AsyncRecordsResource:
         async for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield RecordRow.model_validate(item)
 
+    @overload
     async def search(
         self,
         *,
@@ -709,7 +939,85 @@ class AsyncRecordsResource:
         limit: int | None = None,
         offset: int | None = None,
         cursor: str | None = None,
-    ) -> Page[RecordRow]:
+        view: Literal["full"] | None = None,
+    ) -> Page[RecordRow]: ...
+
+    @overload
+    async def search(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: Literal["compact"],
+    ) -> RecordRowCompactPage: ...
+
+    async def search(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        sort: str | None = None,
+        order: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        cursor: str | None = None,
+        view: RecordView | None = None,
+    ) -> Page[RecordRow] | RecordRowCompactPage:
         """Search Records with advanced filters.
 
         ``role='performer'`` / ``role='principal'`` narrows the calling agent's
@@ -721,6 +1029,10 @@ class AsyncRecordsResource:
         one, and the search querystring rejects unknown properties, so offering it
         produced a 400. On an admin or platform key the replacement for it is
         ``performer_agent_id``, not ``role``.
+
+        ``view="compact"`` returns a :class:`RecordRowCompactPage`, whose rows
+        leave out every top-level null field and whose ``next_steps`` entries
+        carry only ``action``, ``method`` and ``href``.
         """
         params: dict[str, Any] = {}
         if org_id is not None: params["orgId"] = org_id
@@ -755,9 +1067,8 @@ class AsyncRecordsResource:
         if limit is not None: params["limit"] = limit
         if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
-        raw = await self._http.get_page("/v1/records/search", params=params)
-        raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
-        return Page[RecordRow].model_validate(raw)
+        if view is not None: params["view"] = view
+        return _parse_page(await self._http.get_page("/v1/records/search", params=params), view)
 
     async def update(self, record_id: str, **params: Any) -> RecordRow:
         return RecordRow.model_validate(await self._http.patch(f"/v1/records/{record_id}", json=params))

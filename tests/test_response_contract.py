@@ -186,3 +186,20 @@ def test_record_reject_sends_message_not_reason():
     assert route.called
     sent = json.loads(route.calls[0].request.content)
     assert sent == {"message": "out of scope"}
+
+
+@respx.mock
+def test_a_record_received_from_a_peer_parses_with_federation_status_inbound():
+    """The Server serves ``federationStatus: inbound`` on every record a peer
+    projected here. The field was a closed four-value Literal, so reading any
+    such record raised a ValidationError instead of returning it."""
+    respx.get(f"{BASE}/v1/records/rec-1").mock(
+        return_value=httpx.Response(200, json={
+            "id": "rec-1", "orgId": "org-1", "principalAgentId": "agt-1",
+            "type": "notarize-generic-v1", "platform": "federation", "status": "ACTIVE",
+            "criteria": {}, "submissionCount": 0, "version": 1,
+            "createdAt": "2026-09-28T00:00:00Z", "updatedAt": "2026-09-28T00:00:00Z",
+            "federationStatus": "inbound",
+        })
+    )
+    assert _client().records.get("rec-1").federation_status == "inbound"

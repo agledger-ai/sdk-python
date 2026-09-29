@@ -10,8 +10,9 @@ from typing import Any, ClassVar, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class NextStep(BaseModel):
-    """A suggested next API call: guides agents through the lifecycle."""
+class NextStepCompact(BaseModel):
+    """A suggested next API call as the compact record view serves it: the call
+    alone, without the guidance :class:`NextStep` carries."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -23,6 +24,11 @@ class NextStep(BaseModel):
     """HTTP method."""
     href: str
     """Relative URL template (substitute {id} placeholders)."""
+
+
+class NextStep(NextStepCompact):
+    """A suggested next API call: guides agents through the lifecycle."""
+
     description: str
     """Why this step matters."""
     after_this: str | None = Field(None, alias="afterThis")
@@ -318,8 +324,9 @@ class RecordIntegrity(BaseModel):
     treating a clean ``verified`` as covering the field you care about."""
 
 
-class RecordRow(BaseModel):
-    """A Record: a registered commitment between a principal and a performer."""
+class _RecordRowFields(BaseModel):
+    """The fields :class:`RecordRow` and :class:`RecordRowCompact` share: all of
+    them but ``next_steps``, whose entries the compact view trims."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -488,8 +495,6 @@ class RecordRow(BaseModel):
     """Free-form identifier of the human or upstream system that asked for the work."""
     references: list[EntityReference] | None = None
     """External references attached to this Record (present on single-Record fetch only)."""
-    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
-    """Suggested next API calls after Record mutations."""
     signed_statement: SignedStatement | None = Field(None, alias="signedStatement")
     """Inline tamper-evident head of this Record's audit chain (the Signed Statement at chainPosition)."""
     record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
@@ -526,16 +531,59 @@ class RecordRow(BaseModel):
         None, alias="settlementSignal"
     )
     """Settlement Signal projected onto the Record, or None until a terminal verdict produces one."""
-    federation_status: Literal["pending", "delivered", "partial", "failed"] | None = (
-        Field(None, alias="federationStatus")
-    )
-    """Federation delivery status for this Record's outbound state, or None when not federated."""
+    federation_status: (
+        Literal["pending", "delivered", "partial", "failed", "inbound"] | str | None
+    ) = Field(None, alias="federationStatus")
+    """Federation delivery status for this Record's outbound state, ``inbound``
+    on a Record received from a peer, or None when not federated. Open with
+    ``| str`` so a status a newer Server adds parses instead of raising."""
     shared_to_peers: list[str] | None = Field(None, alias="sharedToPeers")
     """Peer Server IDs this Record has been shared to via federation."""
     share: bool | None = None
     """Whether this Record participates in revenue share, or None when not configured."""
     integrity: RecordIntegrity | None = None
     """Tamper-evidence result, present only when read with ``integrity=True``."""
+
+
+class RecordRow(_RecordRowFields):
+    """A Record: a registered commitment between a principal and a performer."""
+
+    next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
+    """Suggested next API calls after Record mutations."""
+
+
+class RecordRowCompact(_RecordRowFields):
+    """A Record as served under ``view="compact"``.
+
+    Every top-level field whose value is null is left out of the body, so an
+    absent field reads as None here, the same as a null one; nested objects
+    (``criteria``, ``settlement_signal``) are untouched. Each ``next_steps``
+    entry carries only ``action``, ``method`` and ``href``: read the Record
+    once without ``view`` for the ``description``, ``after_this`` and
+    ``workflow_*`` guidance. Meant for an agent loop that re-reads Records it
+    has already seen in full."""
+
+    next_steps: list[NextStepCompact] | None = Field(None, alias="nextSteps")
+    """Suggested next calls, trimmed to ``action``, ``method`` and ``href``."""
+
+
+class RecordRowCompactPage(BaseModel):
+    """A page of :class:`RecordRowCompact` rows: ``records.list()`` and
+    ``records.search()`` under ``view="compact"``. The envelope's own
+    ``next_steps`` are trimmed the same way the rows' are."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    data: list[RecordRowCompact]
+    has_more: bool = Field(alias="hasMore")
+    next_cursor: str | None = Field(None, alias="nextCursor")
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    next_steps: list[NextStepCompact] | None = Field(None, alias="nextSteps")
+    record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
 
 
 class BulkCreateResultItem(BaseModel):
