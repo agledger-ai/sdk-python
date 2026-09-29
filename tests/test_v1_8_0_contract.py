@@ -250,20 +250,26 @@ def test_conformance_reports_license_state():
 # enum snapshot pins these too; this states the cert_window_drift addition
 # where a reader of this wave's deltas will look for it, and the checkpoint
 # and key-window codes the engine added after the wave was first packed.
-SPEC_1_8_0_CHAIN_INTEGRITY_REASON = {
+# The members the engine declares for chainIntegrityReason and
+# chainIntegrityDetail.failure. The 1.8.0 tag's set plus what main added after
+# it: an unsigned entry after a signed one, or written once the install signs,
+# is ``signature_missing``, and an unsigned checkpoint from then on is
+# ``checkpoint_unsigned`` (a reason only; the detail's failure never carries a
+# checkpoint class).
+SPEC_CHAIN_INTEGRITY_REASON = {
     "agent_signature_invalid", "audit_vault_empty", "audit_vault_row_missing_for_checkpoint",
     "cert_actor_drift", "cert_expired", "cert_missing", "cert_window_drift", "chain_broken_at",
     "checkpoint_claim_mismatch", "checkpoint_hash_mismatch", "checkpoint_key_unknown",
-    "checkpoint_signature_invalid", "key_expired", "key_not_yet_active", "oidc_actor_drift",
-    "payload_drift", "signature_invalid", "signing_key_drift", "signing_key_unknown",
-    "signing_key_unpublished", "unsupported_algorithm",
+    "checkpoint_signature_invalid", "checkpoint_unsigned", "key_expired", "key_not_yet_active",
+    "oidc_actor_drift", "payload_drift", "signature_invalid", "signature_missing",
+    "signing_key_drift", "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
 }
-SPEC_1_8_0_CHAIN_FAILURE = {
+SPEC_CHAIN_FAILURE = {
     "agent_signature_invalid", "audit_vault_truncated", "cert_actor_drift", "cert_expired",
     "cert_missing", "cert_window_drift", "checkpoint_anchor_mismatch", "key_expired",
     "key_not_yet_active", "oidc_actor_drift", "payload_drift", "payload_hash_mismatch",
-    "previous_hash_mismatch", "signature_invalid", "signing_key_drift", "signing_key_unknown",
-    "signing_key_unpublished", "unsupported_algorithm",
+    "previous_hash_mismatch", "signature_invalid", "signature_missing", "signing_key_drift",
+    "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
 }
 
 
@@ -277,8 +283,8 @@ def _members(alias: object) -> set[str]:
 
 
 def test_chain_integrity_unions_match_the_spec():
-    assert _members(AuditChainIntegrityReasonCode) == SPEC_1_8_0_CHAIN_INTEGRITY_REASON
-    assert _members(AuditChainFailureCode) == SPEC_1_8_0_CHAIN_FAILURE
+    assert _members(AuditChainIntegrityReasonCode) == SPEC_CHAIN_INTEGRITY_REASON
+    assert _members(AuditChainFailureCode) == SPEC_CHAIN_FAILURE
 
 
 def _export(reason: str, failure: str) -> dict[str, object]:
@@ -298,6 +304,8 @@ def _export(reason: str, failure: str) -> dict[str, object]:
     ("reason", "failure"),
     [
         ("cert_window_drift", "cert_window_drift"),
+        ("signature_missing", "signature_missing"),
+        ("checkpoint_unsigned", "signature_missing"),
         # A reason a newer Server adds must still parse. A closed Literal here
         # failed the whole export on the first value it did not list.
         ("some_future_reason", "some_future_failure"),
@@ -404,7 +412,8 @@ def test_models_no_longer_declare_fields_the_server_never_sent():
 
     assert not {"uptime", "database"} & set(HealthResponse.model_fields)
     assert "active_incidents" not in StatusResponse.model_fields
-    assert not {"id", "format"} & set(ComplianceExport.model_fields)
+    # ``format`` came back: the create and the status read both carry it now.
+    assert "id" not in ComplianceExport.model_fields
     assert not {"position", "timestamp", "actor"} & set(AuditExportEntry.model_fields)
 
 
@@ -444,3 +453,10 @@ def test_reference_lookup_is_a_page_of_matches_and_walks_every_page():
     matches = list(_client().references.lookup_all(system="erp", ref_type="po", ref_id="PO-1"))
     assert [m["entityId"] for m in matches] == ["rec-1", "agt-1"]
     assert route.calls[1].request.url.params["cursor"] == "c2"
+
+
+@respx.mock
+def test_a_compliance_export_carries_the_format_it_was_created_in():
+    body = {"exportId": "exp-1", "status": "completed", "format": "csv", "downloadUrl": "/v1/compliance/export/exp-1/download"}
+    respx.get(f"{BASE}/v1/compliance/export/exp-1").mock(return_value=httpx.Response(200, json=body))
+    assert _client().compliance.get_export_status("exp-1").format == "csv"
