@@ -46,6 +46,9 @@ class APIError(AgledgerError):
     - ``doc_url``: documentation link, only if the API returned one
     - ``suggestion``: typo-correction hint, only if the API returned one
     - ``recovery_hint``: machine-readable recovery guidance (e.g. on 422 INVALID_ACTION)
+    - ``reason`` / ``current_state`` / ``allowed_actions``: the refusal's reason code, the
+      state it found, and what is allowed now
+    - ``existing_id``: the row a 409 collided with (e.g. TRUSTED_ISSUER_EXISTS)
     - ``refresh_url``: concrete GET URL to re-fetch state (e.g. on 422 INVALID_ACTION)
     """
 
@@ -87,6 +90,23 @@ class APIError(AgledgerError):
     Set on the federation 401 alongside the signing-input template."""
     suggestion: str | None
     recovery_hint: str | None
+    reason: str | None
+    """Machine-readable reason code, forwarded from the body. On a 401 OIDC
+    refusal it names the token check that failed (``expired``,
+    ``wrong_audience``, ``wrong_azp``, ``jti_replayed``, ...); on a 409 it
+    names the conflict (``TRUSTED_ISSUER_EXISTS``, ``AGENT_NAME_IN_USE``,
+    ...). Branch on this rather than on the message prose."""
+    current_state: str | None
+    """State the resource was in when the request was refused, forwarded from
+    the body. Some refusals name their precondition here instead, such as the
+    cert exchange's 422 ``scope_claim_admin_only``."""
+    allowed_actions: list[str] | None
+    """Actions the resource accepts right now, forwarded from the body. Ground
+    truth for the next call."""
+    existing_id: str | None
+    """ID of the row already holding the unique key this request collided
+    with. Present on 409 ``TRUSTED_ISSUER_EXISTS``: read or PATCH that row
+    rather than creating another."""
     refresh_url: str | None
     deadline: str | None
     """ISO deadline that had already passed on a system TIME_OUT 422 (API v1.3.2)."""
@@ -111,6 +131,10 @@ class APIError(AgledgerError):
         recovery_hint: str | None = None,
         refresh_url: str | None = None,
         deadline: str | None = None,
+        reason: str | None = None,
+        current_state: str | None = None,
+        allowed_actions: list[str] | None = None,
+        existing_id: str | None = None,
         type: str | None = None,
         publishers: list[str] | None = None,
         registry_version: int | None = None,
@@ -132,6 +156,10 @@ class APIError(AgledgerError):
         self.docs = docs
         self.suggestion = suggestion
         self.recovery_hint = recovery_hint
+        self.reason = reason
+        self.current_state = current_state
+        self.allowed_actions = allowed_actions
+        self.existing_id = existing_id
         self.refresh_url = refresh_url
         self.deadline = deadline
         self.raw_body = raw_body

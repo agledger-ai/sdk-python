@@ -48,7 +48,14 @@ class OidcCertExchangeError(APIError):
     was never sent, because the credential could not obtain a cert to send it
     with. Carries the Server's error verbatim, and ``recovery_hint`` names what
     to fix (an unregistered issuer, an unbound subject, an OIDC token id that
-    was already exchanged)."""
+    was already exchanged).
+
+    Two refusals worth branching on: ``status == 403`` with
+    ``code == "CERT_AGENT_BINDING_MISMATCH"`` says the ``agent_id`` the
+    credential asserted is not the agent the token binds to, or the token binds
+    to none; and ``status == 422`` with ``current_state ==
+    "scope_claim_admin_only"`` says the token's mapped scopes claim names only
+    scopes no agent cert may hold."""
 
 
 def _monotonic() -> float:
@@ -246,6 +253,10 @@ class _CertState:
                 docs=source.docs,
                 recovery_hint=_scrub(source.recovery_hint, token),
                 type=source.type,
+                reason=source.reason,
+                current_state=source.current_state,
+                allowed_actions=source.allowed_actions,
+                existing_id=source.existing_id,
             )
         try:
             raw_payload: Any = response.json()
@@ -455,10 +466,17 @@ def oidc_cert_credential(
     raises; a 409 there says the token source returned a token that was
     already exchanged.
 
-    ``agent_id`` binds the cert to one agent in the trusted issuer's org. Omit
-    it to let the Server bind from the token's mapped ``agent_id`` claim, an
-    agent already registered under the token's ``(iss, sub)``, or the issuer's
-    auto-provisioning.
+    The token decides which agent the cert binds to: the trusted issuer's
+    ``claimMapping.agent_id``, else the agent carrying the token's
+    ``oidcIss``/``oidcSub``, else the issuer's auto-provisioning. ``agent_id``
+    never chooses the agent; it is only an assertion. When sent it must equal
+    the agent the token binds to, so the exchange fails with 403
+    ``CERT_AGENT_BINDING_MISMATCH`` rather than binding an agent you did not
+    expect (also when the token binds to no agent). Read the raised error's
+    ``recovery_hint`` for the binding to make. To bind an agent,
+    ``client.agents.update(agent_id, oidc_iss=..., oidc_sub=...)``
+    (``PATCH /v1/agents/{id}``), or set ``claimMapping.agent_id`` on the
+    trusted issuer.
 
     Requires ``pip install 'agledger[oidc]'``.
     """
