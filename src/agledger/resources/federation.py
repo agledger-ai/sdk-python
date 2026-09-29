@@ -9,17 +9,16 @@ from agledger.types import PeerHandshakeResult
 
 
 def _handshake_body(
-    peer_hub_id: str, peer_url: str, signing_public_key: str,
-    peering_token: str, bound_org_id: str,
+    peer_hub_id: str, peer_url: str, signing_public_key: str, peering_token: str,
 ) -> dict[str, Any]:
-    """The whole ``POST /federation/v1/peer`` body. All five are required and the
-    route takes nothing else."""
+    """The whole ``POST /federation/v1/peer`` body. All four are required and the
+    route takes nothing else: the token names the local org the peering binds
+    to, so the body names none."""
     return {
         "peerHubId": peer_hub_id,
         "peerUrl": peer_url,
         "signingPublicKey": signing_public_key,
         "peeringToken": peering_token,
-        "boundOrgId": bound_org_id,
     }
 
 
@@ -87,17 +86,22 @@ class FederationResource:
         peer_url: str,
         signing_public_key: str,
         peering_token: str,
-        bound_org_id: str,
     ) -> PeerHandshakeResult:
         """Establish a peer relationship with another Server.
 
-        The five fields are the whole body: the route is
+        The four fields are the whole body: the route is
         ``additionalProperties: false``, so anything else is a 400. It is
         unauthenticated and admits on ``peering_token`` alone, a single-use
         secret the RECEIVING Server's operator mints at
         ``federation_admin.create_peering_token()`` and shares out of band. Send
         it over the peer's real URL and nothing else: this is the one federation
         call that carries no signature to fall back on.
+
+        The token is checked first: an unknown, consumed or expired one is a
+        401 before anything else about the request is looked at. The token was
+        minted for one hub id and one local org; ``peer_hub_id`` must be that
+        hub id (your own ``instanceId``), else 422 with the token left
+        unconsumed. The org comes from the token.
 
         ``signing_public_key`` is your own Ed25519 signing key, SPKI-DER
         base64, which this Server will verify your later messages against. Your
@@ -109,7 +113,7 @@ class FederationResource:
         """
         return PeerHandshakeResult.model_validate(
             self._http.post("/federation/v1/peer", json=_handshake_body(
-                peer_hub_id, peer_url, signing_public_key, peering_token, bound_org_id,
+                peer_hub_id, peer_url, signing_public_key, peering_token,
             ))
         )
 
@@ -156,7 +160,17 @@ class FederationResource:
         failing_rule_ids: list[str] | None = None,
         reason: str | None = None,
     ) -> dict[str, Any]:
-        """Relay a Settlement Signal (SETTLE / HOLD / RELEASE) to a counterparty peer."""
+        """Relay a Settlement Signal (SETTLE / HOLD / RELEASE) to a counterparty peer.
+
+        A receiver that registered the record's type with
+        ``coSignRequired: true`` refuses a signal without ``counter_signature``
+        with 422, ``retryable: false``, reason ``co_sign_required``.
+
+        ``reason`` is ignored by the receiver. Peers on API 1.8.0 and earlier
+        send the signal's free-text reason here, so the field is still
+        accepted, but it is neither stored nor forwarded: free text does not
+        cross the federation wire, and ``reason_code`` and ``failing_rule_ids``
+        carry the cause."""
         body = _signal_body(
             record_id, recommendation, outcome_hash, valid_until, idempotency_key,
             outcome, counter_signature, schema_ref, reason_code, failing_rule_ids,
@@ -186,13 +200,14 @@ class AsyncFederationResource:
         peer_url: str,
         signing_public_key: str,
         peering_token: str,
-        bound_org_id: str,
     ) -> PeerHandshakeResult:
-        """Establish a peer relationship with another Server. The five fields are
-        the whole body, and the route admits on ``peering_token`` alone."""
+        """Establish a peer relationship with another Server. The four fields are
+        the whole body, and the route admits on ``peering_token`` alone: a bad
+        token is a 401, a ``peer_hub_id`` other than the one it was minted for a
+        422. See :meth:`FederationResource.peer_handshake`."""
         return PeerHandshakeResult.model_validate(
             await self._http.post("/federation/v1/peer", json=_handshake_body(
-                peer_hub_id, peer_url, signing_public_key, peering_token, bound_org_id,
+                peer_hub_id, peer_url, signing_public_key, peering_token,
             ))
         )
 
