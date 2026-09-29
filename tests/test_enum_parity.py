@@ -80,9 +80,34 @@ COVERED = sorted(set(SDK_LITERALS) & set(PINNED))
 UNCOVERED = ["AcceptanceStatus", "ApiKeyRole", "RecordType", "RiskClassification"]
 
 
+# Pinned unions the TS SDK names and this one does not yet. The comparison
+# below runs only over names both sides hold, so a pin missing here was skipped
+# without a word; this list makes each one visible, and a new pin must either be
+# named in ``agledger.types`` or added here on purpose.
+NOT_YET_NAMED = [
+    "ComplianceRecordType",
+    "DisputeGrounds",
+    "DisputeProtocolAction",
+    "EvidenceType",
+    "FederationSettlementSignal",
+    "FederationVerdict",
+    "SchemaCompatibilityMode",
+    "SchemaFieldMappingValueType",
+    "SchemaVersionStatus",
+    "SettlementSignal",
+    "StructuralValidation",
+    "WebhookSigningAlg",
+]
+
+
 def test_every_literal_is_pinned_or_explicitly_uncovered() -> None:
     """A Literal that is neither checked nor listed is silently unguarded."""
     assert sorted(SDK_LITERALS) == sorted(COVERED + UNCOVERED)
+
+
+def test_every_pin_is_named_here_or_listed_as_not_yet_named() -> None:
+    """A pin with no Literal of that name here is a pin nothing checks."""
+    assert sorted(set(PINNED) - set(SDK_LITERALS)) == NOT_YET_NAMED
 
 
 def test_the_snapshot_actually_covers_something() -> None:

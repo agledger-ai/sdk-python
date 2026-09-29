@@ -5,7 +5,7 @@ Mirrors the TypeScript SDK types. All models are Pydantic v2.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Literal, NotRequired, TypedDict, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -324,6 +324,13 @@ class RecordIntegrity(BaseModel):
     treating a clean ``verified`` as covering the field you care about."""
 
 
+RecordFederationStatus = Literal["pending", "delivered", "partial", "failed", "inbound"]
+"""``RecordRow.federation_status``: the delivery state of a Record's outbound
+federation (``pending``, ``delivered``, ``partial``, ``failed``), or
+``inbound`` on a Record received from a peer. Fields that carry it add
+``| str`` so a status a newer Server adds parses instead of raising."""
+
+
 class _RecordRowFields(BaseModel):
     """The fields :class:`RecordRow` and :class:`RecordRowCompact` share: all of
     them but ``next_steps``, whose entries the compact view trims."""
@@ -531,9 +538,9 @@ class _RecordRowFields(BaseModel):
         None, alias="settlementSignal"
     )
     """Settlement Signal projected onto the Record, or None until a terminal verdict produces one."""
-    federation_status: (
-        Literal["pending", "delivered", "partial", "failed", "inbound"] | str | None
-    ) = Field(None, alias="federationStatus")
+    federation_status: RecordFederationStatus | str | None = Field(
+        None, alias="federationStatus"
+    )
     """Federation delivery status for this Record's outbound state, ``inbound``
     on a Record received from a peer, or None when not federated. Open with
     ``| str`` so a status a newer Server adds parses instead of raising."""
@@ -550,6 +557,14 @@ class RecordRow(_RecordRowFields):
 
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after Record mutations."""
+
+
+RecordView = Literal["full", "compact"]
+"""The ``view`` a record read takes (``records.get()``, ``list()``,
+``list_all()`` and ``search()``). ``full`` (the default) is the whole Record;
+``compact`` leaves out every top-level field whose value is null and trims
+each ``nextSteps`` entry to ``action``, ``method`` and ``href``. The Server
+refuses any other value with a 400, so this is closed."""
 
 
 class RecordRowCompact(_RecordRowFields):
@@ -1450,6 +1465,287 @@ class OrgReadsCheckpointing(BaseModel):
     source: OrgReadsCheckpointingSource
     """``worker`` when read from the schedule the worker registered; ``config``
     when the API process fell back to its own defaults."""
+
+
+VaultScanState = (
+    Literal["created", "active", "completed", "failed", "cancelled", "retry"] | str
+)
+"""pg-boss job state of a vault integrity scan. ``completed``, ``cancelled``
+and ``failed`` are terminal; ``retry`` means an attempt failed and another is
+scheduled, so the scan is still unfinished. Open with ``| str`` because the
+queue owns this vocabulary and has changed it before: branch on ``completed``
+and ``failed`` and treat anything else as still running."""
+
+VaultScanBreakReason = (
+    Literal[
+        "chain_broken_at",
+        "payload_drift",
+        "oidc_actor_drift",
+        "cert_actor_drift",
+        "cert_window_drift",
+        "cert_expired",
+        "cert_missing",
+        "agent_signature_invalid",
+        "signature_invalid",
+        "signing_key_unknown",
+        "signature_missing",
+        "signing_key_unpublished",
+        "unsupported_algorithm",
+        "signing_key_drift",
+        "key_expired",
+        "key_not_yet_active",
+        "audit_vault_row_missing_for_checkpoint",
+        "checkpoint_hash_mismatch",
+        "checkpoint_signature_invalid",
+        "checkpoint_key_unknown",
+        "checkpoint_unsigned",
+        "checkpoint_claim_mismatch",
+        "schema_chain_missing_for_subjects",
+        "verification_error",
+    ]
+    | str
+)
+"""Why a record chain or a record-less chain broke in a vault scan. The
+meanings match :data:`AuditChainIntegrityReasonCode`;
+``schema_chain_missing_for_subjects`` is schema-chain only, and
+``verification_error`` is a walk that could not run. Open with ``| str`` so a
+code a newer Server adds still type-checks."""
+
+VaultScanFirstFindingReason = Literal[
+    "key_expired", "key_not_yet_active", "unsupported_algorithm"
+]
+"""The reason on a :class:`VaultScanFirstFinding`: a key-window or
+unsupported-algorithm entry, which does not withhold a checkpoint on its own."""
+
+OrgReadsBreakReason = (
+    Literal[
+        "leaf_index_gap",
+        "leaf_hash_mismatch",
+        "leaf_claim_mismatch",
+        "leaf_signature_invalid",
+        "leaf_key_unknown",
+        "leaf_signature_missing",
+        "checkpoint_leaf_count_mismatch",
+        "checkpoint_root_mismatch",
+        "checkpoint_claim_mismatch",
+        "checkpoint_signature_invalid",
+        "checkpoint_key_unknown",
+        "checkpoint_unsigned",
+        "verification_error",
+    ]
+    | str
+)
+"""Why the cross-party read log broke for one org. ``leaf_signature_missing``
+and ``checkpoint_unsigned`` are the read-log twins of the vault chain's
+``signature_missing`` and ``checkpoint_unsigned``. Open with ``| str`` so a
+code a newer Server adds still type-checks."""
+
+
+class VaultScanFirstFinding(TypedDict):
+    """An earlier finding in a chain the scan reports broken further on. The
+    ``reason`` and ``brokenAt`` beside it name the break that withholds the
+    chain's checkpoint; this names the first entry before it that was outside
+    its key's window or under an algorithm the Server cannot verify."""
+
+    brokenAt: int
+    reason: VaultScanFirstFindingReason
+
+
+class VaultScanBrokenRecord(TypedDict):
+    """A broken record chain from a vault scan."""
+
+    recordId: str
+    brokenAt: int
+    reason: VaultScanBreakReason
+    expectedEntries: NotRequired[int]
+    """Set when the reason is checkpoint-related: the chain length the latest
+    checkpoint anchors."""
+    firstFinding: NotRequired[VaultScanFirstFinding]
+    """An earlier key-window or unsupported-algorithm entry in the same chain,
+    when there was one."""
+
+
+class VaultScanBrokenChain(TypedDict):
+    """A broken record-less chain from a full vault scan: the single
+    platform-ops chain (``admin``) or one org's schema-registration chain
+    (``schema``)."""
+
+    chain: Literal["admin", "schema"]
+    orgId: str | None
+    """The org whose schema chain broke; None for the platform-ops chain and
+    platform-level schema events."""
+    brokenAt: int
+    reason: VaultScanBreakReason
+    firstFinding: NotRequired[VaultScanFirstFinding]
+    """An earlier key-window or unsupported-algorithm entry in the same chain,
+    when there was one."""
+
+
+class VaultScanGlobalChains(TypedDict):
+    """The record-less chains a full scan walks: the platform-ops chain and
+    each org's schema-registration chain. A tamper here folds into
+    ``VaultScanResult["healthy"]``. Absent on a ``record_ids``-scoped scan."""
+
+    total: int
+    """Record-less chains walked (buckets with at least one entry)."""
+    verified: int
+    broken: int
+    signatureErrors: int
+    """Subset of ``broken``, broken on per-entry signature verification."""
+    unsupportedAlgorithm: NotRequired[int]
+    """Chains holding an entry under an algorithm this Server cannot verify."""
+    brokenChains: list[VaultScanBrokenChain]
+    """Capped at 100 entries; ``brokenChainsTruncated`` means more broke."""
+    brokenChainsTruncated: bool
+
+
+class VaultScanBrokenOrg(TypedDict):
+    """One org whose cross-party read log broke in a vault scan."""
+
+    orgId: str
+    reason: OrgReadsBreakReason
+    at: int
+    """The leaf index or checkpoint tree size the finding localizes to."""
+
+
+class VaultScanOrgAdminReads(TypedDict, total=False):
+    """The cross-party read log walked whole on a full scan: each leaf against
+    its hash, signed claim and signature, and each checkpoint against the Merkle
+    root over the leaves it covers. A break here fails ``healthy``."""
+
+    orgs: int
+    """Orgs with at least one leaf or checkpoint."""
+    leaves: int
+    checkpoints: int
+    broken: int
+    """Orgs with at least one finding; one finding is reported per org, the
+    first met."""
+    unsupportedAlgorithm: int
+    """Orgs whose leaves this Server cannot verify. Not in ``broken``."""
+    brokenOrgs: list[VaultScanBrokenOrg]
+    """Capped at 100 entries."""
+    truncated: bool
+    """True when an org held more leaves than one walk reads; its checkpoints
+    past that point were not checked."""
+
+
+class VaultScanCheckpointing(TypedDict, total=False):
+    """Checkpoint sweep schedule at the time of a scan. Read it before treating
+    an absent checkpoint as a finding. The Server marks none of these required
+    on the scan envelope."""
+
+    cron: str
+    intervalMinutes: int | None
+    nextRunAt: str | None
+    source: OrgReadsCheckpointingSource
+    anchoringEnabled: bool
+
+
+class VaultScanResult(TypedDict):
+    """Scan findings, present once ``state == "completed"``."""
+
+    recordsScanned: int
+    verified: int
+    broken: int
+    signatureErrors: int
+    unsupportedAlgorithm: NotRequired[int]
+    """Record chains this Server cannot verify because the key's algorithm is
+    not available to it. Not in ``broken`` and not in ``healthy``; listed under
+    ``brokenRecords`` with reason ``unsupported_algorithm``."""
+    healthy: bool
+    """The single field to branch on: true iff nothing broke across record
+    chains, record-less chains, chain-less records and the read log. It does
+    not fold in ``unsupportedAlgorithm``."""
+    recordsMissingChain: int
+    missingChainRecords: list[str]
+    """Ids behind ``recordsMissingChain``, newest first, capped at 100."""
+    brokenRecords: list[VaultScanBrokenRecord]
+    """Capped at 100 entries; ``brokenRecordsTruncated`` means more broke."""
+    brokenRecordsTruncated: bool
+    globalChains: NotRequired[VaultScanGlobalChains]
+    """Present on a full scan; absent on a ``record_ids``-scoped scan."""
+    orgAdminReads: NotRequired[VaultScanOrgAdminReads | None]
+    """Present on a full scan; None or absent on a ``record_ids``-scoped scan."""
+    checkpointing: NotRequired[VaultScanCheckpointing]
+    scannedAt: str
+
+
+class VaultScanJob(TypedDict):
+    """Status of an asynchronous vault integrity scan job
+    (``admin.vault.scan.status()``). The wire dict itself, keyed by the
+    camelCase wire names."""
+
+    jobId: str
+    state: VaultScanState
+    startedAt: NotRequired[str | None]
+    completedAt: NotRequired[str | None]
+    result: NotRequired[VaultScanResult | None]
+    """None until ``state == "completed"``."""
+    nextSteps: NotRequired[list[dict[str, Any]]]
+
+
+TrustedIssuerAlg = Literal[
+    "RS256",
+    "RS384",
+    "RS512",
+    "PS256",
+    "PS384",
+    "PS512",
+    "ES256",
+    "ES384",
+    "ES512",
+    "EdDSA",
+]
+"""A JWT signature algorithm a trusted issuer row may be restricted to: the
+asymmetric set the Server accepts. Symmetric (``HS*``) and ``none`` are never
+accepted, and anything outside this set is a 400, so this is closed."""
+
+TrustedIssuerAppliesTo = Literal["agent", "principal", "admin", "any"]
+"""Who a trusted issuer's tokens may authenticate as."""
+
+
+class TrustedIssuer(TypedDict):
+    """A trusted OIDC issuer (``admin.trusted_issuers.get()``, ``create()`` and
+    ``update()``). The wire dict itself, keyed by the camelCase wire names.
+    Tokens this issuer mints can be exchanged for ephemeral signing certs at
+    ``POST /v1/auth/oidc/cert``."""
+
+    id: str
+    orgId: str | None
+    """Org the issuer is scoped to; None means platform-wide."""
+    issuerUrl: str
+    jwksUri: str
+    expectedAudience: str
+    expectedAzp: str | None
+    appliesTo: TrustedIssuerAppliesTo
+    claimMapping: dict[str, str]
+    allowedAlgs: list[TrustedIssuerAlg] | None
+    """The algorithms this row is restricted to; None accepts the whole default
+    set."""
+    maxCredentialTtlSeconds: int
+    autoProvisionAgents: bool
+    autoProvisionScopeProfile: AutoProvisionScopeProfile | None
+    autoProvisionMaxAgents: int
+    jtiSingleUse: bool
+    subjectAllowlist: list[str] | None
+    jwksLastFetchAt: str | None
+    """When the Server last fetched this issuer's JWKS, or None before the
+    first fetch."""
+    jwksLastFetchOutcome: Literal["ok", "jwks_fetch_failed", "jwks_fetch_blocked"] | str | None
+    """How the last JWKS fetch went, or None before the first fetch."""
+    jwksLastFetchError: str | None
+    """The last fetch's error, or None when it succeeded."""
+    jwksLastSuccessAt: str | None
+    """When a JWKS fetch last succeeded, or None if none has."""
+    label: str | None
+    enabled: bool
+    managedBy: Literal["provisioning"] | None
+    """``provisioning`` when sourced from static config; None when API-managed."""
+    createdBy: str | None
+    createdAt: str
+    updatedBy: str | None
+    updatedAt: str
+    nextSteps: NotRequired[list[dict[str, Any]]]
 
 
 class DriftWindow(BaseModel):
