@@ -10,6 +10,7 @@ Reconciled against the AGLedger API release candidate at `cea0f7d5` (reports 1.8
 
 ### Added
 
+- **`completions.list()` and `completions.list_all()` take `structural_validation`** (`"ACCEPTED"` or `"INVALID"`, the two values the listing filter accepts), sync and async, as the TypeScript SDK's `structuralValidation` does.
 - **`view="compact"` on `records.get()`, `records.list()`, `records.list_all()` and `records.search()`**, sync and async. The compact view leaves out every top-level field whose value is null and trims each `nextSteps` entry to `action`, `method` and `href`, on the rows and on the list envelope. It returns the new `RecordRowCompact` (single read) or `RecordRowCompactPage` (list and search), whose steps are `NextStepCompact`; overloads give each view its own static type, and `list_all(view="compact")` yields `RecordRowCompact` rows. `records.list()` also takes `offset`. `RecordView` (`full`, `compact`) moves to `agledger.types` and is exported from the package root; `agledger.resources.records` still re-exports it.
 - **`APIError.reason`, `current_state`, `allowed_actions` and `existing_id`**, forwarded from the error body. `existing_id` names the row a 409 `TRUSTED_ISSUER_EXISTS` collided with; the cert exchange names its 422 `scope_claim_admin_only` precondition in `current_state`.
 - **`ComplianceExport.format`**: the format an export was created in, which `download_url` serves.

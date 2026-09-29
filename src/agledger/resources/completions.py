@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import Any, Literal
 
 from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.types import Completion, Page
+
+# The listing filter is a strict enum server-side: `WARNING` is a value a
+# completion can carry but not one the filter accepts.
+CompletionValidationFilter = Literal["ACCEPTED", "INVALID"]
 
 
 class CompletionsResource:
@@ -46,20 +50,35 @@ class CompletionsResource:
     def get(self, record_id: str, completion_id: str) -> Completion:
         return Completion.model_validate(self._http.get(f"/v1/records/{record_id}/completions/{completion_id}"))
 
-    def list(self, record_id: str, *, limit: int | None = None, cursor: str | None = None) -> Page[Completion]:
+    def list(
+        self,
+        record_id: str,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+        structural_validation: CompletionValidationFilter | None = None,
+    ) -> Page[Completion]:
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
+        if structural_validation is not None: params["structuralValidation"] = structural_validation
         raw = self._http.get_page(f"/v1/records/{record_id}/completions", params=params)
         raw["data"] = [Completion.model_validate(r) for r in raw.get("data", [])]
         return Page[Completion].model_validate(raw)
 
-    def list_all(self, record_id: str, *, max_pages: int | None = None) -> Iterator[Completion]:
+    def list_all(
+        self,
+        record_id: str,
+        *,
+        structural_validation: CompletionValidationFilter | None = None,
+        max_pages: int | None = None,
+    ) -> Iterator[Completion]:
         """Auto-paginate through every Completion on a Record.
 
         Raises :class:`PaginationLimitError` if the walk hits the runaway guard
         rather than returning a prefix; pass ``max_pages`` to bound it yourself."""
-        for item in self._http.paginate(f"/v1/records/{record_id}/completions", max_pages=max_pages):
+        params = {"structuralValidation": structural_validation} if structural_validation is not None else None
+        for item in self._http.paginate(f"/v1/records/{record_id}/completions", params=params, max_pages=max_pages):
             yield Completion.model_validate(item)
 
 
@@ -95,14 +114,29 @@ class AsyncCompletionsResource:
     async def get(self, record_id: str, completion_id: str) -> Completion:
         return Completion.model_validate(await self._http.get(f"/v1/records/{record_id}/completions/{completion_id}"))
 
-    async def list(self, record_id: str, *, limit: int | None = None, cursor: str | None = None) -> Page[Completion]:
+    async def list(
+        self,
+        record_id: str,
+        *,
+        limit: int | None = None,
+        cursor: str | None = None,
+        structural_validation: CompletionValidationFilter | None = None,
+    ) -> Page[Completion]:
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
+        if structural_validation is not None: params["structuralValidation"] = structural_validation
         raw = await self._http.get_page(f"/v1/records/{record_id}/completions", params=params)
         raw["data"] = [Completion.model_validate(r) for r in raw.get("data", [])]
         return Page[Completion].model_validate(raw)
 
-    async def list_all(self, record_id: str, *, max_pages: int | None = None) -> AsyncIterator[Completion]:
-        async for item in self._http.paginate(f"/v1/records/{record_id}/completions", max_pages=max_pages):
+    async def list_all(
+        self,
+        record_id: str,
+        *,
+        structural_validation: CompletionValidationFilter | None = None,
+        max_pages: int | None = None,
+    ) -> AsyncIterator[Completion]:
+        params = {"structuralValidation": structural_validation} if structural_validation is not None else None
+        async for item in self._http.paginate(f"/v1/records/{record_id}/completions", params=params, max_pages=max_pages):
             yield Completion.model_validate(item)
