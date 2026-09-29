@@ -62,17 +62,21 @@ FailureCode = Literal[
     "CHAIN_SIGNING_KEY_DRIFT",
     "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
     "CHAIN_AGENT_SIGNATURE_INVALID",
+    "CHAIN_ENTRY_UNSIGNED",
     # --- vault checkpoints ---
     "CHECKPOINT_ROW_MISSING",
     "CHECKPOINT_HASH_MISMATCH",
     "CHECKPOINT_SIGNATURE_INVALID",
+    "CHECKPOINT_UNSIGNED",
     # --- org_admin_reads Merkle log + STH ---
     "TENANT_READ_LEAF_HASH_MISMATCH",
     "TENANT_READ_LEAF_INDEX_GAP",
     "TENANT_READ_SIGNATURE_INVALID",
+    "TENANT_READ_LEAF_UNSIGNED",
     "TENANT_CHECKPOINT_LEAF_COUNT_MISMATCH",
     "TENANT_CHECKPOINT_ROOT_MISMATCH",
     "TENANT_CHECKPOINT_SIGNATURE_INVALID",
+    "TENANT_CHECKPOINT_UNSIGNED",
     "TENANT_CHECKPOINT_FORK",
 ]
 
@@ -190,6 +194,15 @@ _SUGGESTIONS: dict[str, str] = {
         "mistake: treat the agent attribution of this entry as unproven and escalate to the "
         "operator."
     ),
+    "CHAIN_ENTRY_UNSIGNED": (
+        "The entry carries no signing key id where the install could not have written an "
+        "unsigned entry: after a signed entry in the same chain, or at or after the earliest "
+        "activation time in the signing key set (retired keys included). From that instant "
+        "every writer holds a registered key, so this is what a writer without one leaves on "
+        "the chain, or a signed row whose key id was nulled. Treat the entry as forged and "
+        "escalate to the operator. Unsigned entries from before the first key activation stay "
+        "reduced signature coverage, not a break."
+    ),
     "CHECKPOINT_ROW_MISSING": (
         "A signed checkpoint anchors a position that has no matching chain row. The chain was "
         "truncated below a checkpoint (out-of-band DELETE/TRUNCATE). The checkpoint is proof "
@@ -203,6 +216,12 @@ _SUGGESTIONS: dict[str, str] = {
         "A checkpoint's COSE_Sign1 signature did not verify. The checkpoint was forged or "
         "altered. Re-run with out-of-band verification keys."
     ),
+    "CHECKPOINT_UNSIGNED": (
+        "A checkpoint carries no signing key id but was written at or after the earliest "
+        "activation time in the signing key set (retired keys included), when every writer "
+        "holds a registered key. The checkpoint was forged or its key id nulled, and nothing "
+        "it anchors can be trusted. Escalate to the operator."
+    ),
     "TENANT_READ_LEAF_HASH_MISMATCH": (
         "An org_admin_reads leaf hash does not match sha256(cose_sign1). The read-log leaf "
         "was altered after recording."
@@ -215,6 +234,12 @@ _SUGGESTIONS: dict[str, str] = {
         "An org_admin_reads leaf's COSE_Sign1 signature did not verify. The read-log leaf "
         "was forged or altered."
     ),
+    "TENANT_READ_LEAF_UNSIGNED": (
+        "An org_admin_reads leaf carries the unsigned key id where the install could not have "
+        "written an unsigned leaf: after a signed leaf in the same org's log, or at or after "
+        "the earliest activation time in the signing key set (retired keys included). The "
+        "read-log leaf was forged or its signature stripped. Escalate to the operator."
+    ),
     "TENANT_CHECKPOINT_LEAF_COUNT_MISMATCH": (
         "A signed tree head commits to more leaves than the dump contains. The read log was "
         "truncated below a checkpoint."
@@ -225,6 +250,12 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "TENANT_CHECKPOINT_SIGNATURE_INVALID": (
         "A signed-tree-head COSE_Sign1 signature did not verify. The STH was forged or altered."
+    ),
+    "TENANT_CHECKPOINT_UNSIGNED": (
+        "A signed tree head of the org_admin_reads log carries no signing key id but was "
+        "written at or after the earliest activation time in the signing key set (retired "
+        "keys included), when every writer holds a registered key. The tree head was forged "
+        "or its key id nulled. Escalate to the operator."
     ),
     "TENANT_CHECKPOINT_FORK": (
         "Two signed tree heads at the same tree_size carry different roots. This is an engine "

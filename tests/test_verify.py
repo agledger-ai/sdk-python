@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 import cbor2
@@ -304,13 +306,28 @@ def test_empty_string_signing_key_id_is_not_the_unsigned_marker() -> None:
     assert result.signature_coverage.skipped == 0
 
 
-def test_unsigned_entry_keeps_chain_integrity() -> None:
+def test_an_all_unsigned_chain_with_no_key_windows_keeps_chain_integrity() -> None:
+    # No entry names a key and no key carries an activation time, so the
+    # install is read as one that has not begun to sign: reduced coverage.
+    pub, priv = _make_keypair()
+    exp = _make_export(pub, priv)
+    for e in exp["entries"]:
+        e["integrity"]["signingKeyId"] = None
+    result = verify_export(exp)
+    assert result.valid is True
+    assert result.signature_coverage.skipped == 3
+
+
+def test_an_unsigned_entry_after_a_signed_one_breaks_the_chain() -> None:
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
     exp["entries"][1]["integrity"]["signingKeyId"] = None
     result = verify_export(exp)
-    assert result.valid is True
-    assert result.signature_coverage.skipped == 1
+    assert result.valid is False
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_ENTRY_UNSIGNED"
+    assert result.broken_at.position == 2
+    assert result.signature_coverage.skipped == 0
 
 
 def test_require_key_id_policy_violation() -> None:
@@ -354,28 +371,40 @@ def test_public_keys_can_be_supplied_at_call_time() -> None:
 
 
 def test_null_key_entry_fails_closed_under_key_policy() -> None:
-    # A null-signingKeyId entry is a legitimate hash-chain-only row WITHOUT a
-    # key policy, but a high-assurance run must reject it (parity with TS).
-    pub, priv = _make_keypair()
-    exp = _make_export(pub, priv)
-    exp["entries"][1]["integrity"]["signingKeyId"] = None
+    # A null-signingKeyId entry written before the install began signing is a
+    # legitimate hash-chain-only row WITHOUT a key policy, but a high-assurance
+    # run must reject it (parity with TS). Built on the corpus's own unsigned
+    # export, whose entries were written before any key was registered.
+    corpus = Path(__file__).resolve().parent.parent / "testdata" / "conformance" / "export"
+    unsigned = json.loads((corpus / "unsigned.json").read_text())
+    valid = json.loads((corpus / "valid.json").read_text())
+    oob = json.loads((corpus / "keys-oob.json").read_text())
+    key_id = valid["entries"][0]["integrity"]["signingKeyId"]
 
-    no_policy = verify_export(exp, public_keys={"vault-key-1": pub})
+    no_policy = verify_export(unsigned)
     assert no_policy.valid is True
-    assert no_policy.signature_coverage.skipped == 1
+    assert no_policy.signature_coverage.skipped == 3
 
-    require_id = verify_export(exp, public_keys={"vault-key-1": pub}, require_key_id="vault-key-1")
+    require_id = verify_export(unsigned, require_key_id=key_id)
     assert require_id.valid is False
     assert require_id.broken_at is not None
     assert require_id.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
-    assert require_id.broken_at.position == 2
+    assert require_id.broken_at.position == 1
 
-    require_oob = verify_export(
-        exp, public_keys={"vault-key-1": pub}, require_out_of_band_keys=True
-    )
+    require_oob = verify_export(unsigned, public_keys=oob, require_out_of_band_keys=True)
     assert require_oob.valid is False
     assert require_oob.broken_at is not None
     assert require_oob.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
+    assert require_oob.broken_at.position == 1
+
+    # An unsigned entry after a signed one is evidence about the chain itself,
+    # so the run reports it under its own code whatever policy it applies.
+    valid["entries"][1]["integrity"]["signingKeyId"] = None
+    ahead = verify_export(valid, require_key_id=key_id)
+    assert ahead.valid is False
+    assert ahead.broken_at is not None
+    assert ahead.broken_at.code == "CHAIN_ENTRY_UNSIGNED"
+    assert ahead.broken_at.position == 2
 
 
 # Regression: public_keys polymorphic acceptance + TypeError on bad shape.

@@ -16,6 +16,10 @@ Verification walks every entry and asserts:
        visible columns disagree about chain identity
     6. COSE_Sign1 signature verifies against the signingPublicKey for the
        entry's signingKeyId
+    7. An entry with no signingKeyId is reduced coverage only before the
+       install began signing: after an entry in the same chain that names a
+       key, or written at or after the earliest activatedAt across the key set
+       (retired keys included), it is CHAIN_ENTRY_UNSIGNED
 
 This is the export (per-record) path. Beside the always-run checks above, it
 runs the input-gated checks whenever the export carries their inputs (engine
@@ -39,9 +43,9 @@ import binascii
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel
@@ -91,8 +95,11 @@ except ImportError as _err:  # pragma: no cover
 
 # Mirrors ``@agledger/verify-core``'s ``SignatureOutcome``:
 #   ok / invalid / decode-fail : the signature was checked
-#   unsigned                   : no signature by design
-#   skipped                    : chain intact, entry has no signing key (engine booted keyless)
+#   unsigned                   : kept for parity; an entry that names a key and
+#                                carries an all-zero signature now fails
+#                                CHAIN_SIGNATURE_INVALID instead
+#   skipped                    : chain intact, entry has no signing key and was
+#                                written before the install began signing
 #   not-checked                : a structural check failed first, so the signature was never reached
 # unsupported: the trusted key commits to an algorithm this build cannot
 # compute (CHAIN_UNSUPPORTED_ALGORITHM); a failure state, never a benign skip.
@@ -327,6 +334,7 @@ def verify_export(
     verified = 0
     broken_at: BrokenAt | None = None
     prev_payload_hash: str | None = None
+    signed_before = False
 
     for i, entry in enumerate(sorted_entries):
         result = verify_entry(
@@ -337,7 +345,12 @@ def verify_export(
             require_key_id,
             require_out_of_band_keys,
             applied,
+            signed_before=signed_before,
         )
+        # As the engine's walk does: any earlier row naming a key, whatever its
+        # own verdict, means this chain was already being signed.
+        if as_mapping(entry.get("integrity")).get("signingKeyId") is not None:
+            signed_before = True
         if result.valid:
             result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
         entry_results.append(result)
@@ -548,26 +561,75 @@ def _describe_runtime_refusal(key_id: str, key_alg: KeyAlgorithm) -> str:
     )
 
 
+@dataclass(frozen=True)
+class _OobKey:
+    """One caller-supplied key, with the activation window it brought, if any."""
+
+    spki_base64: str
+    activated_at: str | None = None
+    retired_at: str | None = None
+    #: The caller supplied a window for this key (an ``activatedAt`` string, or
+    #: a ``retiredAt`` that is a string or an explicit null). Such a window
+    #: outranks the export's ``signingKeyWindows`` entry for the key.
+    carries_window: bool = False
+
+
+def _oob_window(item: object) -> tuple[str | None, str | None, bool]:
+    """The ``(activated_at, retired_at, carries_window)`` a caller-supplied key
+    entry brings, read the way verify-core reads ``activatedAt`` /
+    ``retiredAt`` off an out-of-band key: an activation counts only as a
+    string, a retirement as a string or an explicit null."""
+    activated: object
+    retired: object
+    retired_given: bool
+    if isinstance(item, Mapping):
+        m = cast("Mapping[str, Any]", item)
+        activated = m["activatedAt"] if "activatedAt" in m else m.get("activated_at")
+        retired_given = "retiredAt" in m or "retired_at" in m
+        retired = m["retiredAt"] if "retiredAt" in m else m.get("retired_at")
+    else:
+        activated = getattr(item, "activatedAt", None)
+        if activated is None:
+            activated = getattr(item, "activated_at", None)
+        retired = getattr(item, "retiredAt", None)
+        if retired is None:
+            retired = getattr(item, "retired_at", None)
+        # A pydantic model (VerificationKey) says which fields the wire carried.
+        fields_set: object = getattr(item, "model_fields_set", None)
+        if isinstance(fields_set, (set, frozenset)):
+            names = cast("set[str]", fields_set)
+            retired_given = "retired_at" in names or "retiredAt" in names
+        else:
+            retired_given = retired is not None
+    activated_at = activated if isinstance(activated, str) else None
+    retired_ok = retired is None or isinstance(retired, str)
+    retired_at = retired if isinstance(retired, str) else None
+    carries = activated_at is not None or (retired_given and retired_ok)
+    return activated_at, retired_at, carries
+
+
 def _normalize_oob_keys(
     public_keys: Mapping[str, Any] | Sequence[Any] | None,
-) -> dict[str, str] | None:
-    """Normalize ``public_keys`` into a ``{keyId: spki_b64}`` dict, or raise
-    ``TypeError`` at the boundary if the shape is wrong.
+) -> dict[str, _OobKey] | None:
+    """Normalize ``public_keys`` into ``{keyId: key}``, or raise ``TypeError``
+    at the boundary if the shape is wrong.
 
     Fail-closed by design: an OOB-key argument that silently falls back to
     embedded keys would lie about the audit-independence claim.
 
     Accepts:
-      - ``Mapping[str, str]``: compact ``{keyId: base64SpkiDer}`` form
+      - ``Mapping[str, str]``: compact ``{keyId: base64SpkiDer}`` form, which
+        carries no activation window
       - ``Sequence`` of ``{keyId, publicKey}`` entries (the ``.data`` list from
         ``client.verification_keys.list()``, ``VerificationKey`` pydantic models,
-        or raw dicts of that shape)
+        or raw dicts of that shape). An entry's ``activatedAt`` / ``retiredAt``
+        ride along as that key's window.
     """
     if public_keys is None:
         return None
 
     if isinstance(public_keys, Mapping):
-        out: dict[str, str] = {}
+        out: dict[str, _OobKey] = {}
         for k, v in public_keys.items():
             if not isinstance(v, str):
                 raise TypeError(
@@ -576,7 +638,7 @@ def _normalize_oob_keys(
                     f"client.verification_keys.list(), pass it as the list: not "
                     f"a dict built from it."
                 )
-            out[str(k)] = v
+            out[str(k)] = _OobKey(spki_base64=v)
         return out
 
     if isinstance(public_keys, (str, bytes, bytearray)):
@@ -627,13 +689,19 @@ def _normalize_oob_keys(
                 f"Empty fields are a structural error; fix the upstream "
                 f"serializer rather than pass the empty value through."
             )
-        out[key_id] = material
+        activated_at, retired_at, carries = _oob_window(cast(object, item))
+        out[key_id] = _OobKey(
+            spki_base64=material,
+            activated_at=activated_at,
+            retired_at=retired_at,
+            carries_window=carries,
+        )
     return out
 
 
 def _build_key_registry(
     meta: Mapping[str, Any],
-    overrides: Mapping[str, str] | None,
+    overrides: Mapping[str, _OobKey] | None,
 ) -> KeyCache:
     """Build the keyId → key registry, tagging each key's provenance.
 
@@ -645,25 +713,49 @@ def _build_key_registry(
     if isinstance(embedded, Mapping):
         for k, v in cast("Mapping[Any, Any]", embedded).items():
             keys[str(k)] = RegisteredKey(spki_base64=str(v), source="embedded")
+    caller_windowed: set[str] = set()
     if overrides:
-        for k, v in overrides.items():
-            keys[str(k)] = RegisteredKey(spki_base64=str(v), source="out-of-band")
+        for k, oob in overrides.items():
+            keys[str(k)] = RegisteredKey(
+                spki_base64=oob.spki_base64,
+                source="out-of-band",
+                activated_at=oob.activated_at,
+                retired_at=oob.retired_at,
+            )
+            if oob.carries_window:
+                caller_windowed.add(str(k))
     # Activation/retirement windows from exportMetadata (engine >= v0.26.x)
-    # enable the temporal key-validity check on the export path. Out-of-band
-    # keys here carry no window of their own, so they take the export's, as
-    # verify-core does for an out-of-band key without one. Older exports omit
-    # the map and the check stays skipped_no_input.
+    # enable the temporal key-validity check on the export path. An
+    # out-of-band key that brought its own window keeps it: the export is the
+    # untrusted side, and letting it overwrite the caller's window would let a
+    # compromised export hide a retirement. An out-of-band key without one
+    # takes the export's, as verify-core does. Older exports omit the map and
+    # the check stays skipped_no_input.
     windows = meta.get("signingKeyWindows")
+    window_only: list[Mapping[str, Any]] = []
     if isinstance(windows, Mapping):
         for k, w in cast("Mapping[Any, Any]", windows).items():
-            key = keys.get(str(k))
-            if key is None or not isinstance(w, Mapping):
+            if not isinstance(w, Mapping):
                 continue
             window = cast("Mapping[str, Any]", w)
+            key = keys.get(str(k))
+            if key is None:
+                window_only.append(window)
+                continue
+            if str(k) in caller_windowed:
+                continue
             activated, retired = window.get("activatedAt"), window.get("retiredAt")
             key.activated_at = activated if isinstance(activated, str) else None
             key.retired_at = retired if isinstance(retired, str) else None
-    return KeyCache(keys)
+    # When the install began signing, for CHAIN_ENTRY_UNSIGNED. The engine reads
+    # it as min(activated_at) over its whole key registry, retired keys
+    # included, and ``signingKeyWindows`` publishes that whole registry, so the
+    # instant is taken over every key held here plus every window the export
+    # lists for a key it carries no public key for.
+    signing_since = earliest_key_activation(
+        [*({"activatedAt": key.activated_at} for key in keys.values()), *window_only]
+    )
+    return KeyCache(keys, signing_since=signing_since)
 
 
 def _with_export_oidc_actor(entry: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -691,9 +783,27 @@ class KeyCache:
     out-of-band) for the result tally and the ``require_out_of_band_keys`` policy.
     """
 
-    def __init__(self, registry: Mapping[str, RegisteredKey]) -> None:
+    def __init__(
+        self,
+        registry: Mapping[str, RegisteredKey],
+        *,
+        signing_since: str | None = None,
+    ) -> None:
         self._registry = dict(registry)
         self._cache: dict[str, _Ed25519PublicKey | _EllipticCurvePublicKey] = {}
+        #: When the install began signing: the earliest ``activated_at`` across
+        #: its whole signing key set, retired keys included, as the ISO string
+        #: it was given in. An entry or checkpoint with no signing key id
+        #: written at or after it is a break. ``None`` when no key carries a
+        #: usable activation time, so only the signed-before half of the
+        #: unsigned-entry rule applies.
+        if signing_since is not None and _instant_ms(signing_since) is None:
+            # Refused rather than read as "no activation time", which would
+            # silently switch the time half of the rule off.
+            raise TypeError(
+                f"signing_since must be an ISO-8601 time or None (got {signing_since!r})."
+            )
+        self.signing_since: str | None = signing_since
 
     def entry(self, key_id: str) -> RegisteredKey | None:
         """Registry membership: the raw registered key, or ``None`` if absent
@@ -740,11 +850,17 @@ def verify_entry(
     require_key_id: str | None,
     require_out_of_band_keys: bool,
     applied_checks: set[str] | None = None,
+    *,
+    signed_before: bool = False,
 ) -> EntryVerificationResult:
     """Verify one chain entry. ``applied_checks``, when given, collects the
     input-gated checks that ran on it (``payload_binding``, ``oidc_actor``,
     ``key_temporal``), so a caller can report "not checked" apart from
-    "passed"."""
+    "passed".
+
+    ``signed_before`` says an earlier entry in the same chain names a signing
+    key; with ``keys.signing_since`` it decides whether an entry with no
+    signing key id is reduced coverage or CHAIN_ENTRY_UNSIGNED."""
     position = _entry_position(entry)
     integrity = as_mapping(entry.get("integrity"))
 
@@ -925,6 +1041,32 @@ def verify_entry(
     # and fails CHAIN_SIGNATURE_MISSING_KEY below: a truthiness shortcut here
     # would let a tampered signingKeyId:"" row skip its signature check.
     if signing_key_id is None:
+        # Engine mirror of `signature_missing`. An unsigned entry is reduced
+        # coverage only where the install had not yet begun to sign: before any
+        # signed entry in this chain, and before the earliest key activation.
+        # Anywhere else no process of the install could have written it; it is
+        # what a writer holding no key leaves on the tip, or a signed row whose
+        # key id was nulled. Checked ahead of the caller's key policy because
+        # it is evidence about the chain itself, whatever policy the run
+        # applies.
+        if signed_before:
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_ENTRY_UNSIGNED",
+                detail="Entry has no signingKeyId but follows a signed entry in the same chain.",
+            )
+        created = entry.get("createdAt")
+        if isinstance(created, str) and written_while_signing(created, keys.signing_since):
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_ENTRY_UNSIGNED",
+                detail=(
+                    f"Entry has no signingKeyId but was written {created}, at or after "
+                    f"the earliest signing key activation {keys.signing_since}."
+                ),
+            )
         # Fail closed under a key policy: a high-assurance run that requires a
         # specific key (or out-of-band keys) must NOT accept an unsigned/null-key
         # entry as valid; otherwise an attacker forges an entry, nulls its
@@ -1034,21 +1176,18 @@ def verify_entry(
 
     outcome = _verify_cose_signature(parts, registered, keys, signing_key_id)
     if outcome == "unsigned":
-        # An all-zero signature slot on an entry that CLAIMS a signing key.
-        # Under a key policy this must fail: an auditor who demanded signed
-        # entries must never count a zeroed signature as green.
-        if require_key_id or require_out_of_band_keys:
-            return EntryVerificationResult(
-                position=position,
-                valid=False,
-                code="CHAIN_KEY_POLICY_VIOLATION",
-                detail=(
-                    f"Entry claims signingKeyId={signing_key_id} but carries an "
-                    f"all-zero signature; this run requires signed entries "
-                    f"(require_key_id / require_out_of_band_keys)."
-                ),
-            )
-        return EntryVerificationResult(position=position, valid=True, signature="unsigned")
+        # An all-zero signature slot on an entry that CLAIMS a signing key. The
+        # engine writes a key id only beside a signature it made with that key,
+        # and fails this shape `signature_invalid`, so it is a forged or wiped
+        # signature, never an unsigned entry. (A genuinely unsigned entry
+        # carries a null signingKeyId and is graded above.)
+        return EntryVerificationResult(
+            position=position,
+            valid=False,
+            code="CHAIN_SIGNATURE_INVALID",
+            detail=f"Entry claims signingKeyId={signing_key_id} but carries an all-zero signature.",
+            signature="invalid",
+        )
     if outcome == "ok":
         return EntryVerificationResult(
             position=position, valid=True, signature="ok", key_source=key_source
@@ -1628,6 +1767,15 @@ def _extract_header_alg(protected_bstr: bytes) -> int | None:
     return alg
 
 
+def decode_cose_kid(envelope: bytes) -> str | None:
+    """The signature-covered ``kid`` of a tagged COSE_Sign1 envelope, as
+    lowercase hex, or ``None`` when the envelope or its protected header does
+    not decode. The org_admin_reads pass reads it to tell an unsigned leaf
+    (the all-zero sentinel kid) from a signed one."""
+    parts = _decode_cose_sign1(envelope)
+    return _extract_kid(parts[0]) if parts is not None else None
+
+
 def _extract_kid(protected_bstr: bytes) -> str | None:
     """Extract the signature-covered ``kid`` (protected header label 4) as
     lowercase hex, matching the engine's ``vault_signing_keys.key_id`` shape.
@@ -1781,16 +1929,60 @@ def verify_cose_sign1(envelope: bytes, key: RegisteredKey) -> CoseVerifyOutcome:
 # --- temporal key-validity (mirror verify-core chain.ts temporalKeyFailure) ---
 
 
-def _parse_instant(value: str) -> datetime | None:
-    """Parse an ISO-8601 timestamp to a comparable instant, normalising a
-    trailing ``Z`` to ``+00:00``. ``fromisoformat`` handles ``Z`` natively from
-    3.11 on, so the replace is now belt-and-braces rather than required. Returns
-    ``None`` on any parse failure: the caller reads that as "skip" (fail-open),
-    matching the TS ``Number.isNaN(Date.parse(...))`` no-op."""
-    try:
-        return datetime.fromisoformat(value)
-    except (ValueError, AttributeError):
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _instant_ms(value: object) -> int | None:
+    """An ISO-8601 time as integer milliseconds since the epoch, the
+    resolution ``Date.parse`` gives the TS verifier, so the two agree on every
+    boundary. A time without an offset (including a bare date) is read as
+    UTC. ``None`` for anything that does not parse: the caller reads that as
+    "cannot place this row", never as a failure."""
+    if not isinstance(value, str) or not value:
         return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (parsed - _EPOCH) // timedelta(milliseconds=1)
+
+
+def earliest_key_activation(keys: Iterable[Mapping[str, Any]]) -> str | None:
+    """The earliest ``activatedAt`` (or ``activated_at``) among ``keys``, as
+    the ISO string it was given in, or ``None`` when no key carries a
+    parseable one.
+
+    This is the instant from which the engine treats every chain entry and
+    checkpoint as required to be signed; pass every key the verifier knows,
+    retired ones included, since the engine reads it as ``min(activated_at)``
+    over its whole key registry. Mirrors verify-core ``earliestKeyActivation``.
+    """
+    earliest: tuple[int, str] | None = None
+    for key in keys:
+        raw = key["activatedAt"] if "activatedAt" in key else key.get("activated_at")
+        at = _instant_ms(raw)
+        if at is None or not isinstance(raw, str):
+            continue
+        if earliest is None or at < earliest[0]:
+            earliest = (at, raw)
+    return earliest[1] if earliest is not None else None
+
+
+def written_while_signing(written_at: object, signing_since: object) -> bool:
+    """Whether a row with no signing key id, written at ``written_at``, falls
+    inside the era in which the install signs everything: at or after
+    ``signing_since`` (see :func:`earliest_key_activation`). The rule for an
+    unsigned checkpoint or read-log row, and the time half of the rule for an
+    unsigned chain entry. ``False`` when either time is absent or unparseable:
+    without both the verifier cannot place the row, and it stays what it was
+    before the rule existed. Mirrors verify-core ``writtenWhileSigning``."""
+    written = _instant_ms(written_at)
+    since = _instant_ms(signing_since)
+    if written is None or since is None:
+        return False
+    return written >= since
 
 
 def _temporal_key_failure(
@@ -1808,18 +2000,18 @@ def _temporal_key_failure(
     for a key that had not started yet sent consumers to investigate rotation
     when the real condition is a backdated entry or clock skew.
     """
-    written = _parse_instant(created_at)
+    written = _instant_ms(created_at)
     if written is None:
         return None
     if activated_at:
-        activated = _parse_instant(activated_at)
+        activated = _instant_ms(activated_at)
         if activated is not None and written < activated:
             return (
                 "CHAIN_KEY_NOT_YET_ACTIVE",
                 f"Entry written {created_at} predates key {key_id} activation {activated_at}.",
             )
     if retired_at:
-        retired = _parse_instant(retired_at)
+        retired = _instant_ms(retired_at)
         if retired is not None and written > retired:
             return (
                 "CHAIN_KEY_EXPIRED",

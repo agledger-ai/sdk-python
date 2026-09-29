@@ -49,11 +49,18 @@ from agledger.verify.verify_export import (
     as_mapping,
     build_agent_key_registry,
     check_agent_signature,
+    decode_cose_kid,
+    earliest_key_activation,
     merkle_root,
     optional_checks_report,
     verify_cose_sign1,
     verify_entry,
+    written_while_signing,
 )
+
+#: The kid an unsigned org_admin_reads leaf carries in its protected header:
+#: eight zero bytes, the engine's ``UNSIGNED_KID_SENTINEL``.
+UNSIGNED_KID_SENTINEL = "0000000000000000"
 
 
 def _as_int(value: Any) -> int | None:
@@ -107,7 +114,9 @@ def _build_vault_key_registry(signing_keys: list[DumpRow]) -> KeyCache:
             # it against the key material (CHAIN_ALG_MISMATCH on a lie).
             algorithm=str(algorithm) if isinstance(algorithm, str) else None,
         )
-    return KeyCache(registry)
+    # The dump carries the whole key registry, retired keys included, so the
+    # instant the install began signing is its earliest activation.
+    return KeyCache(registry, signing_since=earliest_key_activation(signing_keys))
 
 
 def _chain_key(e: DumpRow) -> str:
@@ -207,10 +216,17 @@ def _collect_chain_failures(
     """Walk one chain group via the shared per-entry body and flatten any invalid
     entry into a Failure. The dump passes NO key-policy options (all dump keys
     are embedded). previousHash advances even on a failed entry, matching the
-    export walk and verify-core."""
+    export walk and verify-core. An entry with no signing key id after one that
+    names a key, or written at or after ``keys.signing_since``, fails
+    CHAIN_ENTRY_UNSIGNED."""
     prev_payload_hash: str | None = None
+    signed_before = False
     for i, entry in enumerate(normalized):
-        result = verify_entry(entry, i + 1, prev_payload_hash, keys, None, False, applied)
+        result = verify_entry(
+            entry, i + 1, prev_payload_hash, keys, None, False, applied, signed_before=signed_before
+        )
+        if as_mapping(entry.get("integrity")).get("signingKeyId") is not None:
+            signed_before = True
         if result.valid and agent_counts is not None and agent_check is not None:
             result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
         if not result.valid and result.code is not None:
@@ -269,6 +285,22 @@ def _verify_vault_checkpoints(
             continue
 
         signing_key_id = cp.get("signing_key_id")
+        # An unsigned checkpoint is legitimate only from before the install
+        # began signing (engine mirror: checkpoint_unsigned).
+        if signing_key_id is None and written_while_signing(cp.get("created_at"), keys.signing_since):
+            failures.append(
+                Failure(
+                    code="CHECKPOINT_UNSIGNED",
+                    message=(
+                        f"{label} pos {position}: checkpoint has no signing_key_id but was "
+                        f"written {cp.get('created_at')}, at or after the earliest signing "
+                        f"key activation {keys.signing_since}"
+                    ),
+                    scope_id=chain_key,
+                    position=_as_int(position),
+                )
+            )
+            continue
         sig = _checkpoint_signature_outcome(cp.get("cose_sign1"), signing_key_id, keys)
         if sig == "missing-key":
             failures.append(
@@ -426,6 +458,7 @@ def _verify_one_org_admin_reads_log(
     failures: list[Failure],
 ) -> None:
     leaves.sort(key=lambda r: r.get("leaf_index", 0))
+    signed_before = False
 
     for i, leaf in enumerate(leaves):
         if leaf.get("leaf_index") != i:
@@ -457,6 +490,36 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return  # a tampered leaf stops the whole org
+        # A leaf the install wrote without a key carries the all-zero sentinel
+        # kid. Legitimate only before the org's log saw a signed leaf and
+        # before the install began signing (engine mirror:
+        # leaf_signature_missing).
+        kid = decode_cose_kid(envelope)
+        if kid == UNSIGNED_KID_SENTINEL:
+            read_at = leaf.get("read_at")
+            if signed_before or written_while_signing(read_at, keys.signing_since):
+                reason = (
+                    "follows a signed leaf in the same org's log"
+                    if signed_before
+                    else (
+                        f"was read {read_at}, at or after the earliest signing key "
+                        f"activation {keys.signing_since}"
+                    )
+                )
+                failures.append(
+                    Failure(
+                        code="TENANT_READ_LEAF_UNSIGNED",
+                        message=(
+                            f"Org {org_id} leaf {leaf.get('leaf_index')}: leaf is unsigned but "
+                            f"{reason}"
+                        ),
+                        scope_id=org_id,
+                        leaf_index=_as_int(leaf.get("leaf_index")),
+                    )
+                )
+                return  # an unsigned leaf where one cannot be stops the whole org
+        elif kid is not None:
+            signed_before = True
 
     leaf_hashes = [str(leaf.get("leaf_hash")) for leaf in leaves]
 
@@ -492,6 +555,20 @@ def _verify_one_org_admin_reads_log(
             continue
 
         signing_key_id = cp.get("signing_key_id")
+        if signing_key_id is None and written_while_signing(cp.get("checkpoint_at"), keys.signing_since):
+            failures.append(
+                Failure(
+                    code="TENANT_CHECKPOINT_UNSIGNED",
+                    message=(
+                        f"Org {org_id}: checkpoint {cp.get('id')} has no signing_key_id but was "
+                        f"written {cp.get('checkpoint_at')}, at or after the earliest signing "
+                        f"key activation {keys.signing_since}"
+                    ),
+                    scope_id=org_id,
+                    tree_size=tree_size,
+                )
+            )
+            continue
         sig = _checkpoint_signature_outcome(cp.get("cose_sign1"), signing_key_id, keys)
         if sig == "missing-key":
             failures.append(
