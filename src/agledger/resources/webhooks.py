@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import Page, Webhook, WebhookTestResult
+from agledger.types import Page, Webhook, WebhookSigningAlg, WebhookTestResult
 
 
 class WebhooksResource:
@@ -18,7 +18,7 @@ class WebhooksResource:
         url: str,
         event_types: list[str],
         format: str | None = None,
-        signing_alg: str | None = None,
+        signing_alg: WebhookSigningAlg | None = None,
         record_types: list[str] | None = None,
     ) -> Webhook:
         """Register a new webhook subscription.
@@ -26,7 +26,9 @@ class WebhooksResource:
         Set ``signing_alg="ed25519"`` for non-repudiable RFC 9421 deliveries
         signed with the Server vault key (verify them with ``verify_rfc9421``
         from ``agledger.webhooks``). Settlement-event subscriptions default to
-        ``ed25519`` when the Server has a vault signing key.
+        ``ed25519`` when the Server has a vault signing key. A FIPS-mode
+        Server signs under ``ecdsa-p256-sha256`` instead; request whichever
+        ``capabilities.signingAlgorithms`` on ``GET /v1/conformance`` lists.
 
         ``record_types`` filters record-scoped events by record type:
         ``["*"]`` means all types; any other list is fail-closed (only
@@ -132,7 +134,7 @@ class AsyncWebhooksResource:
         url: str,
         event_types: list[str],
         format: str | None = None,
-        signing_alg: str | None = None,
+        signing_alg: WebhookSigningAlg | None = None,
         record_types: list[str] | None = None,
     ) -> Webhook:
         """Register a new webhook subscription.
@@ -140,7 +142,9 @@ class AsyncWebhooksResource:
         Set ``signing_alg="ed25519"`` for non-repudiable RFC 9421 deliveries
         signed with the Server vault key (verify them with ``verify_rfc9421``
         from ``agledger.webhooks``). Settlement-event subscriptions default to
-        ``ed25519`` when the Server has a vault signing key.
+        ``ed25519`` when the Server has a vault signing key. A FIPS-mode
+        Server signs under ``ecdsa-p256-sha256`` instead; request whichever
+        ``capabilities.signingAlgorithms`` on ``GET /v1/conformance`` lists.
 
         ``record_types`` filters record-scoped events by record type:
         ``["*"]`` means all types; any other list is fail-closed (only

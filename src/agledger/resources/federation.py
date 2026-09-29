@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import PeerHandshakeResult
+from agledger.types import (
+    FederationSettlementSignal,
+    FederationVerdict,
+    PeerHandshakeResult,
+)
 
 
 def _handshake_body(
@@ -52,8 +56,9 @@ def _state_transition_body(
 
 
 def _signal_body(
-    record_id: str, recommendation: str, outcome_hash: str, valid_until: str,
-    idempotency_key: str, outcome: str | None, counter_signature: str | None,
+    record_id: str, recommendation: FederationSettlementSignal, outcome_hash: str,
+    valid_until: str, idempotency_key: str, outcome: FederationVerdict | None,
+    counter_signature: str | None,
     schema_ref: dict[str, Any] | None, reason_code: str | None,
     failing_rule_ids: list[str] | None, reason: str | None,
 ) -> dict[str, Any]:
@@ -149,11 +154,11 @@ class FederationResource:
         self,
         *,
         record_id: str,
-        recommendation: str,
+        recommendation: FederationSettlementSignal,
         outcome_hash: str,
         valid_until: str,
         idempotency_key: str,
-        outcome: str | None = None,
+        outcome: FederationVerdict | None = None,
         counter_signature: str | None = None,
         schema_ref: dict[str, Any] | None = None,
         reason_code: str | None = None,
@@ -242,11 +247,11 @@ class AsyncFederationResource:
         self,
         *,
         record_id: str,
-        recommendation: str,
+        recommendation: FederationSettlementSignal,
         outcome_hash: str,
         valid_until: str,
         idempotency_key: str,
-        outcome: str | None = None,
+        outcome: FederationVerdict | None = None,
         counter_signature: str | None = None,
         schema_ref: dict[str, Any] | None = None,
         reason_code: str | None = None,

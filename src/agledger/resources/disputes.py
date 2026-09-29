@@ -5,7 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import Dispute, DisputeOutcome, DisputeResponse, DisputeStatus, Page
+from agledger.types import (
+    Dispute,
+    DisputeGrounds,
+    DisputeOutcome,
+    DisputeResponse,
+    DisputeStatus,
+    EvidenceType,
+    Page,
+)
 
 
 class DisputesResource:
@@ -42,7 +50,7 @@ class DisputesResource:
         raw["data"] = [Dispute.model_validate(d) for d in raw.get("data", [])]
         return Page[Dispute].model_validate(raw)
 
-    def create(self, record_id: str, *, grounds: str, context: str | None = None) -> Dispute:
+    def create(self, record_id: str, *, grounds: DisputeGrounds, context: str | None = None) -> Dispute:
         """Initiate a dispute on a Record. Returns the dispute object (from the create envelope)."""
         body: dict[str, Any] = {"grounds": grounds}
         if context is not None:
@@ -100,7 +108,7 @@ class DisputesResource:
         self,
         record_id: str,
         *,
-        evidence_type: str,
+        evidence_type: EvidenceType,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         """Submit additional evidence for a dispute."""
@@ -134,7 +142,7 @@ class AsyncDisputesResource:
         raw["data"] = [Dispute.model_validate(d) for d in raw.get("data", [])]
         return Page[Dispute].model_validate(raw)
 
-    async def create(self, record_id: str, *, grounds: str, context: str | None = None) -> Dispute:
+    async def create(self, record_id: str, *, grounds: DisputeGrounds, context: str | None = None) -> Dispute:
         body: dict[str, Any] = {"grounds": grounds}
         if context is not None:
             body["context"] = context
@@ -172,7 +180,7 @@ class AsyncDisputesResource:
         self,
         record_id: str,
         *,
-        evidence_type: str,
+        evidence_type: EvidenceType,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         return await self._http.post(
