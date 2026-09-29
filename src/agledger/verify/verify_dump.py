@@ -161,10 +161,11 @@ def _checkpoint_chain_key(cp: DumpRow) -> str:
 
 def _chain_label(chain_key: str) -> str:
     """How a chain is named in failure messages. A per-record key IS a record
-    id, so "RecordRow <uuid>" is actionable; a schema key is not, and labelling
-    it that way sent auditors to /v1/records/{id} for a 404.
+    id, so "Record <uuid>" is a lookup an auditor can act on; a schema key is
+    not, and labelling it that way sent auditors to /v1/records/{id} for a 404,
+    so it is named as the chain it actually is.
     """
-    return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"RecordRow {chain_key}"
+    return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"Record {chain_key}"
 
 
 def _group_by_chain(entries: list[DumpRow]) -> dict[str, list[DumpRow]]:
@@ -241,7 +242,7 @@ def _collect_chain_failures(
             failures.append(
                 Failure(
                     code=result.code,
-                    message=f"RecordRow {scope_id} pos {result.position}: {result.detail}",
+                    message=f"{_chain_label(scope_id)} pos {result.position}: {result.detail}",
                     scope_id=scope_id,
                     position=result.position,
                 )
