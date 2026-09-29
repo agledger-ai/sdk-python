@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -239,6 +240,32 @@ def test_truncated_schema_chain_still_fails_and_is_named_by_chain_key() -> None:
     assert missing[0].scope_id == "schema:org-1"
     assert "Chain schema:org-1" in missing[0].message
     assert "RecordRow" not in missing[0].message
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")
+def test_entry_level_failure_is_named_by_the_chain_it_is_on() -> None:
+    dump = _as_schema_chain(load_dump(str(_VALID_DUMP)), "schema:org-1")
+    on_schema = [e for e in dump.vault_entries if e.get("chain_key") == "schema:org-1"]
+    on_schema[-1]["payload_hash"] = "0" * 64
+    report = verify_dump(dump)
+    entry_failure = next(
+        (
+            f
+            for f in report.vault.failures
+            if f.scope_id == "schema:org-1" and f.position is not None
+        ),
+        None,
+    )
+    assert entry_failure is not None
+    assert re.match(r"^Chain schema:org-1 pos \d+: ", entry_failure.message)
+
+    plain = load_dump(str(_VALID_DUMP))
+    plain.vault_entries[-1]["payload_hash"] = "0" * 64
+    record_report = verify_dump(plain)
+    record_failure = next(f for f in record_report.vault.failures if f.position is not None)
+    assert re.match(
+        rf"^Record {re.escape(str(record_failure.scope_id))} pos \d+: ", record_failure.message
+    )
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")

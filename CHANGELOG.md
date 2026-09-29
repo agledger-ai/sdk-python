@@ -33,6 +33,7 @@ Reconciled against the AGLedger API release candidate at `cea0f7d5` (reports 1.8
 
 - **A record received from a federation peer parses.** `RecordRow.federation_status` was a closed four-value `Literal`, and the Server sends `inbound` on every federation-received record, so reading one raised a `ValidationError`. It names `inbound` and stays open with `| str`.
 - **A read-log leaf's signature is verified.** The dump verifier checked a leaf's hash and index only. A leaf that names a key must now name one in the dumped registry (`CHAIN_SIGNATURE_MISSING_KEY`) and carry a signature that verifies under it (`TENANT_READ_SIGNATURE_INVALID`, also for a zeroed signature or an envelope that does not decode).
+- **A dump failure names the chain it is on.** An entry-level failure on a schema chain read `RecordRow schema:<org> pos N`, which sent an auditor to `/v1/records/{id}` for a 404. It now reads `Chain schema:<org> pos N`, and a per-record failure reads `Record <id> pos N` rather than the internal type name; checkpoint failures use the same labels.
 
 ## [1.12.0] - 2026-09-21
 

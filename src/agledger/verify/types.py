@@ -36,7 +36,7 @@ class Dump:
 class Failure:
     code: FailureCode
     message: str
-    #: RecordRow id for vault failures, org id for org-reads failures.
+    #: Record id (or schema chain key) for vault failures, org id for org-reads failures.
     scope_id: str | None = None
     position: int | None = None
     leaf_index: int | None = None
