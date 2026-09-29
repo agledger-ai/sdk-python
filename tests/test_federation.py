@@ -12,9 +12,10 @@ BASE = "https://agledger.example.com"
 
 class TestFederationResource:
     @respx.mock
-    def test_peer_handshake_sends_exactly_the_five_body_fields(self):
+    def test_peer_handshake_sends_exactly_the_four_body_fields(self):
         """The route is additionalProperties: false, so an extra key is a 400 and
-        a missing one is a 400. The body is the whole contract here."""
+        a missing one is a 400. The body is the whole contract here. The org the
+        peering binds to comes from the token, so ``boundOrgId`` is not sent."""
         route = respx.post(f"{BASE}/federation/v1/peer").mock(
             return_value=httpx.Response(
                 201,
@@ -33,14 +34,12 @@ class TestFederationResource:
                 peer_url="https://peer.example.com",
                 signing_public_key="ed25519-pk",
                 peering_token="tok-abcdefghijklmno",
-                bound_org_id="44444444-4444-4444-8444-444444444444",
             )
         assert json.loads(route.calls[0].request.content) == {
             "peerHubId": "33333333-3333-4333-8333-333333333333",
             "peerUrl": "https://peer.example.com",
             "signingPublicKey": "ed25519-pk",
             "peeringToken": "tok-abcdefghijklmno",
-            "boundOrgId": "44444444-4444-4444-8444-444444444444",
         }
         assert result.peered is True
         # peer_hub_id is the identifier the admin peer paths take; peer_id is
@@ -136,14 +135,41 @@ class TestFederationResource:
 
 class TestFederationAdminResource:
     @respx.mock
-    def test_create_peering_token(self):
+    def test_create_peering_token_binds_the_hub_id_and_org_at_mint(self):
+        """The Server requires ``peerHubId`` and ``boundOrgId`` on the mint;
+        ``label`` is optional and left off the body when not given."""
+        minted = {
+            "peeringToken": "tok-xyz",
+            "label": "partner-x",
+            "peerHubId": "33333333-3333-4333-8333-333333333333",
+            "boundOrgId": "44444444-4444-4444-8444-444444444444",
+            "createdAt": "2026-09-28T00:00:00Z",
+            "expiresAt": "2026-10-05T00:00:00Z",
+        }
         route = respx.post(f"{BASE}/federation/v1/admin/peering-tokens").mock(
-            return_value=httpx.Response(201, json={"token": "tok-xyz", "label": "partner-x"})
+            return_value=httpx.Response(201, json=minted)
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            result = client.federation_admin.create_peering_token(label="partner-x")
-        assert result["token"] == "tok-xyz"
-        assert route.called
+            result = client.federation_admin.create_peering_token(
+                peer_hub_id="33333333-3333-4333-8333-333333333333",
+                bound_org_id="44444444-4444-4444-8444-444444444444",
+                label="partner-x",
+            )
+            client.federation_admin.create_peering_token(
+                peer_hub_id="33333333-3333-4333-8333-333333333333",
+                bound_org_id="44444444-4444-4444-8444-444444444444",
+            )
+        assert json.loads(route.calls[0].request.content) == {
+            "peerHubId": "33333333-3333-4333-8333-333333333333",
+            "boundOrgId": "44444444-4444-4444-8444-444444444444",
+            "label": "partner-x",
+        }
+        assert json.loads(route.calls[1].request.content) == {
+            "peerHubId": "33333333-3333-4333-8333-333333333333",
+            "boundOrgId": "44444444-4444-4444-8444-444444444444",
+        }
+        assert result["peeringToken"] == "tok-xyz"
+        assert result["boundOrgId"] == "44444444-4444-4444-8444-444444444444"
 
     @respx.mock
     def test_list_peers(self):
@@ -251,3 +277,41 @@ class TestFederationAdminResource:
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
             result = client.federation_admin.get_instance()
         assert result["hubId"] == "h-001"
+
+
+class TestAsyncFederationBodies:
+    @respx.mock
+    async def test_async_mint_and_handshake_send_the_same_bodies_as_sync(self):
+        from agledger import AsyncAgledgerClient
+
+        mint = respx.post(f"{BASE}/federation/v1/admin/peering-tokens").mock(
+            return_value=httpx.Response(201, json={"peeringToken": "tok-xyz"})
+        )
+        peer = respx.post(f"{BASE}/federation/v1/peer").mock(
+            return_value=httpx.Response(
+                201,
+                json={
+                    "peered": True,
+                    "peerId": "11111111-1111-4111-8111-111111111111",
+                    "peerHubId": "hub-x",
+                    "status": "active",
+                    "serverSigningPublicKey": "ed25519-pk",
+                },
+            )
+        )
+        async with AsyncAgledgerClient(base_url=BASE, api_key="agl_adm_test") as client:
+            await client.federation_admin.create_peering_token(
+                peer_hub_id="33333333-3333-4333-8333-333333333333",
+                bound_org_id="44444444-4444-4444-8444-444444444444",
+            )
+            await client.federation.peer_handshake(
+                peer_hub_id="33333333-3333-4333-8333-333333333333",
+                peer_url="https://peer.example.com",
+                signing_public_key="ed25519-pk",
+                peering_token="tok-xyz",
+            )
+        assert json.loads(mint.calls[0].request.content) == {
+            "peerHubId": "33333333-3333-4333-8333-333333333333",
+            "boundOrgId": "44444444-4444-4444-8444-444444444444",
+        }
+        assert "boundOrgId" not in json.loads(peer.calls[0].request.content)

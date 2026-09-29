@@ -243,7 +243,9 @@ class SettlementSignalSummary(BaseModel):
     failing_rule_ids: list[str] | None = Field(None, alias="failingRuleIds")
     """Rule IDs that failed and drove the recommendation, or None."""
     reason: str | None = None
-    """Optional human-readable reason, or None."""
+    """Free-text hint the emitted signal carried, or None. Always None when
+    ``source`` is ``inbound``: free text stays on the Server that wrote it and
+    does not cross the federation wire."""
     delivered_to_peers: list[str] = Field(alias="deliveredToPeers")
     """Peer Servers the signal was successfully delivered to."""
     pending_to_peers: list[str] = Field(alias="pendingToPeers")

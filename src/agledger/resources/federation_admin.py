@@ -8,16 +8,42 @@ from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import FederationPeer, Page
 
 
+def _peering_token_body(peer_hub_id: str, bound_org_id: str, label: str | None) -> dict[str, Any]:
+    body: dict[str, Any] = {"peerHubId": peer_hub_id, "boundOrgId": bound_org_id}
+    if label is not None:
+        body["label"] = label
+    return body
+
+
 class FederationAdminResource:
     """Federation admin operations (API key auth, admin:system scope)."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def create_peering_token(self, *, label: str) -> dict[str, Any]:
+    def create_peering_token(
+        self, *, peer_hub_id: str, bound_org_id: str, label: str | None = None
+    ) -> dict[str, Any]:
         """Create a single-use peering token, to be shared out of band with the
-        operator of the peer Server that will use it in the handshake."""
-        return self._http.post("/federation/v1/admin/peering-tokens", json={"label": label})
+        operator of the peer Server that will use it in the handshake.
+
+        The token is bound at mint to the one hub id it admits and to the local
+        org that peer's records project into; the handshake refuses any other
+        hub id and takes the org from the token.
+
+        ``peer_hub_id`` is the initiating Server's ``instanceId`` (its
+        ``federation_admin.get_instance()``), which its operator sends you with
+        its URL and signing key. A peer already registered under it is a 409.
+        ``bound_org_id`` is a local org id; an unknown one is a 404. ``label``
+        (up to 255 characters) names the intended peer.
+
+        The result carries ``peeringToken`` (shown once), ``peerHubId`` in
+        canonical lowercase, ``boundOrgId``, ``createdAt`` and ``expiresAt``.
+        """
+        return self._http.post(
+            "/federation/v1/admin/peering-tokens",
+            json=_peering_token_body(peer_hub_id, bound_org_id, label),
+        )
 
     def list_peers(self, **params: Any) -> Page[FederationPeer]:
         """List all peer Servers known to this instance.
@@ -70,8 +96,15 @@ class AsyncFederationAdminResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def create_peering_token(self, *, label: str) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/admin/peering-tokens", json={"label": label})
+    async def create_peering_token(
+        self, *, peer_hub_id: str, bound_org_id: str, label: str | None = None
+    ) -> dict[str, Any]:
+        """Create a single-use peering token bound to ``peer_hub_id`` and
+        ``bound_org_id``. See :meth:`FederationAdminResource.create_peering_token`."""
+        return await self._http.post(
+            "/federation/v1/admin/peering-tokens",
+            json=_peering_token_body(peer_hub_id, bound_org_id, label),
+        )
 
     async def list_peers(self, **params: Any) -> Page[FederationPeer]:
         return Page[FederationPeer].model_validate(
