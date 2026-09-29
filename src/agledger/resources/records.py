@@ -15,14 +15,11 @@ from agledger.types import (
     RecordRow,
     RecordRowCompact,
     RecordRowCompactPage,
+    RecordView,
     VerdictResult,
     VerdictStatistics,
 )
 
-RecordView = Literal["full", "compact"]
-"""The ``view`` a record read takes. ``full`` (the default) is the whole
-Record; ``compact`` leaves out every top-level field whose value is null and
-trims each ``nextSteps`` entry to ``action``, ``method`` and ``href``."""
 
 def _parse_page(raw: dict[str, Any], view: RecordView | None) -> Page[RecordRow] | RecordRowCompactPage:
     if view == "compact":
@@ -285,6 +282,7 @@ class RecordsResource:
         )
         return _parse_page(self._http.get_page("/v1/records", params=params), view)
 
+    @overload
     def list_all(
         self,
         *,
@@ -302,13 +300,59 @@ class RecordsResource:
         actionable: bool | None = None,
         limit: int | None = None,
         max_pages: int | None = None,
-    ) -> Iterator[RecordRow]:
+        view: Literal["full"] | None = None,
+    ) -> Iterator[RecordRow]: ...
+
+    @overload
+    def list_all(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
+        view: Literal["compact"],
+    ) -> Iterator[RecordRowCompact]: ...
+
+    def list_all(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
+        view: RecordView | None = None,
+    ) -> Iterator[RecordRow | RecordRowCompact]:
         """Auto-paginate through all Records.
 
         ``role='performer'`` / ``role='principal'`` narrows the calling agent's
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``view="compact"`` yields :class:`RecordRowCompact` rows, which leave out
+        every top-level field whose value is null and trim each ``next_steps``
+        entry to the call.
 
         ``limit`` sets the page size, so a large listing costs fewer round trips.
         Unbounded, the walk runs to the end of the listing and raises
@@ -318,9 +362,10 @@ class RecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, None,
+            None, view,
         )
         for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
-            yield RecordRow.model_validate(item)
+            yield _parse_row(item, view)
 
     @overload
     def search(
@@ -866,6 +911,48 @@ class AsyncRecordsResource:
         )
         return _parse_page(await self._http.get_page("/v1/records", params=params), view)
 
+    @overload
+    def list_all(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
+        view: Literal["full"] | None = None,
+    ) -> AsyncIterator[RecordRow]: ...
+
+    @overload
+    def list_all(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        performer_agent_id: str | None = None,
+        role: str | None = None,
+        from_: str | None = None,
+        to: str | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        actionable: bool | None = None,
+        limit: int | None = None,
+        max_pages: int | None = None,
+        view: Literal["compact"],
+    ) -> AsyncIterator[RecordRowCompact]: ...
+
     async def list_all(
         self,
         *,
@@ -883,13 +970,18 @@ class AsyncRecordsResource:
         actionable: bool | None = None,
         limit: int | None = None,
         max_pages: int | None = None,
-    ) -> AsyncIterator[RecordRow]:
+        view: RecordView | None = None,
+    ) -> AsyncIterator[RecordRow | RecordRowCompact]:
         """Auto-paginate through all Records.
 
         ``role='performer'`` / ``role='principal'`` narrows the calling agent's
         auto-scope to one side of the Record. Agent keys only: admin and platform
         keys get a 400. On those keys the equivalent narrowing is
         ``performer_agent_id``.
+
+        ``view="compact"`` yields :class:`RecordRowCompact` rows, which leave out
+        every top-level field whose value is null and trim each ``next_steps``
+        entry to the call.
 
         ``limit`` sets the page size, so a large listing costs fewer round trips.
         Unbounded, the walk runs to the end of the listing and raises
@@ -899,9 +991,10 @@ class AsyncRecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, None,
+            None, view,
         )
         async for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
-            yield RecordRow.model_validate(item)
+            yield _parse_row(item, view)
 
     @overload
     async def search(

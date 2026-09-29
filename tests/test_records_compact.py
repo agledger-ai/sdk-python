@@ -118,6 +118,30 @@ def test_list_without_a_view_is_still_a_full_page() -> None:
 
 
 @respx.mock
+def test_list_all_compact_sends_the_view_and_yields_compact_rows() -> None:
+    route = respx.get(f"{BASE}/v1/records").mock(return_value=httpx.Response(200, json=COMPACT_PAGE))
+    with AgledgerClient(api_key="agl_agt_test", base_url=BASE) as client:
+        rows = list(client.records.list_all(view="compact", limit=10))
+    assert route.calls[0].request.url.params["view"] == "compact"
+    assert route.calls[0].request.url.params["limit"] == "10"
+    assert len(rows) == 1
+    assert isinstance(rows[0], RecordRowCompact)
+    assert rows[0].next_steps is not None
+    assert isinstance(rows[0].next_steps[0], NextStepCompact)
+
+
+@respx.mock
+def test_list_all_without_a_view_sends_none_and_yields_full_rows() -> None:
+    full_row = {**COMPACT_ROW, "nextSteps": []}
+    full = {"data": [full_row], "hasMore": False, "nextCursor": None, "total": 1}
+    route = respx.get(f"{BASE}/v1/records").mock(return_value=httpx.Response(200, json=full))
+    with AgledgerClient(api_key="agl_agt_test", base_url=BASE) as client:
+        rows = list(client.records.list_all())
+    assert "view" not in route.calls[0].request.url.params
+    assert type(rows[0]) is RecordRow
+
+
+@respx.mock
 async def test_async_compact_reads_match_sync() -> None:
     get = respx.get(f"{BASE}/v1/records/{RID}").mock(return_value=httpx.Response(200, json=COMPACT_ROW))
     respx.get(f"{BASE}/v1/records").mock(return_value=httpx.Response(200, json=COMPACT_PAGE))
@@ -126,13 +150,16 @@ async def test_async_compact_reads_match_sync() -> None:
         row = await client.records.get(RID, view="compact")
         page = await client.records.list(view="compact", offset=5)
         found = await client.records.search(view="compact")
+        rows = [r async for r in client.records.list_all(view="compact")]
     assert get.calls[0].request.url.params["view"] == "compact"
+    assert isinstance(rows[0], RecordRowCompact)
     assert isinstance(row, RecordRowCompact)
     assert isinstance(page, RecordRowCompactPage)
     assert isinstance(found, RecordRowCompactPage)
 
 
 _TYPED_CALLER = """
+from collections.abc import AsyncIterator, Iterator
 from typing import assert_type
 
 from agledger import (
@@ -149,6 +176,8 @@ def sync_reads(client: AgledgerClient) -> None:
     assert_type(client.records.list(view="compact"), RecordRowCompactPage)
     assert_type(client.records.search(view="compact"), RecordRowCompactPage)
     assert_type(client.records.search(), Page[RecordRow])
+    assert_type(client.records.list_all(), Iterator[RecordRow])
+    assert_type(client.records.list_all(view="compact"), Iterator[RecordRowCompact])
 
 
 async def async_reads(client: AsyncAgledgerClient) -> None:
@@ -156,6 +185,8 @@ async def async_reads(client: AsyncAgledgerClient) -> None:
     assert_type(await client.records.get("r", view="compact"), RecordRowCompact)
     assert_type(await client.records.list(view="compact"), RecordRowCompactPage)
     assert_type(await client.records.search(view="full"), Page[RecordRow])
+    assert_type(client.records.list_all(view="compact"), AsyncIterator[RecordRowCompact])
+    assert_type(client.records.list_all(), AsyncIterator[RecordRow])
 """
 
 

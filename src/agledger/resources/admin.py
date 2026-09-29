@@ -7,6 +7,13 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger.types import (
+    AutoProvisionScopeProfile,
+    TrustedIssuer,
+    TrustedIssuerAlg,
+    TrustedIssuerAppliesTo,
+    VaultScanJob,
+)
 
 
 class AdminRecordsResource:
@@ -102,7 +109,7 @@ class AdminVaultScanResource:
             body["recordId"] = record_id
         return self._http.post("/v1/admin/vault/scan", json=body)
 
-    def status(self, job_id: str) -> dict[str, Any]:
+    def status(self, job_id: str) -> VaultScanJob:
         """Get the status of a vault scan job.
 
         Each ``result.brokenRecords[]`` / ``result.globalChains.brokenChains[]``
@@ -331,18 +338,18 @@ class AdminTrustedIssuersResource:
         org_id: str | None = None,
         jwks_uri: str | None = None,
         expected_azp: str | None = None,
-        applies_to: str | None = None,
+        applies_to: TrustedIssuerAppliesTo | None = None,
         claim_mapping: dict[str, str] | None = None,
-        allowed_algs: list[str] | None = None,
+        allowed_algs: list[TrustedIssuerAlg] | None = None,
         max_credential_ttl_seconds: int | None = None,
         auto_provision_agents: bool | None = None,
-        auto_provision_scope_profile: str | None = None,
+        auto_provision_scope_profile: AutoProvisionScopeProfile | None = None,
         auto_provision_max_agents: int | None = None,
         jti_single_use: bool | None = None,
         subject_allowlist: list[str] | None = None,
         label: str | None = None,
         enabled: bool | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrustedIssuer:
         """Register a trusted OIDC issuer.
 
         ``auto_provision_agents`` lets the first token exchange from a subject
@@ -382,11 +389,11 @@ class AdminTrustedIssuersResource:
         )
         return self._http.post("/v1/admin/trusted-issuers", json=body)
 
-    def get(self, issuer_id: str) -> dict[str, Any]:
+    def get(self, issuer_id: str) -> TrustedIssuer:
         """Get a trusted issuer by ID."""
         return self._http.get(f"/v1/admin/trusted-issuers/{issuer_id}")
 
-    def update(self, issuer_id: str, **params: Any) -> dict[str, Any]:
+    def update(self, issuer_id: str, **params: Any) -> TrustedIssuer:
         """Merge-update a trusted issuer (PATCH semantics)."""
         return self._http.patch(
             f"/v1/admin/trusted-issuers/{issuer_id}",
@@ -960,7 +967,7 @@ class AsyncAdminVaultScanResource:
             body["recordId"] = record_id
         return await self._http.post("/v1/admin/vault/scan", json=body)
 
-    async def status(self, job_id: str) -> dict[str, Any]:
+    async def status(self, job_id: str) -> VaultScanJob:
         return await self._http.get(f"/v1/admin/vault/scan/{job_id}")
 
     async def list(self) -> dict[str, Any]:
@@ -1037,18 +1044,18 @@ class AsyncAdminTrustedIssuersResource:
         org_id: str | None = None,
         jwks_uri: str | None = None,
         expected_azp: str | None = None,
-        applies_to: str | None = None,
+        applies_to: TrustedIssuerAppliesTo | None = None,
         claim_mapping: dict[str, str] | None = None,
-        allowed_algs: list[str] | None = None,
+        allowed_algs: list[TrustedIssuerAlg] | None = None,
         max_credential_ttl_seconds: int | None = None,
         auto_provision_agents: bool | None = None,
-        auto_provision_scope_profile: str | None = None,
+        auto_provision_scope_profile: AutoProvisionScopeProfile | None = None,
         auto_provision_max_agents: int | None = None,
         jti_single_use: bool | None = None,
         subject_allowlist: list[str] | None = None,
         label: str | None = None,
         enabled: bool | None = None,
-    ) -> dict[str, Any]:
+    ) -> TrustedIssuer:
         """Register a trusted OIDC issuer.
 
         ``auto_provision_agents`` lets the first token exchange from a subject
@@ -1088,11 +1095,11 @@ class AsyncAdminTrustedIssuersResource:
         )
         return await self._http.post("/v1/admin/trusted-issuers", json=body)
 
-    async def get(self, issuer_id: str) -> dict[str, Any]:
+    async def get(self, issuer_id: str) -> TrustedIssuer:
         """Get a trusted issuer by ID."""
         return await self._http.get(f"/v1/admin/trusted-issuers/{issuer_id}")
 
-    async def update(self, issuer_id: str, **params: Any) -> dict[str, Any]:
+    async def update(self, issuer_id: str, **params: Any) -> TrustedIssuer:
         """Merge-update a trusted issuer (PATCH semantics)."""
         return await self._http.patch(
             f"/v1/admin/trusted-issuers/{issuer_id}",
