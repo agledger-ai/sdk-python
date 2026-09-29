@@ -48,8 +48,10 @@ from agledger.verify.verify_export import (
     KeySource,
     SignatureCoverage,
     VerifyExportResult,
+    earliest_key_activation,
     ed25519_jwk_thumbprint,
     verify_export,
+    written_while_signing,
 )
 
 __all__ = [
@@ -68,9 +70,11 @@ __all__ = [
     "VaultChainsReport",
     "VerifyExportResult",
     "VerifyReport",
+    "earliest_key_activation",
     "ed25519_jwk_thumbprint",
     "load_dump",
     "suggestion",
     "verify_dump",
     "verify_export",
+    "written_while_signing",
 ]

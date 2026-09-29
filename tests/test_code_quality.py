@@ -119,8 +119,9 @@ def test_no_truthiness_on_signing_key_ids() -> None:
 # not match its own source.
 EM_DASH = "\u2014"
 
-# ``testdata`` is generated upstream and digest-pinned by CORPUS-LOCK.json, so
-# changes there have to be made at the generator. CHANGELOG.md is history.
+# ``testdata`` is engine output, written by agledger-api's corpus generator and
+# synced here verbatim, so changes there have to be made at the generator.
+# CHANGELOG.md is history.
 _SKIP_DIRS = {".git", ".venv", "__pycache__", "dist", "build", "testdata", ".claude"}
 
 
