@@ -63,7 +63,9 @@ class SchemasResource:
     def validate_completion(
         self, type: str, evidence: dict[str, Any], *, publisher: str | None = None
     ) -> dict[str, Any]:
-        """Dry-run completion validation against a Type's schema."""
+        """Dry-run completion validation against a Type's schema. Unlike the
+        schema reads this is not public: the key needs ``schemas:read``, which
+        every scope profile except ``agent-readonly`` carries."""
         return self._http.post(
             f"/v1/schemas/{type}/validate", json={"evidence": evidence}, params=_scope(publisher)
         )

@@ -9,6 +9,12 @@ from agledger.types import Dispute, DisputeOutcome, DisputeResponse, DisputeStat
 
 
 class DisputesResource:
+    """Disputes on a Record. The reads (``list``, ``get``) need
+    ``disputes:read``; the mutations (``create``, ``submit_evidence``,
+    ``withdraw``, ``resolve``) need ``disputes:write``, which the
+    ``agent-full`` and ``admin-standard`` scope profiles carry and the
+    read-only profiles do not."""
+
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
@@ -105,6 +111,9 @@ class DisputesResource:
 
 
 class AsyncDisputesResource:
+    """Async :class:`DisputesResource`: ``disputes:read`` for the reads,
+    ``disputes:write`` for the mutations."""
+
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
