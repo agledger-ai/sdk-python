@@ -83,21 +83,8 @@ UNCOVERED = ["AcceptanceStatus", "ApiKeyRole", "RecordType", "RiskClassification
 # Pinned unions the TS SDK names and this one does not yet. The comparison
 # below runs only over names both sides hold, so a pin missing here was skipped
 # without a word; this list makes each one visible, and a new pin must either be
-# named in ``agledger.types`` or added here on purpose.
-NOT_YET_NAMED = [
-    "ComplianceRecordType",
-    "DisputeGrounds",
-    "DisputeProtocolAction",
-    "EvidenceType",
-    "FederationSettlementSignal",
-    "FederationVerdict",
-    "SchemaCompatibilityMode",
-    "SchemaFieldMappingValueType",
-    "SchemaVersionStatus",
-    "SettlementSignal",
-    "StructuralValidation",
-    "WebhookSigningAlg",
-]
+# named in ``agledger.types`` or added here on purpose. Empty: every pin is named.
+NOT_YET_NAMED: list[str] = []
 
 
 def test_every_literal_is_pinned_or_explicitly_uncovered() -> None:

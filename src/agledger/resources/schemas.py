@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import Page
+from agledger.types import Page, SchemaVersionUpdate
 
 
 def _scope(publisher: str | None) -> dict[str, Any] | None:
@@ -173,7 +173,7 @@ class SchemasResource:
         return self._http.post(f"/v1/schemas/{type}/check-compatibility", json=schemas)
 
     def update_version(
-        self, type: str, version: int, params: dict[str, Any], *, publisher: str | None = None
+        self, type: str, version: int, params: SchemaVersionUpdate, *, publisher: str | None = None
     ) -> dict[str, Any]:
         """Change a schema version's compatibility mode, which is all this route updates.
 
@@ -299,7 +299,7 @@ class AsyncSchemasResource:
         return await self._http.post(f"/v1/schemas/{type}/check-compatibility", json=schemas)
 
     async def update_version(
-        self, type: str, version: int, params: dict[str, Any], *, publisher: str | None = None
+        self, type: str, version: int, params: SchemaVersionUpdate, *, publisher: str | None = None
     ) -> dict[str, Any]:
         return await self._http.patch(
             f"/v1/schemas/{type}/versions/{version}", json=params, params=_scope(publisher)

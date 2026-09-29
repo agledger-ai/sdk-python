@@ -88,6 +88,18 @@ Verdict = Literal["accept", "reject"] | str
 open ``Literal | str`` union for forward compatibility: new API versions
 may add verdicts; code generic over ``Verdict`` then composes through
 ``submit_verdict`` without an extra narrowing step."""
+SettlementSignal = Literal["SETTLE", "HOLD", "RELEASE"] | str
+"""The Settlement Signal a verdict produces, as ``VerdictResult.recommendation``
+carries it. Known values: ``SETTLE``, ``HOLD``, ``RELEASE``. Open with ``| str``
+because it is read off a response; the request side, where a peer relays a
+signal, takes the closed :data:`FederationSettlementSignal`."""
+StructuralValidation = Literal["ACCEPTED", "INVALID", "WARNING"] | str
+"""``Completion.structural_validation``: whether the completion body passed its
+type's ``completionSchema``. ``WARNING`` is advisory mode, where the errors that
+would have rejected it are listed on ``Completion.warnings``. It is synthesized
+on read, so the completions listing's ``structuralValidation`` filter accepts
+only ``ACCEPTED`` and ``INVALID``. Open with ``| str`` because it is read off a
+response."""
 EuAiActRiskTier = Literal["unacceptable", "high", "limited", "minimal"]
 """EU AI Act risk tier (Article 5 prohibited -> Annex III high -> Article 50
 limited -> minimal). An AI impact assessment always asserts one of these."""
@@ -687,7 +699,9 @@ class Completion(BaseModel):
     """Evidence of completion."""
     evidence_hash: str | None = Field(None, alias="evidenceHash")
     """SHA-256 hash of the evidence payload."""
-    structural_validation: str | None = Field(None, alias="structuralValidation")
+    structural_validation: StructuralValidation | None = Field(
+        None, alias="structuralValidation"
+    )
     """Structural validation result: ACCEPTED, INVALID, or WARNING."""
     warnings: list[Any] | None = None
     """Validation warnings."""
@@ -781,6 +795,38 @@ and a RELEASE Settlement Signal follows carrying reason code
 The rendering is the caller's. AGLedger holds and serves the signed decision and
 never makes it."""
 
+DisputeGrounds = (
+    Literal[
+        "equivalent_item",
+        "fraudulent_completion",
+        "record_ambiguity",
+        "pricing_dispute",
+        "quality_issue",
+        "verdict_disagreement",
+        "other",
+    ]
+    | str
+)
+"""The grounds a dispute is opened on. Opening one is a strict enum on the route,
+so another value is a 400; the ``| str`` keeps a ground a newer Server adds
+parseable on ``Dispute.grounds``."""
+
+EvidenceType = (
+    Literal["screenshot", "external_lookup", "document", "communication", "other"] | str
+)
+"""The kind of evidence submitted on a dispute. A strict enum on the submit
+route; open with ``| str`` so a kind a newer Server adds is not a typing break."""
+
+DisputeProtocolAction = Literal["opened", "resolved", "withdrawn", "escalated"]
+"""The ``action`` of a federation dispute-protocol message, lowercase and past
+tense, unlike :data:`DisputeGrounds` and :data:`DisputeStatus`. Closed: the
+route declares a strict enum, so anything else is a 400.
+
+``escalated`` is inbound compatibility only. The tier ladder is gone, so this
+Server never emits it; it stays accepted for one release so a peer still on the
+previous version can finish a rolling upgrade, and the receiver projects such a
+message to ``PENDING_RESOLUTION``. Do not send it."""
+
 
 class Dispute(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
@@ -791,7 +837,7 @@ class Dispute(BaseModel):
     record_id: str = Field(alias="recordId")
     initiated_by_role: str = Field(alias="initiatedByRole")
     initiated_by_id: str = Field(alias="initiatedById")
-    grounds: str
+    grounds: DisputeGrounds
     context: str | None = None
     status: DisputeStatus | str
     outcome: str | None = None
@@ -974,6 +1020,16 @@ already holds them still parses. No ``"*"``: that is a subscription wildcard,
 not a queryable event type."""
 
 
+WebhookSigningAlg = Literal["hmac", "ed25519", "ecdsa-p256-sha256"]
+"""How a webhook subscription's deliveries are signed: ``hmac`` with a shared
+secret, or RFC 9421 under the vault key, ``ed25519`` or, on a FIPS-mode Server,
+``ecdsa-p256-sha256``. Which of the two asymmetric schemes a Server offers
+depends on its signing key, so read ``capabilities.signingAlgorithms`` from
+``GET /v1/conformance`` rather than assuming ``ed25519``. Closed: the create
+route refuses anything else with a 400. ``Webhook.signing_alg`` widens it with
+``| str`` because it is read off a response."""
+
+
 class Webhook(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -989,10 +1045,11 @@ class Webhook(BaseModel):
     is_active: bool = Field(alias="isActive")
     is_paused: bool | None = Field(None, alias="isPaused")
     format: str = "standard"
-    signing_alg: str | None = Field(None, alias="signingAlg")
-    """Delivery signing scheme: ``hmac`` (shared secret) or ``ed25519`` (RFC 9421, vault-key signed).
+    signing_alg: WebhookSigningAlg | str | None = Field(None, alias="signingAlg")
+    """Delivery signing scheme: ``hmac`` (shared secret), or RFC 9421 under the
+    vault key as ``ed25519`` or, on a FIPS-mode Server, ``ecdsa-p256-sha256``.
 
-    Verify ``ed25519`` deliveries with ``verify_rfc9421`` from ``agledger.webhooks``.
+    Verify RFC 9421 deliveries with ``verify_rfc9421`` from ``agledger.webhooks``.
     """
     secret: str | None = Field(None, repr=False)
     """Only present on creation/rotation of an ``hmac`` subscription (one-time). Absent for ``ed25519``."""
@@ -1028,8 +1085,8 @@ class VerdictResult(BaseModel):
 
     record_id: str = Field(alias="recordId")
     completion_id: str = Field(alias="completionId")
-    verdict: str
-    recommendation: str
+    verdict: Verdict
+    recommendation: SettlementSignal
     record_status: RecordStatus | str | None = Field(None, alias="recordStatus")
     """Record status after the verdict settled: FULFILLED (accept) or FAILED (reject),
     same vocabulary as the Record GET. Surfaced inline so the caller learns
@@ -1053,6 +1110,20 @@ class VerdictStatistics(BaseModel):
     as_performer: dict[str, Any] = Field(default_factory=dict, alias="asPerformer")
 
 
+ComplianceRecordType = (
+    Literal[
+        "workplace_notification",
+        "affected_persons",
+        "input_data_quality",
+        "fundamental_rights_impact_assessment",
+    ]
+    | str
+)
+"""The kind of EU AI Act attestation a compliance record holds. The create route
+declares these four as a strict enum, so another value is a 400 there; the
+``| str`` keeps a kind a newer Server adds parseable on a read."""
+
+
 class ComplianceRecord(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -1061,7 +1132,7 @@ class ComplianceRecord(BaseModel):
     id: str
     record_id: str = Field(alias="recordId")
     org_id: str = Field(alias="orgId")
-    record_type: str = Field(alias="recordType")
+    record_type: ComplianceRecordType = Field(alias="recordType")
     attestation: dict[str, Any]
     attested_by: str = Field(alias="attestedBy")
     attested_at: str = Field(alias="attestedAt")
@@ -2349,6 +2420,42 @@ class VerificationKeysResponse(BaseModel):
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")
     """Template for the canonical signature-input string (v0.25.x)."""
+
+
+SchemaVersionStatus = Literal["ACTIVE", "DISABLED"] | str
+"""A Type schema version's ``status`` on the schema listing and detail reads.
+Disabling a Type is ``schemas.disable()``, not a status write. Open with
+``| str`` because it is read off a response."""
+
+SchemaCompatibilityMode = Literal["none", "backward", "forward", "full"] | str
+"""How a new version of a Type must relate to the previous one. Lowercase, which
+is what every request site declares (register, preview, the import manifest's
+``compatibility`` and the version PATCH), each as a strict enum."""
+
+SchemaFieldMappingValueType = Literal[
+    "number", "denomination", "string", "boolean", "datetime", "expression"
+]
+"""``valueType`` of a field mapping in a Type registration's ``fieldMappings``:
+how the gate compares the criteria path to the evidence path. ``expression``
+takes an ``expression`` string instead. Closed: register and preview declare a
+strict enum."""
+
+
+class SchemaVersionUpdate(TypedDict):
+    """The body of ``schemas.update_version()``. The route declares
+    ``additionalProperties: false`` and takes this one field."""
+
+    compatibilityMode: SchemaCompatibilityMode
+
+
+FederationVerdict = Literal["accept", "reject"]
+"""The principal verdict a peer relays with a Settlement Signal or a co-sign
+request. Closed: both routes declare a strict enum."""
+
+FederationSettlementSignal = Literal["SETTLE", "HOLD", "RELEASE"]
+"""The Settlement Signal a peer relays or asks to have co-signed. Closed: both
+routes declare a strict enum. :data:`SettlementSignal` is the same set read off
+a response, open with ``| str``."""
 
 
 FederationPeerStatus = Literal["active", "revoked"] | str
