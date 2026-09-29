@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T06:53:24.676Z",
+  "generatedAt": "2026-09-29T03:44:01.877Z",
   "sourceKind": "local",
   "apiVersion": "1.8.0",
   "count": 194,
@@ -1491,7 +1491,8 @@
         "source",
         "status",
         "to",
-        "type"
+        "type",
+        "view"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -1513,7 +1514,8 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
-        "integrity"
+        "integrity",
+        "view"
       ],
       "pathParams": [
         "id"
@@ -1959,7 +1961,8 @@
         "to",
         "type",
         "updatedAfter",
-        "updatedBefore"
+        "updatedBefore",
+        "view"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -2835,9 +2838,14 @@
       "path": "/federation/v1/admin/peering-tokens",
       "operationId": "generatePeeringToken",
       "tag": "Federation Admin",
-      "requiredFields": [],
+      "requiredFields": [
+        "boundOrgId",
+        "peerHubId"
+      ],
       "bodyFields": [
-        "label"
+        "boundOrgId",
+        "label",
+        "peerHubId"
       ],
       "queryFields": [],
       "pathParams": [],
@@ -2846,6 +2854,8 @@
         400,
         401,
         403,
+        404,
+        409,
         414,
         429,
         500,
@@ -2963,14 +2973,12 @@
       "operationId": "peerHandshake",
       "tag": "Federation Peering",
       "requiredFields": [
-        "boundOrgId",
         "peerHubId",
         "peerUrl",
         "peeringToken",
         "signingPublicKey"
       ],
       "bodyFields": [
-        "boundOrgId",
         "peerHubId",
         "peerUrl",
         "peeringToken",
@@ -2983,6 +2991,7 @@
         400,
         401,
         403,
+        409,
         414,
         422,
         429,

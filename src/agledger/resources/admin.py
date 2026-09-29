@@ -103,7 +103,17 @@ class AdminVaultScanResource:
         return self._http.post("/v1/admin/vault/scan", json=body)
 
     def status(self, job_id: str) -> dict[str, Any]:
-        """Get the status of a vault scan job."""
+        """Get the status of a vault scan job.
+
+        Each ``result.brokenRecords[]`` / ``result.globalChains.brokenChains[]``
+        row names the break that withholds the chain's checkpoint in
+        ``reason``; an earlier key-window or unsupported-algorithm entry the
+        walk passed on the way is ``firstFinding`` (``{brokenAt, reason}``).
+        ``signature_missing`` is an unsigned entry where the install could not
+        have written one and ``checkpoint_unsigned`` an unsigned checkpoint
+        written once it signs; ``result.orgAdminReads.brokenOrgs[]`` reports the
+        read-log equivalents as ``leaf_signature_missing`` and
+        ``checkpoint_unsigned``."""
         return self._http.get(f"/v1/admin/vault/scan/{job_id}")
 
     def list(self) -> dict[str, Any]:
@@ -126,7 +136,10 @@ class AdminVaultSigningKeysResource:
     def retire(self, key_id: str, *, force: bool | None = None) -> dict[str, Any]:
         """Retire one signing key by its ``keyId`` (a 16-hex fingerprint, not a
         UUID). Retiring the only key able to sign is refused, so rotate first.
-        ``force`` skips the quiet period, for a key known to be compromised.
+        ``force`` skips the quiet period, for a key known to be compromised,
+        and also revokes every unexpired ephemeral cert that key minted:
+        ``revokedCertCount`` in the result says how many (always 0 on an
+        unforced retirement, whose certs lapse on their own TTL).
         """
         body: dict[str, Any] = {}
         if force is not None:

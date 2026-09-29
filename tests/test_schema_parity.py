@@ -37,9 +37,11 @@ from agledger.types import (
     DisputeEvidence,
     EntityReference,
     NextStep,
+    NextStepCompact,
     Page,
     RecordReadCompletion,
     RecordRow,
+    RecordRowCompact,
     Webhook,
 )
 
@@ -68,6 +70,9 @@ ALIASES: dict[str, type[BaseModel]] = {
     # snapshot never held them and nothing checked them.
     "PaginatedResponse": Page,
     "RecordReadCompletion": RecordReadCompletion,
+    # The ``?view=compact`` shapes of a record read.
+    "RecordRowCompact": RecordRowCompact,
+    "NextStepActionCompact": NextStepCompact,
 }
 
 # Snapshot components the Python SDK deliberately does NOT model with a typed

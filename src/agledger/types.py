@@ -1129,6 +1129,12 @@ AuditChainIntegrityReasonCode = (
         "signature_invalid",
         "signing_key_unknown",
         "signing_key_drift",
+        # The entry is unsigned where the install could not have written it
+        # unsigned: after a signed entry in the same chain, or at or after the
+        # earliest activatedAt in the key registry. A checkpoint written
+        # unsigned from that instant on is checkpoint_unsigned.
+        "signature_missing",
+        "checkpoint_unsigned",
         # The entry falls outside its signing key's published window, or the
         # key was never published: signed after retiredAt / stamped before
         # activatedAt / resolved to a key absent from /v1/verification-keys.
@@ -1167,6 +1173,7 @@ AuditChainFailureCode = (
         "signature_invalid",
         "signing_key_unknown",
         "signing_key_drift",
+        "signature_missing",
         # The entry falls outside its signing key's published window, or the
         # key was never published: signed after retiredAt / stamped before
         # activatedAt / resolved to a key absent from /v1/verification-keys.
@@ -1978,6 +1985,9 @@ class ComplianceExport(BaseModel):
     #: ``record_count`` unless ``truncated``. Header twin on a download:
     #: ``X-AGLedger-Export-Total-Records``.
     total_records: int | None = Field(None, alias="totalRecords")
+    #: The format the export was created in (``csv``, ``json`` or ``html``),
+    #: which ``download_url`` serves. None on a Server that predates the field.
+    format: Literal["csv", "json", "html"] | str | None = None
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
 
 
