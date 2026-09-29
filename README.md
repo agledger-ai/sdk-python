@@ -387,6 +387,19 @@ agledger-verify audit-export.json --keys verification-keys.json --require-out-of
 on an `/audit-export` file; in code, pass `agent_keys=` to `verify_dump` or
 `verify_export`. Both reports say which input-gated checks ran
 (`optional_checks`) and how many agent signatures were present and verified.
+A dump not scoped to one org carries the certificate keys itself: each
+`EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its
+certificate's `publicKeyJwk` (engines from 1.8.0 on), and a key is used once
+that chain has verified clean (`cert_keys_from_chain` counts them). An
+org-scoped dump and an `/audit-export` carry none, so for those pass the keys.
+
+A row with no signing key is reduced coverage only from before the install
+began signing. An unsigned chain entry after a signed one, or any unsigned
+entry, checkpoint or read-log row written at or after the earliest
+`activatedAt` in the key set (retired keys included), fails
+`CHAIN_ENTRY_UNSIGNED`, `CHECKPOINT_UNSIGNED`, `TENANT_READ_LEAF_UNSIGNED` or
+`TENANT_CHECKPOINT_UNSIGNED`, as the engine grades it. Each read-log leaf's
+signature is verified too.
 
 Without `--keys`, an `/audit-export` file is verified against the signing keys
 carried inside that same export, and the report says so (`key provenance :

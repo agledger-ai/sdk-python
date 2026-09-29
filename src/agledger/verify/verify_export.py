@@ -1767,6 +1767,25 @@ def _extract_header_alg(protected_bstr: bytes) -> int | None:
     return alg
 
 
+def decode_cose_parts(envelope: bytes) -> tuple[bytes, bytes, bytes] | None:
+    """A tagged COSE_Sign1 envelope as ``(protected, payload, signature)``, or
+    ``None`` when it does not decode as one."""
+    return _decode_cose_sign1(envelope)
+
+
+def decode_cose_predicate(envelope: bytes) -> dict[str, Any] | None:
+    """The in-toto predicate signed inside a COSE_Sign1 envelope, or ``None``
+    when the envelope or its payload does not decode."""
+    parts = _decode_cose_sign1(envelope)
+    return _decode_predicate(parts[1]) if parts is not None else None
+
+
+def describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
+    """Why a key's signatures could not be checked here: this build does not
+    implement its algorithm, or this host refused to compute it."""
+    return _describe_unsupported_algorithm(key_id, spki_base64)
+
+
 def decode_cose_kid(envelope: bytes) -> str | None:
     """The signature-covered ``kid`` of a tagged COSE_Sign1 envelope, as
     lowercase hex, or ``None`` when the envelope or its protected header does

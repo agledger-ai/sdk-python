@@ -79,9 +79,13 @@ def _build_parser() -> argparse.ArgumentParser:
             "exchange (also the cnf.jwk claim in its certJws). An entry whose sealed "
             "agent signature names one of them by thumbprint has that signature "
             "re-verified offline, and fails CHAIN_AGENT_SIGNATURE_INVALID if it does "
-            "not verify. Applies to a dump directory and to an /audit-export file. "
-            "Neither carries agent cert keys, so without this flag the check reports "
-            "'not checked' and changes no verdict."
+            "not verify. Applies to a dump directory (added to the cert keys the dump "
+            "itself signs) and to an /audit-export file. A dump not scoped to one org "
+            "carries the cert keys: each EPHEMERAL_CERT_ISSUED entry on the platform-ops "
+            "chain signs its cert's publicKeyJwk (engines from 1.8.0 on), used once that "
+            "chain verifies clean. An org-scoped dump and an /audit-export carry none, so "
+            "for those pass this flag. Where no key is at hand the check reports 'not "
+            "checked' and changes no verdict."
         ),
     )
     parser.add_argument(
@@ -203,26 +207,41 @@ def load_out_of_band_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
 
 
 def _agent_signature_summary(
-    counts: AgentSignatureCounts, check: CheckApplicability, keys_given: bool
+    counts: AgentSignatureCounts,
+    check: CheckApplicability,
+    keys_given: bool,
+    keys_from_chain: int = 0,
 ) -> str:
     """One line on the agent-signature check. ``present > verified`` on a
     passing report means some signatures were not re-checked, never that they
-    failed; the line says so rather than leaving a bare ratio to be misread."""
+    failed; the line says so rather than leaving a bare ratio to be misread.
+    ``keys_from_chain`` counts the cert keys a dump signs itself (always 0 for
+    an export)."""
     base = f"present={counts.present} verified={counts.verified}"
+    on_chain = f"{keys_from_chain} cert key{'' if keys_from_chain == 1 else 's'} the dump signs"
     if check == "applied":
         if counts.present > counts.verified:
             return (
                 f"{base} (checked; {counts.present - counts.verified} not verified: no key "
-                "supplied for their cert, a caller-asserted identity, or a failure listed "
+                "for their cert, a caller-asserted identity, or a failure listed "
                 "in this report)"
             )
-        return f"{base} (checked)"
+        if keys_from_chain == 0:
+            return f"{base} (checked)"
+        against = f"the supplied keys and the {on_chain}" if keys_given else f"the {on_chain}"
+        return f"{base} (checked against {against})"
     if counts.present == 0:
         return f"{base} (none on the chain)"
     if keys_given:
+        extra = f" or the {on_chain}" if keys_from_chain else ""
         return (
-            f"{base} (NOT checked: no supplied key matches their certs, or each is a "
+            f"{base} (NOT checked: no supplied key{extra} matches their certs, or each is a "
             "caller-asserted identity)"
+        )
+    if keys_from_chain:
+        return (
+            f"{base} (NOT checked: none of the {on_chain} matches; pass --agent-keys with "
+            "the agent cert keys to re-verify them)"
         )
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
@@ -244,7 +263,7 @@ def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
         report.vault.agent_signatures_present, report.vault.agent_signatures_verified
     )
     lines.append(
-        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given)}"
+        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain)}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:

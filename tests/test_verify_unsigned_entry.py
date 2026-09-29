@@ -15,17 +15,16 @@ an unsigned leaf (sentinel kid ``0000000000000000``) or tree head into
 CHAIN_ENTRY_UNSIGNED, CHECKPOINT_UNSIGNED, TENANT_READ_LEAF_UNSIGNED and
 TENANT_CHECKPOINT_UNSIGNED.
 
-The export cases are ported one for one from verify-core's
-``unsigned-entry.test.ts`` so the two suites pin the same behaviour. Every
-fixture is a mutation of a real corpus vector: ``valid.json`` (signed with a
-key activated before its entries were written), ``unsigned.json`` (written
-before any key was registered) and the ``dump/valid`` directory.
+The cases are ported one for one from verify-core's ``unsigned-entry.test.ts``
+so the two suites pin the same behaviour; the dump side is in
+``test_verify_dump_unsigned.py``. Every fixture is a mutation of a real corpus
+vector: ``valid.json`` (signed with a key activated before its entries were
+written) and ``unsigned.json`` (written before any key was registered).
 """
 
 from __future__ import annotations
 
 import base64
-import copy
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -36,13 +35,8 @@ import cbor2
 import pytest
 
 from agledger.verify import load_dump, verify_export
-from agledger.verify.types import Dump, Failure
-from agledger.verify.verify_dump import (
-    UNSIGNED_KID_SENTINEL,
-    verify_dump,
-    verify_org_admin_reads_chains,
-    verify_vault_chains,
-)
+from agledger.verify.types import Dump
+from agledger.verify.verify_dump import verify_vault_chains
 from agledger.verify.verify_export import (
     KeyCache,
     RegisteredKey,
@@ -409,71 +403,29 @@ def test_a_zeroed_signature_under_a_named_key_fails_signature_invalid(policy: st
     assert (cov.signed, cov.unsigned, cov.skipped) == (0, 0, 0)
 
 
-# --- the dump: the instant comes from the dumped key registry ---------------
+# --- the walk's instant, given directly ---------------------------------------
 
 
-@pytest.fixture
-def dump() -> Dump:
-    return load_dump(CONFORMANCE / "dump" / "valid")
-
-
-def _chain_rows(d: Dump) -> tuple[str, list[dict[str, Any]]]:
-    """The longest record chain in the dump, by chain key."""
+def _long_chain(d: Dump) -> list[dict[str, Any]]:
     by_chain: dict[str, list[dict[str, Any]]] = {}
     for row in d.vault_entries:
-        by_chain.setdefault(str(row.get("chain_key") or row.get("record_id")), []).append(row)
-    key = max(by_chain, key=lambda k: len(by_chain[k]))
-    return key, sorted(by_chain[key], key=lambda r: r["chain_position"])
+        by_chain.setdefault(str(row.get("chain_key")), []).append(row)
+    return sorted(max(by_chain.values(), key=len), key=lambda r: r["chain_position"])
 
 
-def _codes(failures: list[Failure]) -> list[str]:
-    return [f.code for f in failures]
-
-
-def test_dump_valid_verifies_clean(dump: Dump) -> None:
-    report = verify_dump(dump)
-    assert report.ok, [f.to_json() for f in report.vault.failures + report.org_admin_reads.failures]
-
-
-def test_dump_an_unsigned_entry_after_a_signed_one_breaks_its_chain(dump: Dump) -> None:
-    chain_key, rows = _chain_rows(dump)
-    assert len(rows) >= 2
-    rows[1]["signing_key_id"] = None
-    report = verify_vault_chains(dump.vault_entries, dump.vault_checkpoints, dump.signing_keys)
-    hits = [f for f in report.failures if f.code == "CHAIN_ENTRY_UNSIGNED"]
-    assert [(f.scope_id, f.position) for f in hits] == [(chain_key, 2)]
-
-
-def test_dump_an_unsigned_first_entry_written_after_activation_breaks(dump: Dump) -> None:
-    chain_key, rows = _chain_rows(dump)
-    rows[0]["signing_key_id"] = None
-    report = verify_vault_chains(dump.vault_entries, dump.vault_checkpoints, dump.signing_keys)
-    hits = [f for f in report.failures if f.code == "CHAIN_ENTRY_UNSIGNED"]
-    assert [(f.scope_id, f.position) for f in hits] == [(chain_key, 1)]
-    assert "at or after the earliest signing key activation" in hits[0].message
-
-
-def test_dump_an_all_unsigned_chain_from_before_the_first_key_is_not_a_break(dump: Dump) -> None:
-    _, rows = _chain_rows(dump)
-    for row in rows:
-        row["signing_key_id"] = None
-    keys = [dict(k, activated_at=_shift_ms(rows[-1]["created_at"], 1)) for k in dump.signing_keys]
-    report = verify_vault_chains(rows, [], keys)
-    assert report.failures == []
-
-
-def test_dump_signing_since_none_switches_off_only_the_time_half(dump: Dump) -> None:
-    _, rows = _chain_rows(dump)
+def test_signing_since_none_switches_off_only_the_time_half() -> None:
+    d = load_dump(CONFORMANCE / "dump" / "valid")
+    rows = _long_chain(d)
     for row in rows:
         row["signing_key_id"] = None
     registry = KeyCache(
-        {k["key_id"]: RegisteredKey(spki_base64=k["public_key"], source="embedded") for k in dump.signing_keys},
+        {k["key_id"]: RegisteredKey(spki_base64=k["public_key"], source="embedded") for k in d.signing_keys},
         signing_since=None,
     )
-    assert verify_vault_chains(rows, [], dump.signing_keys, registry).failures == []
+    assert verify_vault_chains(rows, [], d.signing_keys, registry).failures == []
 
-    rows[0]["signing_key_id"] = dump.signing_keys[0]["key_id"]
-    report = verify_vault_chains(rows, [], dump.signing_keys, registry)
+    rows[0]["signing_key_id"] = d.signing_keys[0]["key_id"]
+    report = verify_vault_chains(rows, [], d.signing_keys, registry)
     # Row 1 now names a key, so row 2 fails on the signed-before half.
     assert (2, "CHAIN_ENTRY_UNSIGNED") in [(f.position, f.code) for f in report.failures]
 
@@ -481,110 +433,6 @@ def test_dump_signing_since_none_switches_off_only_the_time_half(dump: Dump) -> 
 def test_an_unparseable_signing_since_is_refused_rather_than_switching_the_check_off() -> None:
     with pytest.raises(TypeError):
         KeyCache({}, signing_since="soon")
-
-
-def test_dump_an_unsigned_vault_checkpoint_after_activation_is_checkpoint_unsigned(dump: Dump) -> None:
-    cp = dump.vault_checkpoints[0]
-    cp["signing_key_id"] = None
-    report = verify_vault_chains(dump.vault_entries, dump.vault_checkpoints, dump.signing_keys)
-    assert _codes(report.failures) == ["CHECKPOINT_UNSIGNED"]
-    assert report.failures[0].position == cp["chain_position"]
-
-
-def test_dump_an_unsigned_vault_checkpoint_is_inclusive_at_the_activation_instant(dump: Dump) -> None:
-    cp = dump.vault_checkpoints[0]
-    cp["signing_key_id"] = None
-
-    at = [dict(k, activated_at=cp["created_at"]) for k in dump.signing_keys]
-    report = verify_vault_chains(dump.vault_entries, dump.vault_checkpoints, at)
-    assert "CHECKPOINT_UNSIGNED" in _codes(report.failures)
-
-    after = [dict(k, activated_at=_shift_ms(cp["created_at"], 1)) for k in dump.signing_keys]
-    report = verify_vault_chains(dump.vault_entries, dump.vault_checkpoints, after)
-    assert "CHECKPOINT_UNSIGNED" not in _codes(report.failures)
-
-
-# --- the dump: the cross-party read log -------------------------------------
-
-
-def _unsign_leaf(leaf: dict[str, Any]) -> None:
-    """Rewrite a read-log leaf as the engine writes one with no key: the
-    sentinel kid in the protected header and an all-zero signature, its
-    leaf_hash recomputed so only the signature state differs."""
-    tagged = cbor2.loads(base64.b64decode(leaf["cose_sign1"]))
-    protected, unprotected, payload, signature = tagged.value
-    header = cbor2.loads(protected)
-    header[4] = bytes.fromhex(UNSIGNED_KID_SENTINEL)
-    envelope = cbor2.dumps(
-        cbor2.CBORTag(18, [cbor2.dumps(header, canonical=True), unprotected, payload, bytes(len(signature))])
-    )
-    leaf["cose_sign1"] = base64.b64encode(envelope).decode()
-    leaf["leaf_hash"] = hashlib.sha256(envelope).hexdigest()
-
-
-def _later_keys(d: Dump, after: str) -> list[dict[str, Any]]:
-    return [dict(k, activated_at=_shift_ms(after, 1)) for k in d.signing_keys]
-
-
-def test_read_log_an_unsigned_leaf_after_a_signed_one_breaks_before_activation(dump: Dump) -> None:
-    leaves = sorted(dump.org_admin_reads, key=lambda r: r["leaf_index"])
-    assert len(leaves) >= 2
-    _unsign_leaf(leaves[1])
-    # Every read predates the key here, so only the signed-before half can fire.
-    keys = _later_keys(dump, max(r["read_at"] for r in leaves))
-    report = verify_org_admin_reads_chains(leaves, [], keys)
-    assert [(f.code, f.leaf_index) for f in report.failures] == [("TENANT_READ_LEAF_UNSIGNED", 1)]
-    assert "follows a signed leaf" in report.failures[0].message
-
-
-def test_read_log_an_unsigned_first_leaf_read_after_activation_breaks(dump: Dump) -> None:
-    leaves = sorted(dump.org_admin_reads, key=lambda r: r["leaf_index"])
-    _unsign_leaf(leaves[0])
-    report = verify_org_admin_reads_chains(leaves, [], dump.signing_keys)
-    assert [(f.code, f.leaf_index) for f in report.failures] == [("TENANT_READ_LEAF_UNSIGNED", 0)]
-
-
-def test_read_log_unsigned_leaves_from_before_the_first_key_are_not_a_break(dump: Dump) -> None:
-    leaves = sorted(dump.org_admin_reads, key=lambda r: r["leaf_index"])
-    for leaf in leaves:
-        _unsign_leaf(leaf)
-    keys = _later_keys(dump, max(r["read_at"] for r in leaves))
-    assert verify_org_admin_reads_chains(leaves, [], keys).failures == []
-
-    # At the activation instant it is a break.
-    at = [dict(k, activated_at=leaves[0]["read_at"]) for k in dump.signing_keys]
-    report = verify_org_admin_reads_chains(leaves, [], at)
-    assert [(f.code, f.leaf_index) for f in report.failures] == [("TENANT_READ_LEAF_UNSIGNED", 0)]
-
-
-def test_read_log_an_unsigned_tree_head_after_activation_is_tenant_checkpoint_unsigned(dump: Dump) -> None:
-    cp = dump.org_admin_reads_checkpoints[0]
-    cp["signing_key_id"] = None
-    report = verify_org_admin_reads_chains(
-        dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys
-    )
-    assert [(f.code, f.tree_size) for f in report.failures] == [
-        ("TENANT_CHECKPOINT_UNSIGNED", cp["tree_size"])
-    ]
-
-
-def test_read_log_an_unsigned_tree_head_from_before_the_first_key_is_not_a_break(dump: Dump) -> None:
-    cp = dump.org_admin_reads_checkpoints[0]
-    cp["signing_key_id"] = None
-    keys = _later_keys(dump, cp["checkpoint_at"])
-    report = verify_org_admin_reads_chains(dump.org_admin_reads, dump.org_admin_reads_checkpoints, keys)
-    assert report.failures == []
-
-
-def test_verify_dump_reports_every_unsigned_code_it_finds(dump: Dump) -> None:
-    d = copy.deepcopy(dump)
-    _, rows = _chain_rows(d)
-    rows[1]["signing_key_id"] = None
-    d.org_admin_reads_checkpoints[0]["signing_key_id"] = None
-    report = verify_dump(d)
-    assert not report.ok
-    codes = set(_codes(report.vault.failures + report.org_admin_reads.failures))
-    assert {"CHAIN_ENTRY_UNSIGNED", "TENANT_CHECKPOINT_UNSIGNED"} <= codes
 
 
 # --- the shared helpers ------------------------------------------------------

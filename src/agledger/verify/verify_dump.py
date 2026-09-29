@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from agledger.verify.types import (
@@ -44,13 +45,18 @@ from agledger.verify.types import (
 from agledger.verify.verify_export import (
     AgentSignatureCounts,
     CheckApplicability,
+    EntryVerificationResult,
     KeyCache,
     RegisteredKey,
     as_mapping,
     build_agent_key_registry,
     check_agent_signature,
     decode_cose_kid,
+    decode_cose_parts,
+    decode_cose_predicate,
+    describe_unsupported_algorithm,
     earliest_key_activation,
+    ed25519_jwk_thumbprint,
     merkle_root,
     optional_checks_report,
     verify_cose_sign1,
@@ -212,15 +218,16 @@ def _collect_chain_failures(
     agent_counts: AgentSignatureCounts | None = None,
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,
-) -> None:
+) -> list[EntryVerificationResult]:
     """Walk one chain group via the shared per-entry body and flatten any invalid
-    entry into a Failure. The dump passes NO key-policy options (all dump keys
+    entry into a Failure; returns each entry's result, in chain order. The dump passes NO key-policy options (all dump keys
     are embedded). previousHash advances even on a failed entry, matching the
     export walk and verify-core. An entry with no signing key id after one that
     names a key, or written at or after ``keys.signing_since``, fails
     CHAIN_ENTRY_UNSIGNED."""
     prev_payload_hash: str | None = None
     signed_before = False
+    results: list[EntryVerificationResult] = []
     for i, entry in enumerate(normalized):
         result = verify_entry(
             entry, i + 1, prev_payload_hash, keys, None, False, applied, signed_before=signed_before
@@ -238,7 +245,50 @@ def _collect_chain_failures(
                     position=result.position,
                 )
             )
+        results.append(result)
         prev_payload_hash = as_mapping(entry.get("integrity")).get("payloadHash")
+    return results
+
+
+#: The entry type that records a cert's issuance, with its public key signed in.
+_CERT_ISSUED = "EPHEMERAL_CERT_ISSUED"
+
+
+def _harvest_cert_keys(
+    rows: list[DumpRow],
+    results: list[EntryVerificationResult],
+    registry: dict[str, bytes],
+) -> int:
+    """Add to ``registry`` the agent cert public keys a verified chain signs,
+    and return how many were new.
+
+    Each ``EPHEMERAL_CERT_ISSUED`` entry on the platform-ops chain signs its
+    cert's ``publicKeyJwk`` (engines from 1.8.0 on). Called only for a chain
+    that verified with no failure, its checkpoints included, and reads only
+    entries whose vault signature checked ``ok``, so every key taken is one the
+    engine signed and nobody changed since. The key is read from the signed
+    predicate, never the row copy, and filed under its own RFC 7638
+    thumbprint, which is how a sealed agent signature names its cert, so a key
+    can only ever check the signatures made under it. Mirrors
+    ``@agledger/verify``."""
+    added = 0
+    for row, result in zip(rows, results, strict=False):
+        if result.signature != "ok":
+            continue
+        cose = row.get("cose_sign1")
+        predicate = decode_cose_predicate(base64.b64decode(cose)) if isinstance(cose, str) else None
+        if predicate is None or predicate.get("entry_type") != _CERT_ISSUED:
+            continue
+        jwk = as_mapping(predicate.get("payload")).get("publicKeyJwk")
+        thumbprint = ed25519_jwk_thumbprint(jwk)
+        if thumbprint is None or thumbprint in registry:
+            continue
+        x = as_mapping(jwk).get("x")
+        if not isinstance(x, str):
+            continue
+        registry[thumbprint] = base64.urlsafe_b64decode(x + "=" * (-len(x) % 4))
+        added += 1
+    return added
 
 
 def _verify_vault_checkpoints(
@@ -360,7 +410,15 @@ def verify_vault_chains(
     chain walk re-verifies the sealed agent signatures whose cert thumbprint
     matches one. Anything that is not an Ed25519 JWK raises ``TypeError``."""
     failures: list[Failure] = []
-    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
+    # Caller keys first, then the cert keys each clean chain signs. A chain can
+    # only use keys harvested from chains closed before it; the producer sorts
+    # the platform-ops chain (the all-zero record id) first, so on a dump in
+    # producer order every record chain sees every cert key. Out of order, a
+    # signature simply goes unchecked, never misjudged.
+    agent_registry: dict[str, bytes] = (
+        dict(build_agent_key_registry(agent_keys)) if agent_keys is not None else {}
+    )
+    cert_keys_from_chain = 0
     agent_counts = AgentSignatureCounts()
     agent_check: list[CheckApplicability] = ["skipped_no_input"]
     applied: set[str] = set()
@@ -401,12 +459,22 @@ def verify_vault_chains(
         keys = _build_vault_key_registry(signing_keys)
     by_chain = _group_by_chain(entries)
 
+    checkpoints_by_chain: dict[str, list[DumpRow]] = {}
+    for cp in checkpoints:
+        checkpoints_by_chain.setdefault(_checkpoint_chain_key(cp), []).append(cp)
+
     for chain_key, rows in by_chain.items():
+        failures_before = len(failures)
         normalized = [_normalize_entry(e) for e in rows]
-        _collect_chain_failures(
+        results = _collect_chain_failures(
             chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied
         )
-    _verify_vault_checkpoints(by_chain, checkpoints, keys, failures)
+        _verify_vault_checkpoints(by_chain, checkpoints_by_chain.pop(chain_key, []), keys, failures)
+        if len(failures) == failures_before:
+            cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
+    # Checkpoints whose chain has no row left at all.
+    for orphaned in checkpoints_by_chain.values():
+        _verify_vault_checkpoints(by_chain, orphaned, keys, failures)
 
     return VaultChainsReport(
         record_count=len(by_chain),
@@ -415,6 +483,7 @@ def verify_vault_chains(
         failures=failures,
         agent_signatures_present=agent_counts.present,
         agent_signatures_verified=agent_counts.verified,
+        cert_keys_from_chain=cert_keys_from_chain,
         optional_checks=optional_checks_report(
             applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
         ),
@@ -450,6 +519,99 @@ def _detect_checkpoint_forks(checkpoints: list[DumpRow], failures: list[Failure]
             by_key[key] = cp
 
 
+@dataclass
+class _MustSign:
+    """Whether an earlier leaf in this org's log names a real signing key."""
+
+    signed_before: bool = False
+
+
+def _check_leaf_signature(
+    org_id: str,
+    leaf: DumpRow,
+    envelope: bytes,
+    keys: KeyCache,
+    must_sign: _MustSign,
+) -> Failure | None:
+    """Grade one read-log leaf's signature the way the engine does, after its
+    index and hash have been checked, or return None when it holds up.
+
+    The leaf has no signing-key column, so the envelope's signature-covered kid
+    is the only marker it has. The unsigned sentinel kid is reduced coverage
+    only before the install began signing and before any signed leaf in the
+    org's log (engine mirror: ``leaf_signature_missing``). Any other kid names
+    a key: it must be in the dumped registry and its signature must verify,
+    because otherwise a forger could name any kid and skip the unsigned rule.
+    ``must_sign.signed_before`` is set by any leaf naming a real key, whatever
+    its own verdict, as the engine's walk does. Mirrors ``@agledger/verify``.
+    """
+    at = f"Org {org_id} leaf {leaf.get('leaf_index')}"
+    leaf_index = _as_int(leaf.get("leaf_index"))
+    kid = decode_cose_kid(envelope)
+    if kid is None:
+        what = (
+            "carries no kid"
+            if decode_cose_parts(envelope) is not None
+            else "does not decode as a COSE_Sign1 envelope"
+        )
+        return Failure(
+            code="TENANT_READ_SIGNATURE_INVALID",
+            message=f"{at}: cose_sign1 {what}, so no signature can be attributed to it",
+            scope_id=org_id,
+            leaf_index=leaf_index,
+        )
+    if kid == UNSIGNED_KID_SENTINEL:
+        why: str | None = None
+        if must_sign.signed_before:
+            why = "follows a signed leaf in the same org log"
+        elif written_while_signing(leaf.get("read_at"), keys.signing_since):
+            why = (
+                f"was written {leaf.get('read_at')}, at or after the earliest signing key "
+                f"activation {keys.signing_since}"
+            )
+        if why is None:
+            return None
+        return Failure(
+            code="TENANT_READ_LEAF_UNSIGNED",
+            message=f"{at}: leaf is unsigned (kid {UNSIGNED_KID_SENTINEL}) but {why}",
+            scope_id=org_id,
+            leaf_index=leaf_index,
+        )
+    must_sign.signed_before = True
+    key = keys.entry(kid)
+    if key is None:
+        return Failure(
+            code="CHAIN_SIGNATURE_MISSING_KEY",
+            message=f'{at}: leaf kid "{kid}" not in dumped key registry',
+            scope_id=org_id,
+            leaf_index=leaf_index,
+            signing_key_id=kid,
+        )
+    # Fail closed on ANY non-ok outcome; an all-zero signature under a real kid
+    # is a wiped signature, as the engine grades it.
+    outcome = verify_cose_sign1(envelope, key)
+    if outcome == "ok":
+        return None
+    if outcome == "unsupported-key-algorithm":
+        return Failure(
+            code="CHAIN_UNSUPPORTED_ALGORITHM",
+            message=(
+                f"{at}: this leaf's signature could NOT BE CHECKED. "
+                f"{describe_unsupported_algorithm(kid, key.spki_base64)}"
+            ),
+            scope_id=org_id,
+            leaf_index=leaf_index,
+            signing_key_id=kid,
+        )
+    return Failure(
+        code="TENANT_READ_SIGNATURE_INVALID",
+        message=f"{at}: COSE_Sign1 signature does not verify ({outcome})",
+        scope_id=org_id,
+        leaf_index=leaf_index,
+        signing_key_id=kid,
+    )
+
+
 def _verify_one_org_admin_reads_log(
     org_id: str,
     leaves: list[DumpRow],
@@ -458,7 +620,7 @@ def _verify_one_org_admin_reads_log(
     failures: list[Failure],
 ) -> None:
     leaves.sort(key=lambda r: r.get("leaf_index", 0))
-    signed_before = False
+    must_sign = _MustSign()
 
     for i, leaf in enumerate(leaves):
         if leaf.get("leaf_index") != i:
@@ -490,36 +652,10 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return  # a tampered leaf stops the whole org
-        # A leaf the install wrote without a key carries the all-zero sentinel
-        # kid. Legitimate only before the org's log saw a signed leaf and
-        # before the install began signing (engine mirror:
-        # leaf_signature_missing).
-        kid = decode_cose_kid(envelope)
-        if kid == UNSIGNED_KID_SENTINEL:
-            read_at = leaf.get("read_at")
-            if signed_before or written_while_signing(read_at, keys.signing_since):
-                reason = (
-                    "follows a signed leaf in the same org's log"
-                    if signed_before
-                    else (
-                        f"was read {read_at}, at or after the earliest signing key "
-                        f"activation {keys.signing_since}"
-                    )
-                )
-                failures.append(
-                    Failure(
-                        code="TENANT_READ_LEAF_UNSIGNED",
-                        message=(
-                            f"Org {org_id} leaf {leaf.get('leaf_index')}: leaf is unsigned but "
-                            f"{reason}"
-                        ),
-                        scope_id=org_id,
-                        leaf_index=_as_int(leaf.get("leaf_index")),
-                    )
-                )
-                return  # an unsigned leaf where one cannot be stops the whole org
-        elif kid is not None:
-            signed_before = True
+        leaf_failure = _check_leaf_signature(org_id, leaf, envelope, keys, must_sign)
+        if leaf_failure is not None:
+            failures.append(leaf_failure)
+            return  # one finding per org, the first met in leaf order
 
     leaf_hashes = [str(leaf.get("leaf_hash")) for leaf in leaves]
 

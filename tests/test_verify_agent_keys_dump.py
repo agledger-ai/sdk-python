@@ -110,7 +110,7 @@ def test_cli_dump_with_agent_keys(capsys: pytest.CaptureFixture[str]):
 
 def test_cli_dump_text_says_which_signatures_were_checked(capsys: pytest.CaptureFixture[str]):
     _, out, _ = _run([DUMP, "--agent-keys", KEY_FILE], capsys)
-    assert "agent sigs  : present=12 verified=6 (checked; 6 not verified: no key supplied" in out
+    assert "agent sigs  : present=12 verified=6 (checked; 6 not verified: no key for their cert" in out
     _, out, _ = _run([DUMP], capsys)
     assert "agent sigs  : present=12 verified=0 (NOT checked" in out
 
