@@ -219,12 +219,13 @@ def _collect_chain_failures(
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,
 ) -> list[EntryVerificationResult]:
-    """Walk one chain group via the shared per-entry body and flatten any invalid
-    entry into a Failure; returns each entry's result, in chain order. The dump passes NO key-policy options (all dump keys
-    are embedded). previousHash advances even on a failed entry, matching the
-    export walk and verify-core. An entry with no signing key id after one that
-    names a key, or written at or after ``keys.signing_since``, fails
-    CHAIN_ENTRY_UNSIGNED."""
+    """Walk one chain group via the shared per-entry body, flatten any invalid
+    entry into a Failure, and return each entry's result in chain order.
+
+    The dump passes NO key-policy options (all dump keys are embedded).
+    previousHash advances even on a failed entry, matching the export walk and
+    verify-core. An entry with no signing key id after one that names a key, or
+    written at or after ``keys.signing_since``, fails CHAIN_ENTRY_UNSIGNED."""
     prev_payload_hash: str | None = None
     signed_before = False
     results: list[EntryVerificationResult] = []
