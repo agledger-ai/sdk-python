@@ -280,6 +280,53 @@ def test_a_refused_exchange_names_the_exchange_and_carries_the_recovery_hint():
 
 
 @respx.mock
+def test_an_agent_id_the_token_does_not_bind_is_a_403_carrying_the_binding_to_make():
+    """The body agentId is only an assertion: the token decides the agent, and
+    a different id is refused rather than bound."""
+    route = respx.post(EXCHANGE).mock(
+        return_value=httpx.Response(
+            403,
+            json={
+                "error": "CERT_AGENT_BINDING_MISMATCH",
+                "message": "The token binds a different agent than agentId names.",
+                "recoveryHint": "Bind the agent: PATCH /v1/agents/{id} with oidcIss/oidcSub.",
+            },
+        )
+    )
+    client = AgledgerClient(
+        bearer_token=oidc_cert_credential(
+            get_oidc_token=FakeIdp(), agent_id="11111111-1111-4111-8111-111111111111"
+        ),
+        base_url=BASE,
+    )
+    with pytest.raises(OidcCertExchangeError) as info:
+        client.request("GET", "/v1/auth/me")
+    err = info.value
+    assert json.loads(route.calls[0].request.content)["agentId"] == "11111111-1111-4111-8111-111111111111"
+    assert (err.status, err.code) == (403, "CERT_AGENT_BINDING_MISMATCH")
+    assert err.recovery_hint == "Bind the agent: PATCH /v1/agents/{id} with oidcIss/oidcSub."
+
+
+@respx.mock
+def test_a_scopes_claim_of_only_admin_scopes_is_a_422_naming_it_in_current_state():
+    respx.post(EXCHANGE).mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "error": "UNPROCESSABLE",
+                "message": "The scopes claim names only admin-only scopes.",
+                "currentState": "scope_claim_admin_only",
+                "recoveryHint": "Fix the IdP claim mapping.",
+            },
+        )
+    )
+    client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE)
+    with pytest.raises(OidcCertExchangeError) as info:
+        client.request("GET", "/v1/auth/me")
+    assert (info.value.status, info.value.current_state) == (422, "scope_claim_admin_only")
+
+
+@respx.mock
 def test_a_refused_exchange_never_carries_the_oidc_token():
     # The Server's 400 echoes the submitted input in details[].received, and an
     # exception is what gets logged. The token must not survive into it.

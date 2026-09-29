@@ -137,6 +137,17 @@ def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
         return {"message": response.text or f"HTTP {response.status_code}"}
 
 
+def _str_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _str_list_or_none(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    items = cast("list[object]", value)
+    return [item for item in items if isinstance(item, str)]
+
+
 def build_error(response: httpx.Response) -> APIError:
     body = _parse_error_body(response)
     status = response.status_code
@@ -166,6 +177,10 @@ def build_error(response: httpx.Response) -> APIError:
         # that blocks the delete under every label.
         "pinned_records": body.get("pinnedRecords"),
         "unattributable_records": body.get("unattributableRecords"),
+        "reason": _str_or_none(body.get("reason")),
+        "current_state": _str_or_none(body.get("currentState")),
+        "allowed_actions": _str_list_or_none(body.get("allowedActions")),
+        "existing_id": _str_or_none(body.get("existingId")),
     }
 
     if cls is PermissionDeniedError:

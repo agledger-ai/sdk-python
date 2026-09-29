@@ -170,3 +170,47 @@ def test_non_json_error_response():
     with pytest.raises(APIError) as exc_info:
         client.records.get("x")
     assert exc_info.value.status == 500
+
+
+@respx.mock
+def test_a_409_carries_the_row_it_collided_with_and_its_reason():
+    """``existingId`` names the row a 409 TRUSTED_ISSUER_EXISTS collided with,
+    so the caller can read or PATCH it instead of creating another."""
+    respx.post("https://agledger.example.com/v1/admin/trusted-issuers").mock(
+        return_value=httpx.Response(
+            409,
+            json={
+                "error": "CONFLICT",
+                "message": "A trusted issuer already holds this key.",
+                "reason": "TRUSTED_ISSUER_EXISTS",
+                "existingId": "22222222-2222-4222-8222-222222222222",
+            },
+        )
+    )
+    client = AgledgerClient(api_key="agl_plt_test", base_url="https://agledger.example.com")
+    with pytest.raises(APIError) as info:
+        client.request("POST", "/v1/admin/trusted-issuers", json={})
+    assert info.value.reason == "TRUSTED_ISSUER_EXISTS"
+    assert info.value.existing_id == "22222222-2222-4222-8222-222222222222"
+
+
+@respx.mock
+def test_a_422_carries_current_state_and_allowed_actions():
+    respx.post("https://agledger.example.com/v1/records/r/transition").mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "error": "INVALID_ACTION",
+                "message": "Not in this state.",
+                "currentState": "ACTIVE",
+                "allowedActions": ["cancel", "submit-completion"],
+            },
+        )
+    )
+    client = AgledgerClient(api_key="agl_agt_test", base_url="https://agledger.example.com")
+    with pytest.raises(UnprocessableError) as info:
+        client.request("POST", "/v1/records/r/transition", json={"action": "activate"})
+    assert info.value.current_state == "ACTIVE"
+    assert info.value.allowed_actions == ["cancel", "submit-completion"]
+    assert info.value.existing_id is None
+    assert info.value.reason is None

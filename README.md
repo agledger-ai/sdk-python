@@ -127,10 +127,14 @@ Once the certificate has expired, an unchanged token raises
 `OidcCertExchangeError` saying the token source must mint a new token. If your
 platform rotates the file less often than the certificate lifetime, have the
 function request a fresh token from your provider instead.
-`agent_id=` binds the certificate to a named agent; without it the Server binds
-from the token or, if the issuer allows it, creates the agent. A refused
-exchange raises `OidcCertExchangeError` carrying the Server's `recovery_hint`,
-with the token scrubbed out. `AsyncAgledgerClient` takes
+The token decides which agent the certificate binds to: the trusted issuer's
+`claimMapping.agent_id`, or the agent carrying the token's `oidcIss`/`oidcSub`
+(set with `client.agents.update(agent_id, oidc_iss=..., oidc_sub=...)` or in
+provisioning), or, if the issuer allows it, a newly created agent. `agent_id=`
+is only an assertion: when it names a different agent, or the token binds to
+none, the exchange raises `OidcCertExchangeError` (403
+`CERT_AGENT_BINDING_MISMATCH`). A refused exchange carries the Server's
+`recovery_hint`, with the token scrubbed out. `AsyncAgledgerClient` takes
 `async_oidc_cert_credential`, whose token function may be a coroutine.
 
 To verify an agent's own signatures offline later, keep `credential.public_key_jwk`
