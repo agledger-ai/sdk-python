@@ -4,6 +4,36 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] - 2026-09-28
+
+Reconciled against the AGLedger API release candidate at `cea0f7d5` (reports 1.8.0). Several of its changes alter wire shapes this SDK sends, so two method signatures change; see Changed.
+
+### Added
+
+- **`view="compact"` on `records.get()`, `records.list()` and `records.search()`**, sync and async. The compact view leaves out every top-level field whose value is null and trims each `nextSteps` entry to `action`, `method` and `href`, on the rows and on the list envelope. It returns the new `RecordRowCompact` (single read) or `RecordRowCompactPage` (list and search), whose steps are `NextStepCompact`; overloads give each view its own static type. `records.list()` also takes `offset`.
+- **`APIError.reason`, `current_state`, `allowed_actions` and `existing_id`**, forwarded from the error body. `existing_id` names the row a 409 `TRUSTED_ISSUER_EXISTS` collided with; the cert exchange names its 422 `scope_claim_admin_only` precondition in `current_state`.
+- **`ComplianceExport.format`**: the format an export was created in, which `download_url` serves.
+- **`Scopes.DISPUTES_WRITE`** (`disputes:write`), which opening, evidencing, withdrawing and resolving a dispute now require.
+- **Unsigned rows are graded as the engine grades them.** An entry with no `signingKeyId` is reduced coverage only from before the install began signing. After an entry in the same chain that names a key, or written at or after the earliest `activatedAt` across the key set (retired keys included), it fails the new `CHAIN_ENTRY_UNSIGNED`. On a dump the same instant applies to vault checkpoints (`CHECKPOINT_UNSIGNED`), to read-log leaves carrying the unsigned sentinel kid (`TENANT_READ_LEAF_UNSIGNED`, also after a signed leaf in the org's log) and to read-log tree heads (`TENANT_CHECKPOINT_UNSIGNED`). The grading runs after every structural check and ahead of the caller's key policy. `earliest_key_activation` and `written_while_signing` are exported from `agledger.verify`.
+- **A full dump re-verifies agent signatures from the cert keys it signs itself.** Each `EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its cert's `publicKeyJwk`; the dump verifier takes those keys from a chain it verified clean, checkpoints included, and only from entries whose vault signature checked, and uses them beside any `agent_keys`. `VaultChainsReport.cert_keys_from_chain` counts them. An org-scoped dump leaves that chain out and still needs `agent_keys`.
+- **Conformance corpus regenerated from the engine at `cea0f7d5`**, where the unsigned pass vector is written before any signing key is registered. The vector set is unchanged, and every vector keeps its verdict and code.
+
+### Changed
+
+- **`federation_admin.create_peering_token()` takes `peer_hub_id` and `bound_org_id`, both required, and `label` is now optional.** The Server binds a peering token at mint to the one hub id it admits and the local org that peer's records project into, and refuses a mint without them.
+- **`federation.peer_handshake()` no longer takes `bound_org_id`.** The org comes from the token, and the Server refuses the field with a 400. A bad token is now a 401 (was 422), checked before anything else; a `peer_hub_id` other than the one the token was minted for is a 422 and leaves the token unconsumed.
+- **The OIDC credential's `agent_id` is an assertion, not a choice.** The token decides which agent a cert binds to; a body `agentId` that differs, or one sent with a token that binds no agent, is refused with 403 `CERT_AGENT_BINDING_MISMATCH`, whose `recovery_hint` names the binding to make.
+- **Scope profiles follow the Server's:** `agent-full` and `admin-standard` gain `disputes:write`, and `admin-iac` gains `schemas:read` so a pipeline that registers a type can dry-run a completion against it.
+- **An all-zero signature on an entry that names a key fails `CHAIN_SIGNATURE_INVALID`**, with or without a key policy, as the engine grades it. It was graded unsigned and passed without one.
+- **Out-of-band keys passed as a list carry their `activatedAt` / `retiredAt`**, which outrank the export's window for that key, as in `@agledger/verify-core`. Key-window times compare at millisecond resolution, and a time without an offset reads as UTC instead of raising.
+- `AuditChainIntegrityReasonCode` names `signature_missing` and `checkpoint_unsigned`, and `AuditChainFailureCode` names `signature_missing`.
+- `relay_signal()` documents that the receiver ignores `reason` and refuses an un-counter-signed signal where co-sign is required; `SettlementSignalSummary.reason` is None on an inbound signal.
+
+### Fixed
+
+- **A record received from a federation peer parses.** `RecordRow.federation_status` was a closed four-value `Literal`, and the Server sends `inbound` on every federation-received record, so reading one raised a `ValidationError`. It names `inbound` and stays open with `| str`.
+- **A read-log leaf's signature is verified.** The dump verifier checked a leaf's hash and index only. A leaf that names a key must now name one in the dumped registry (`CHAIN_SIGNATURE_MISSING_KEY`) and carry a signature that verifies under it (`TENANT_READ_SIGNATURE_INVALID`, also for a zeroed signature or an envelope that does not decode).
+
 ## [1.12.0] - 2026-09-21
 
 ### Fixed
