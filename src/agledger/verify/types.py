@@ -71,6 +71,13 @@ class VaultChainsReport:
     """Of those, the ones re-checked against a key passed as ``agent_keys`` and
     found good. ``present > verified`` on a clean report means some were not
     checked (no key for their cert, or a caller-asserted identity)."""
+    cert_keys_from_chain: int = 0
+    """Agent cert public keys taken from the dump itself: the ``publicKeyJwk``
+    each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
+    counted once per key and only from a chain that verified clean. Used
+    beside any ``agent_keys`` the caller passed. Zero on an org-scoped dump,
+    which leaves that chain out, and for certs an engine older than 1.8.0
+    issued."""
     optional_checks: dict[str, Literal["applied", "skipped_no_input"]] = field(
         default_factory=lambda: dict.fromkeys(
             (
@@ -99,6 +106,7 @@ class VaultChainsReport:
                 "present": self.agent_signatures_present,
                 "verified": self.agent_signatures_verified,
             },
+            "certKeysFromChain": self.cert_keys_from_chain,
         }
 
 
