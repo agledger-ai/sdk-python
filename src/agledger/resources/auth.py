@@ -24,9 +24,13 @@ class AuthResource:
     def rotate_key(self, *, grace_period_seconds: int | None = None) -> dict[str, Any]:
         """Rotate the current API key.
 
-        The old key is revoked immediately unless ``grace_period_seconds`` is given
-, which keeps it valid for an overlap window so in-flight callers
+        The old key is revoked immediately unless ``grace_period_seconds`` is
+        given, which keeps it valid for an overlap window so in-flight callers
         can swap without a hard cutover.
+
+        The result carries the new key's ``keyId`` (the id the admin API-key
+        routes take) and ``scopeProfile``, the profile carried over from the
+        rotated key, or None where its scopes were named explicitly.
         """
         body = {"gracePeriodSeconds": grace_period_seconds} if grace_period_seconds is not None else None
         return self._http.post("/v1/auth/keys/rotate", json=body)
@@ -41,7 +45,13 @@ class AuthResource:
     ) -> dict[str, Any]:
         """Exchange an OIDC token for a short-lived ephemeral signing cert bound
         to a caller-supplied public key. The issuer must be registered as a
-        trusted issuer (``admin.trusted_issuers.create``)."""
+        trusted issuer (``admin.trusted_issuers.create``).
+
+        The token decides the agent the cert binds to: a mapped ``agent_id``
+        claim on the trusted issuer, else the agent carrying the token's
+        ``oidcIss``/``oidcSub``. ``agent_id`` never chooses one. It is an
+        assertion: when sent it must equal that agent, or the exchange is
+        refused with 403 ``CERT_AGENT_BINDING_MISMATCH``."""
         body: dict[str, Any] = {
             "oidcToken": oidc_token,
             "publicKeyJwk": public_key_jwk,
@@ -79,7 +89,13 @@ class AsyncAuthResource:
     ) -> dict[str, Any]:
         """Exchange an OIDC token for a short-lived ephemeral signing cert bound
         to a caller-supplied public key. The issuer must be registered as a
-        trusted issuer (``admin.trusted_issuers.create``)."""
+        trusted issuer (``admin.trusted_issuers.create``).
+
+        The token decides the agent the cert binds to: a mapped ``agent_id``
+        claim on the trusted issuer, else the agent carrying the token's
+        ``oidcIss``/``oidcSub``. ``agent_id`` never chooses one. It is an
+        assertion: when sent it must equal that agent, or the exchange is
+        refused with 403 ``CERT_AGENT_BINDING_MISMATCH``."""
         body: dict[str, Any] = {
             "oidcToken": oidc_token,
             "publicKeyJwk": public_key_jwk,

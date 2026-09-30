@@ -210,7 +210,7 @@ def test_webhook_says_when_provisioning_manages_it_and_delete_is_a_conflict():
         "createdAt": "2026-09-01T00:00:00Z", "managedBy": "provisioning",
     }))
     respx.delete(f"{BASE}/v1/webhooks/wh-1").mock(return_value=httpx.Response(409, json={
-        "message": "Provisioning-managed", "code": "CONFLICT",
+        "detail": "Provisioning-managed", "error": "CONFLICT",
         "recoveryHint": "Remove it from the provisioning config and reload.",
     }))
     client = _client()
@@ -223,7 +223,7 @@ def test_webhook_says_when_provisioning_manages_it_and_delete_is_a_conflict():
 @respx.mock
 def test_rotate_key_422_is_an_unprocessable_error():
     respx.post(f"{BASE}/v1/auth/keys/rotate").mock(
-        return_value=httpx.Response(422, json={"message": "cannot rotate", "code": "INVALID_STATE"})
+        return_value=httpx.Response(422, json={"detail": "cannot rotate", "error": "INVALID_STATE"})
     )
     with pytest.raises(UnprocessableError):
         _client().auth.rotate_key()
@@ -379,8 +379,9 @@ def test_verification_keys_carry_the_envelope_and_per_key_verifier_floor():
         "data": [{
             "keyId": "4b2f0b6374460c76", "algorithm": "Ed25519", "publicKey": "MCow", "publicKeyRaw": "raw",
             "status": "active", "activatedAt": "2026-09-18T06:29:52.325Z", "retiredAt": None,
-            "coseAlgorithm": -8, "minVerifierVersion": "1.0.0",
+            "coseAlgorithm": -8, "minVerifierVersion": "1.0.0", "statements": [],
         }],
+        "anchoredFrom": None, "keyStatementFormat": "application/vnd.agledger.key-statement+cbor",
         "envelope": "COSE_Sign1", "payloadFormat": "application/vnd.in-toto+cbor",
         "canonicalization": "RFC8949-CDE", "coseAlgorithm": -8, "signatureAlgorithm": "Ed25519",
         "signatureInputTemplate": "Sig_structure = ...",

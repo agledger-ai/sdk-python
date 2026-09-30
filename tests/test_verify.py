@@ -450,6 +450,7 @@ def test_oob_keys_accepts_pydantic_models() -> None:
             "status": "active",
             "activatedAt": "2026-01-01T00:00:00Z",
             "retiredAt": None,
+            "statements": [],
         })
     ]
     result = verify_export(exp, public_keys=models)
