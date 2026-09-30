@@ -26,10 +26,15 @@ EXPORT = str(LIVE / "export-cert-lifecycle.json")
 KEY_FILE = str(LIVE / "agent-cert-key.json")
 KEY_ENTRY: dict[str, Any] = json.loads((LIVE / "agent-cert-key.json").read_text())
 JWK: dict[str, str] = KEY_ENTRY["publicKeyJwk"]
-ALL_APPLIED = dict.fromkeys(
-    ("payload_binding", "oidc_actor", "actor_attribution", "key_temporal", "agent_signature"),
-    "applied",
-)
+# A 1.8.0 artifact carries no key statements, so without trust anchors key
+# anchoring does not run, and says so.
+ALL_APPLIED = {
+    **dict.fromkeys(
+        ("payload_binding", "oidc_actor", "actor_attribution", "key_temporal", "agent_signature"),
+        "applied",
+    ),
+    "key_anchoring": "skipped_no_input",
+}
 
 
 def _other_jwk() -> dict[str, str]:

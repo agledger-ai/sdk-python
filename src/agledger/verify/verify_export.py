@@ -26,7 +26,11 @@ runs the input-gated checks whenever the export carries their inputs (engine
 >= v0.26.x): binding-integrity on the row ``payload``, the OIDC-actor
 cross-check on ``actorOidc*``, and temporal key-validity on
 ``signingKeyWindows``. The agent-signature re-check runs when the caller passes
-``agent_keys``. ``VerifyExportResult.optional_checks`` says which ran.
+``agent_keys``, and key anchoring when the caller passes ``trust_anchors``: the
+signed key statements the export carries are walked from them
+(:mod:`agledger.verify.key_statements`), and an entry under a key the walk does
+not anchor fails CHAIN_SIGNING_KEY_UNANCHORED. ``VerifyExportResult.optional_checks``
+says which ran, and ``VerifyExportResult.key_trust`` what the walk concluded.
 
 This is an independent re-implementation of the shared TS verification core
 (``@agledger/verify-core``); it emits the SAME canonical SCREAMING_SNAKE
@@ -41,10 +45,11 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import io
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -52,6 +57,19 @@ from pydantic import BaseModel
 
 from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 from agledger.verify.failures import FailureCode
+from agledger.verify.key_statements import (
+    DistrustedKey,
+    KeyStatementInput,
+    KeyTrust,
+    KeyTrustReport,
+    KeyTrustState,
+    TrustKeyInput,
+    compute_key_trust,
+    key_statements_from_export,
+    no_anchor_report,
+    report_key_trust,
+    spki_sha256,
+)
 
 try:
     import cbor2 as _cbor2
@@ -107,10 +125,14 @@ SignatureOutcome = Literal[
     "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail", "unsupported"
 ]
 
-#: Provenance of a verification key: ``out-of-band`` (caller-supplied from a
-#: trusted source) or ``embedded`` (shipped inside the export the engine
-#: produced). Mirrors ``@agledger/verify-core``'s ``KeySource``.
-KeySource = Literal["out-of-band", "embedded"]
+#: Where a verification key came from: ``supplied`` (the caller passed it, from
+#: ``GET /v1/verification-keys``, ``/.well-known/scitt-keys`` or its own
+#: records) or ``embedded`` (shipped inside the artifact under verification).
+#: Neither says the key is trusted: a key the Server serves comes from its
+#: database, which is what a key-registry attacker writes to. Trust comes from
+#: walking the signed key statements from ``trust_anchors``. Mirrors
+#: ``@agledger/verify-core``'s ``KeySource``.
+KeySource = Literal["supplied", "embedded"]
 
 _SUPPORTED_FORMAT_VERSION = "2.0"
 _SUPPORTED_CANONICALIZATION = "RFC8949-CDE"
@@ -172,13 +194,13 @@ class SignatureCoverage:
 
 @dataclass
 class KeyProvenance:
-    """How many signature checks resolved against out-of-band vs embedded keys.
+    """How many signature checks resolved against supplied vs embedded keys.
 
-    ``embedded > 0`` means the verdict trusts keys shipped by the engine that
-    produced the export; supply out-of-band keys for an independent audit.
+    Provenance only: whether a key is trusted is ``key_trust``, which
+    ``trust_anchors`` decides.
     """
 
-    out_of_band: int = 0
+    supplied: int = 0
     embedded: int = 0
 
 
@@ -192,6 +214,7 @@ OPTIONAL_CHECKS = (
     "actor_attribution",
     "key_temporal",
     "agent_signature",
+    "key_anchoring",
 )
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
@@ -232,10 +255,18 @@ class VerifyExportResult:
     #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
     agent_signature_check: CheckApplicability = "skipped_no_input"
     #: Which input-gated checks ran on this export: ``payload_binding``,
-    #: ``oidc_actor``, ``key_temporal`` and ``agent_signature``. Mirrors
-    #: ``optionalChecks`` in ``@agledger/verify-core``, so a caller never
-    #: mistakes "not checked here" for "checked and passed".
+    #: ``oidc_actor``, ``actor_attribution``, ``key_temporal``,
+    #: ``agent_signature`` and ``key_anchoring``. Mirrors ``optionalChecks`` in
+    #: ``@agledger/verify-core``, so a caller never mistakes "not checked here"
+    #: for "checked and passed".
     optional_checks: dict[str, CheckApplicability] = field(default_factory=lambda: dict(_NO_OPTIONAL_CHECKS))
+    #: Whether the keys were anchored, and to what. ``status == "no_anchor"``
+    #: means no ``trust_anchors`` were given: the verdict then rests on keys
+    #: nobody pinned, which is not a clean verdict whatever ``valid`` says.
+    #: Findings on the key statements themselves (KEY_STATEMENT_INVALID,
+    #: KEY_CLOSURE_INVALID, CHAIN_KEY_WINDOW_DRIFT) are listed here and make
+    #: ``valid`` false. Mirrors ``keyTrust`` in ``@agledger/verify-core``.
+    key_trust: KeyTrustReport = field(default_factory=no_anchor_report)
 
 
 def verify_export(
@@ -243,28 +274,31 @@ def verify_export(
     *,
     public_keys: Mapping[str, str] | Sequence[Any] | None = None,
     require_key_id: str | None = None,
-    require_out_of_band_keys: bool = False,
+    require_supplied_keys: bool = False,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    trust_anchors: str | Sequence[str] | None = None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
 ) -> VerifyExportResult:
     """Verify a record audit export offline.
 
     :param export_data: Parsed export. Accepts either a raw ``dict`` (parsed
         JSON) or the typed ``RecordAuditExport`` Pydantic model returned by
         ``client.records.get_audit_export()``.
-    :param public_keys: Optional out-of-band keys supplied from a trusted source
-        (``GET /v1/verification-keys``, ``/.well-known/scitt-keys``). These
-        override any key embedded in the export. For a real independent audit,
-        supply keys here rather than trusting the export's own
-        ``signingPublicKeys``. Accepts either form: pass the ``.data`` list
-        from ``client.verification_keys.list()`` directly, or a compact
-        ``{keyId: base64SpkiDer}`` mapping. The wrong shape raises ``TypeError``
-        rather than silently falling back to embedded keys.
+    :param public_keys: Keys the caller supplies (``GET /v1/verification-keys``,
+        ``/.well-known/scitt-keys``, its own records). They override any key
+        embedded in the export under the same id. A key the Server serves
+        comes from its database, so supplying keys says where they came from,
+        not that they are trusted: pin ``trust_anchors`` for that. Accepts
+        either form: pass the ``.data`` list from
+        ``client.verification_keys.list()`` directly (each entry's
+        ``statements`` are walked with the export's own), or a compact
+        ``{keyId: base64SpkiDer}`` mapping. The wrong shape raises
+        ``TypeError`` rather than silently falling back to embedded keys.
     :param require_key_id: If set, every entry must reference this keyId
         (else :data:`CHAIN_KEY_POLICY_VIOLATION`).
-    :param require_out_of_band_keys: High-assurance auditor mode. An entry whose
-        only available key is export-embedded fails
-        :data:`CHAIN_KEY_POLICY_VIOLATION`; verifying the engine against its own
-        embedded key is not an independent audit.
+    :param require_supplied_keys: Refuse keys embedded in the export: an entry
+        whose only key is export-embedded fails
+        :data:`CHAIN_KEY_POLICY_VIOLATION`.
     :param agent_keys: Ed25519 public keys of agent ephemeral certs, as JWKs
         (``{"kty": "OKP", "crv": "Ed25519", "x": ...}``): the ``publicKeyJwk``
         the agent sent to ``POST /v1/auth/oidc/cert``, which is also the
@@ -279,19 +313,35 @@ def verify_export(
         the RFC 7638 thumbprint the entry signed, so where a key came from
         does not need to be trusted. Anything that is not an Ed25519 JWK
         raises ``TypeError``.
+    :param trust_anchors: SPKI digests (``sha256:<64 hex>``, as a list or a
+        comma list) of vault keys pinned out of band: the installer prints
+        one, and the Server's ``signing-key-digest.js`` derives it from a key.
+        With at least one, the signed key statements the export carries
+        (``exportMetadata.signingKeyStatements``, plus any ``statements`` on
+        supplied keys) are walked from these anchors, every key is graded
+        anchored or not, an entry signed by a key the walk does not anchor
+        fails :data:`CHAIN_SIGNING_KEY_UNANCHORED`, and each anchored key's
+        window is the one its statements sign. Without anchors the result says
+        so in ``key_trust`` and ``optional_checks["key_anchoring"]``, and every
+        key is taken on the word of whoever embedded or supplied it. A
+        malformed entry raises ``TypeError``.
+    :param distrusted_keys: Keys distrusted from outside the database, in the
+        Server's ``VAULT_DISTRUSTED_KEYS`` form (``sha256:<64 hex>``,
+        optionally ``@<RFC 3339 instant>``, as a list or a comma list, or
+        :class:`~agledger.verify.key_statements.DistrustedKey` values): what
+        such a key stored at or after the instant (with none, from the
+        retirement a trusted key signed for it, and with neither, ever) counts
+        for nothing in the walk. Used only with ``trust_anchors``.
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
-        signature-coverage discriminator, a key-provenance tally, and the agent
-        signatures present and verified.
+        signature-coverage discriminator, a key-provenance tally, the agent
+        signatures present and verified, and the key-trust report.
     """
     if isinstance(export_data, BaseModel):
         export_data = export_data.model_dump(by_alias=True)
 
-    meta = export_data.get("exportMetadata", {})
+    meta = as_mapping(export_data.get("exportMetadata"))
     entries: list[Mapping[str, Any]] = export_data.get("entries", []) or []
     record_id = str(meta.get("recordId", ""))
-    overrides = _normalize_oob_keys(public_keys)
-    registry = _build_key_registry(meta, overrides)
-    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
     coverage = SignatureCoverage(total=len(entries))
 
     fmt_version = meta.get("exportFormatVersion")
@@ -310,6 +360,34 @@ def verify_export(
         )
         return _early_failure(record_id, len(entries), detail, coverage)
 
+    supplied = _normalize_supplied_keys(public_keys)
+    registry = _build_key_registry(meta, supplied)
+    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
+    trust: KeyTrust | None = None
+    if trust_anchors is not None and len(trust_anchors) > 0:
+        trust = compute_key_trust(
+            keys=_trust_keys_of(meta, supplied),
+            statements=_trust_statements_of(meta, supplied),
+            trust_anchors=trust_anchors,
+            distrusted_keys=distrusted_keys,
+        )
+        registry = apply_key_trust(registry, trust)
+        # When the install began signing, for CHAIN_ENTRY_UNSIGNED, is taken
+        # from the keys held and the windows the export lists. Those windows
+        # are unsigned, and deleting them would move the instant later or clear
+        # it, so every activation an anchored key's statements sign is taken as
+        # well: the earliest of all of them stands, and neither source can make
+        # the rule looser than the other.
+        signed = [{"activatedAt": e.activated_at} for e in trust.by_digest.values() if e.trusted]
+        registry = KeyCache(
+            dict(registry.items()),
+            signing_since=earliest_key_activation([{"activatedAt": registry.signing_since}, *signed]),
+        )
+    anchored_from = meta.get("anchoredFrom")
+    key_trust = report_key_trust(
+        registry.trust_states(), trust, anchored_from if isinstance(anchored_from, str) else None
+    )
+
     if len(entries) == 0:
         return VerifyExportResult(
             valid=False,
@@ -319,6 +397,7 @@ def verify_export(
             entries=[],
             broken_at=BrokenAt(position=0, code="CHAIN_EMPTY", detail="No entries to verify."),
             signature_coverage=coverage,
+            key_trust=key_trust,
         )
 
     # Sort by chain position before the walk so a reordered export array still
@@ -343,7 +422,7 @@ def verify_export(
             prev_payload_hash,
             registry,
             require_key_id,
-            require_out_of_band_keys,
+            require_supplied_keys,
             applied,
             signed_before=signed_before,
         )
@@ -360,8 +439,8 @@ def verify_export(
             broken_at = BrokenAt(position=result.position, code=result.code, detail=result.detail)
         if result.signature == "ok":
             coverage.signed += 1
-            if result.key_source == "out-of-band":
-                provenance.out_of_band += 1
+            if result.key_source == "supplied":
+                provenance.supplied += 1
             elif result.key_source == "embedded":
                 provenance.embedded += 1
         elif result.signature == "unsigned":
@@ -370,8 +449,14 @@ def verify_export(
             coverage.skipped += 1
         prev_payload_hash = as_mapping(entry.get("integrity")).get("payloadHash")
 
+    # A finding on the key statements has no chain position; it is reported at
+    # position 0, the place for findings that precede the walk.
+    if broken_at is None and key_trust.findings:
+        first = key_trust.findings[0]
+        broken_at = BrokenAt(position=0, code=first.code, detail=first.detail)
+
     return VerifyExportResult(
-        valid=(verified == len(sorted_entries)),
+        valid=verified == len(sorted_entries) and not key_trust.findings,
         total_entries=len(sorted_entries),
         verified_entries=verified,
         record_id=record_id,
@@ -384,6 +469,7 @@ def verify_export(
         optional_checks=optional_checks_report(
             applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
         ),
+        key_trust=key_trust,
     )
 
 
@@ -431,6 +517,10 @@ class RegisteredKey:
     #: commits to; a divergence fails CHAIN_ALG_MISMATCH. The declared string
     #: never selects the verification code path.
     algorithm: str | None = None
+    #: The key-statement walk's verdict on this key (see :func:`apply_key_trust`).
+    #: ``None`` when no walk ran (no ``trust_anchors``), and the result then
+    #: reports ``optional_checks["key_anchoring"] == "skipped_no_input"``.
+    trust: KeyTrustState | None = None
 
 
 @dataclass(frozen=True)
@@ -562,7 +652,7 @@ def _describe_runtime_refusal(key_id: str, key_alg: KeyAlgorithm) -> str:
 
 
 @dataclass(frozen=True)
-class _OobKey:
+class _SuppliedKey:
     """One caller-supplied key, with the activation window it brought, if any."""
 
     spki_base64: str
@@ -572,12 +662,16 @@ class _OobKey:
     #: a ``retiredAt`` that is a string or an explicit null). Such a window
     #: outranks the export's ``signingKeyWindows`` entry for the key.
     carries_window: bool = False
+    #: The key's signed statements, as ``/v1/verification-keys`` lists them
+    #: (entries of the list form only). Walked with the export's own when
+    #: ``trust_anchors`` is given. ``None`` when the entry carries none.
+    statements: list[object] | None = None
 
 
-def _oob_window(item: object) -> tuple[str | None, str | None, bool]:
+def _supplied_window(item: object) -> tuple[str | None, str | None, bool]:
     """The ``(activated_at, retired_at, carries_window)`` a caller-supplied key
     entry brings, read the way verify-core reads ``activatedAt`` /
-    ``retiredAt`` off an out-of-band key: an activation counts only as a
+    ``retiredAt`` off a supplied key: an activation counts only as a
     string, a retirement as a string or an explicit null."""
     activated: object
     retired: object
@@ -608,14 +702,14 @@ def _oob_window(item: object) -> tuple[str | None, str | None, bool]:
     return activated_at, retired_at, carries
 
 
-def _normalize_oob_keys(
+def _normalize_supplied_keys(
     public_keys: Mapping[str, Any] | Sequence[Any] | None,
-) -> dict[str, _OobKey] | None:
+) -> dict[str, _SuppliedKey] | None:
     """Normalize ``public_keys`` into ``{keyId: key}``, or raise ``TypeError``
     at the boundary if the shape is wrong.
 
-    Fail-closed by design: an OOB-key argument that silently falls back to
-    embedded keys would lie about the audit-independence claim.
+    Fail-closed by design: a key argument that silently falls back to
+    embedded keys would lie about which keys the verdict rests on.
 
     Accepts:
       - ``Mapping[str, str]``: compact ``{keyId: base64SpkiDer}`` form, which
@@ -629,7 +723,7 @@ def _normalize_oob_keys(
         return None
 
     if isinstance(public_keys, Mapping):
-        out: dict[str, _OobKey] = {}
+        out: dict[str, _SuppliedKey] = {}
         for k, v in public_keys.items():
             if not isinstance(v, str):
                 raise TypeError(
@@ -638,7 +732,7 @@ def _normalize_oob_keys(
                     f"client.verification_keys.list(), pass it as the list: not "
                     f"a dict built from it."
                 )
-            out[str(k)] = _OobKey(spki_base64=v)
+            out[str(k)] = _SuppliedKey(spki_base64=v)
         return out
 
     if isinstance(public_keys, (str, bytes, bytearray)):
@@ -689,24 +783,29 @@ def _normalize_oob_keys(
                 f"Empty fields are a structural error; fix the upstream "
                 f"serializer rather than pass the empty value through."
             )
-        activated_at, retired_at, carries = _oob_window(cast(object, item))
-        out[key_id] = _OobKey(
+        activated_at, retired_at, carries = _supplied_window(cast(object, item))
+        if isinstance(item, Mapping):
+            statements: object = cast("Mapping[str, Any]", item).get("statements")
+        else:
+            statements = getattr(item, "statements", None)
+        out[key_id] = _SuppliedKey(
             spki_base64=material,
             activated_at=activated_at,
             retired_at=retired_at,
             carries_window=carries,
+            statements=list(cast("Sequence[object]", statements)) if isinstance(statements, (list, tuple)) else None,
         )
     return out
 
 
 def _build_key_registry(
     meta: Mapping[str, Any],
-    overrides: Mapping[str, _OobKey] | None,
+    overrides: Mapping[str, _SuppliedKey] | None,
 ) -> KeyCache:
     """Build the keyId → key registry, tagging each key's provenance.
 
-    Embedded keys come from the export's ``signingPublicKeys``; out-of-band keys
-    are caller-supplied and OVERRIDE embedded keys of the same id.
+    Embedded keys come from the export's ``signingPublicKeys``; supplied keys
+    come from the caller and OVERRIDE embedded keys of the same id.
     """
     keys: dict[str, RegisteredKey] = {}
     embedded = meta.get("signingPublicKeys")
@@ -715,22 +814,22 @@ def _build_key_registry(
             keys[str(k)] = RegisteredKey(spki_base64=str(v), source="embedded")
     caller_windowed: set[str] = set()
     if overrides:
-        for k, oob in overrides.items():
+        for k, key in overrides.items():
             keys[str(k)] = RegisteredKey(
-                spki_base64=oob.spki_base64,
-                source="out-of-band",
-                activated_at=oob.activated_at,
-                retired_at=oob.retired_at,
+                spki_base64=key.spki_base64,
+                source="supplied",
+                activated_at=key.activated_at,
+                retired_at=key.retired_at,
             )
-            if oob.carries_window:
+            if key.carries_window:
                 caller_windowed.add(str(k))
     # Activation/retirement windows from exportMetadata (engine >= v0.26.x)
-    # enable the temporal key-validity check on the export path. An
-    # out-of-band key that brought its own window keeps it: the export is the
-    # untrusted side, and letting it overwrite the caller's window would let a
-    # compromised export hide a retirement. An out-of-band key without one
-    # takes the export's, as verify-core does. Older exports omit the map and
-    # the check stays skipped_no_input.
+    # enable the temporal key-validity check on the export path. A supplied
+    # key that brought its own window keeps it: the export is the untrusted
+    # side, and letting it overwrite the caller's window would let a
+    # compromised export hide a retirement. A supplied key without one takes
+    # the export's, as verify-core does. With trust_anchors, an anchored key's
+    # window is the one its statements sign, whichever of these it carried.
     windows = meta.get("signingKeyWindows")
     window_only: list[Mapping[str, Any]] = []
     if isinstance(windows, Mapping):
@@ -758,6 +857,71 @@ def _build_key_registry(
     return KeyCache(keys, signing_since=signing_since)
 
 
+def _trust_keys_of(meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey] | None) -> list[TrustKeyInput]:
+    """The keys the walk reads: the export's own, with the windows it lists as
+    the columns the drift check holds against the signed values, and the
+    supplied keys as key material only (the caller's catalogue is not the
+    artifact)."""
+    out: list[TrustKeyInput] = []
+    embedded = as_mapping(meta.get("signingPublicKeys"))
+    windows = as_mapping(meta.get("signingKeyWindows"))
+    for key_id, public_key in embedded.items():
+        window = windows.get(key_id)
+        if isinstance(window, Mapping):
+            w = cast("Mapping[str, Any]", window)
+            active = "retiredAt" in w and w["retiredAt"] is None
+            out.append(
+                TrustKeyInput(
+                    key_id=str(key_id),
+                    public_key=str(public_key),
+                    activated_at=w.get("activatedAt"),
+                    retired_at=w.get("retiredAt"),
+                    status="active" if active else "retired",
+                )
+            )
+        else:
+            out.append(TrustKeyInput(key_id=str(key_id), public_key=str(public_key)))
+    for key_id, key in (supplied or {}).items():
+        out.append(TrustKeyInput(key_id=key_id, public_key=key.spki_base64))
+    return out
+
+
+def _trust_statements_of(
+    meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey] | None
+) -> list[KeyStatementInput]:
+    """The export's key statements, plus any a supplied key carries (a
+    ``/v1/verification-keys`` ``data`` entry)."""
+    raw = meta.get("signingKeyStatements")
+    out = key_statements_from_export(cast("Mapping[str, Any]", raw) if raw is not None else None)
+    by_key = {key_id: key.statements for key_id, key in (supplied or {}).items() if key.statements is not None}
+    out.extend(replace(st, id=f"supplied:{st.id or ''}") for st in key_statements_from_export(by_key))
+    return out
+
+
+def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
+    """Mark every key of a registry with the walk's verdict, and give each
+    anchored key the window its statements sign in place of whatever window it
+    carried, as the engine grades entries. An anchored key no statement dates
+    carries no edge on that side. A key is anchored only when its key id is the
+    fingerprint of its own SPKI: a row filed under another key's id names that
+    key's entries, and is anchored to nothing. Mirrors verify-core
+    ``applyKeyTrust``."""
+    out: dict[str, RegisteredKey] = {}
+    for key_id, key in keys.items():
+        digest = spki_sha256(key.spki_base64)
+        bound = key_id == digest[:16]
+        anchored = bound and digest in trust.trusted
+        state: KeyTrustState = (
+            "anchored" if anchored else "undecided" if bound and digest in trust.undecided else "unanchored"
+        )
+        signed = trust.by_digest.get(digest)
+        if anchored and signed is not None:
+            out[key_id] = replace(key, trust=state, activated_at=signed.activated_at, retired_at=signed.retired_at)
+        else:
+            out[key_id] = replace(key, trust=state)
+    return KeyCache(out, signing_since=keys.signing_since)
+
+
 def _with_export_oidc_actor(entry: Mapping[str, Any]) -> Mapping[str, Any]:
     """Map an export entry's actor OIDC columns onto the shape the OIDC-actor
     check reads. ``actorOidcSynthesized`` is the marker that the export
@@ -780,7 +944,8 @@ class KeyCache:
 
     Large exports (10k+ entries) would otherwise re-decode the same key on
     every signature check. Carries each key's provenance (embedded vs
-    out-of-band) for the result tally and the ``require_out_of_band_keys`` policy.
+    supplied) for the result tally and the ``require_supplied_keys`` policy,
+    and, once :func:`apply_key_trust` marked it, the walk's verdict on each key.
     """
 
     def __init__(
@@ -804,6 +969,14 @@ class KeyCache:
                 f"signing_since must be an ISO-8601 time or None (got {signing_since!r})."
             )
         self.signing_since: str | None = signing_since
+
+    def items(self) -> list[tuple[str, RegisteredKey]]:
+        """Every registered key, by key id."""
+        return list(self._registry.items())
+
+    def trust_states(self) -> dict[str, KeyTrustState | None]:
+        """Each key id's :data:`KeyTrustState`, ``None`` where no walk ran."""
+        return {key_id: key.trust for key_id, key in self._registry.items()}
 
     def entry(self, key_id: str) -> RegisteredKey | None:
         """Registry membership: the raw registered key, or ``None`` if absent
@@ -848,15 +1021,15 @@ def verify_entry(
     expected_prev_hash: str | None,
     keys: KeyCache,
     require_key_id: str | None,
-    require_out_of_band_keys: bool,
+    require_supplied_keys: bool,
     applied_checks: set[str] | None = None,
     *,
     signed_before: bool = False,
 ) -> EntryVerificationResult:
     """Verify one chain entry. ``applied_checks``, when given, collects the
     input-gated checks that ran on it (``payload_binding``, ``oidc_actor``,
-    ``key_temporal``), so a caller can report "not checked" apart from
-    "passed".
+    ``actor_attribution``, ``key_temporal``, ``key_anchoring``), so a caller
+    can report "not checked" apart from "passed".
 
     ``signed_before`` says an earlier entry in the same chain names a signing
     key; with ``keys.signing_since`` it decides whether an entry with no
@@ -1068,17 +1241,17 @@ def verify_entry(
                 ),
             )
         # Fail closed under a key policy: a high-assurance run that requires a
-        # specific key (or out-of-band keys) must NOT accept an unsigned/null-key
+        # specific key (or supplied keys) must NOT accept an unsigned/null-key
         # entry as valid; otherwise an attacker forges an entry, nulls its
         # signingKeyId, and slips past the policy the auditor explicitly set.
-        if require_key_id or require_out_of_band_keys:
+        if require_key_id or require_supplied_keys:
             return EntryVerificationResult(
                 position=position,
                 valid=False,
                 code="CHAIN_KEY_POLICY_VIOLATION",
                 detail=(
                     "Entry has no signingKeyId but this run requires a signed "
-                    "entry (require_key_id / require_out_of_band_keys)."
+                    "entry (require_key_id / require_supplied_keys)."
                 ),
             )
         return EntryVerificationResult(position=position, valid=True, signature="skipped")
@@ -1104,16 +1277,64 @@ def verify_entry(
         )
 
     key_source = registered.source
-    if require_out_of_band_keys and key_source != "out-of-band":
+    if require_supplied_keys and key_source != "supplied":
         return EntryVerificationResult(
             position=position,
             valid=False,
             code="CHAIN_KEY_POLICY_VIOLATION",
             detail=(
                 f"Key {signing_key_id} is embedded in the artifact; this run "
-                f"requires out-of-band keys."
+                f"requires supplied keys."
             ),
         )
+
+    # Signed-kid binding (engine mirror: signing_key_drift), ahead of every
+    # question about the key, as the engine orders it. The row's signingKeyId
+    # column selected the key above, but the column is a denormalized
+    # convenience; the kid at protected-header label 4 is signature-covered. A
+    # divergence means the column was rewritten after signing.
+    signed_kid = _extract_kid(parts[0])
+    if signed_kid is not None and signed_kid != signing_key_id:
+        return EntryVerificationResult(
+            position=position,
+            valid=False,
+            code="CHAIN_SIGNING_KEY_DRIFT",
+            detail=(
+                f"Row signingKeyId={signing_key_id} does not match the "
+                f"signature-covered kid {signed_kid} in the protected header."
+            ),
+        )
+
+    # Key anchoring (engine mirror: signing_key_unanchored). Runs when a
+    # key-statement walk marked the registry. A key nothing signed links to a
+    # pinned anchor is one anything with write access to the Server's database
+    # can register, so an entry under it is a forgery until shown otherwise,
+    # whatever its signature says.
+    if registered.trust is not None:
+        if applied_checks is not None:
+            applied_checks.add("key_anchoring")
+        if registered.trust == "unanchored":
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_SIGNING_KEY_UNANCHORED",
+                detail=(
+                    f"Key {signing_key_id} is not linked by any signed key statement "
+                    f"to a pinned trust anchor."
+                ),
+            )
+        if registered.trust == "undecided":
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_UNSUPPORTED_ALGORITHM",
+                detail=(
+                    f"Key {signing_key_id} is linked to a pinned anchor only through a key "
+                    f"statement signed under an algorithm this host cannot compute, and "
+                    f"{_unsupported_algorithm_clause(signing_key_id, registered.spki_base64)}"
+                ),
+                signature="unsupported",
+            )
 
     # Registry self-consistency: when the input declares an algorithm for this
     # key (vault_signing_keys.algorithm), it must agree with what the SPKI key
@@ -1134,23 +1355,6 @@ def verify_entry(
                     f"{signing_key_id}, but the key material is {key_alg.name}."
                 ),
             )
-
-    # Signed-kid binding (engine mirror: signing_key_drift). The row's
-    # signingKeyId column selected the key above, but the column is a
-    # denormalized convenience; the kid at protected-header label 4 is
-    # signature-covered. A divergence means the column was rewritten after
-    # signing.
-    signed_kid = _extract_kid(parts[0])
-    if signed_kid is not None and signed_kid != signing_key_id:
-        return EntryVerificationResult(
-            position=position,
-            valid=False,
-            code="CHAIN_SIGNING_KEY_DRIFT",
-            detail=(
-                f"Row signingKeyId={signing_key_id} does not match the "
-                f"signature-covered kid {signed_kid} in the protected header."
-            ),
-        )
 
     # Temporal key-validity (CHAIN_KEY_EXPIRED): runs only when BOTH the entry
     # write time and a key window are present (dump path): and only here, AFTER
@@ -1767,6 +1971,16 @@ def _extract_header_alg(protected_bstr: bytes) -> int | None:
     return alg
 
 
+def cbor_whole(data: bytes) -> Any:
+    """Decode exactly one CBOR item spanning all of ``data``, as cborg does
+    (``cbor2.loads`` ignores trailing bytes). Raises on anything else."""
+    fp = io.BytesIO(data)
+    obj: Any = _cbor2.CBORDecoder(fp).decode()
+    if fp.read(1):
+        raise ValueError("trailing bytes after the CBOR item")
+    return obj
+
+
 def decode_cose_parts(envelope: bytes) -> tuple[bytes, bytes, bytes] | None:
     """A tagged COSE_Sign1 envelope as ``(protected, payload, signature)``, or
     ``None`` when it does not decode as one."""
@@ -1784,6 +1998,14 @@ def describe_unsupported_algorithm(key_id: str, spki_base64: str) -> str:
     """Why a key's signatures could not be checked here: this build does not
     implement its algorithm, or this host refused to compute it."""
     return _describe_unsupported_algorithm(key_id, spki_base64)
+
+
+def _unsupported_algorithm_clause(key_id: str, spki_base64: str) -> str:
+    """:func:`describe_unsupported_algorithm` as a clause, without its leading
+    "Key <id> " (verify-core's ``describeUnsupportedAlgorithm`` form)."""
+    text = _describe_unsupported_algorithm(key_id, spki_base64)
+    prefix = f"Key {key_id} "
+    return text.removeprefix(prefix)
 
 
 def decode_cose_kid(envelope: bytes) -> str | None:
@@ -2039,30 +2261,118 @@ def _temporal_key_failure(
     return None
 
 
-# --- Merkle primitives (mirror verify-core primitives.ts merkleRoot/hashPair) ---
+# --- org_admin_reads Merkle tree (mirror verify-core primitives.ts, RFC 9162 section 2.1) ---
+#
+# The org_admin_reads log is the RFC 9162 section 2.1 SHA-256 tree SCITT
+# Receipts use. Its rows store and serve each hash as lowercase hex, so these
+# are hex forms of the byte functions: every hex string is decoded to the 32
+# bytes it denotes before hashing, never hashed as text.
+
+_HEX_32_BYTES = re.compile(r"[0-9a-f]{64}")
 
 
-def _hash_pair(left: str, right: str) -> str:
-    """Hash two hex-string children into a parent hex digest. Per verify-core,
-    the two hex STRINGS are concatenated and the resulting UTF-8 text is hashed
-   : NOT a byte concat, and NO RFC 9162 0x00/0x01 domain-separation prefixes
-    (those belong to the SCITT receipt path, not org_admin_reads)."""
-    return hashlib.sha256((left + right).encode()).hexdigest()
+def _hex_to_bytes(value: object) -> bytes | None:
+    return bytes.fromhex(value) if isinstance(value, str) and _HEX_32_BYTES.fullmatch(value) else None
 
 
-def merkle_root(leaves: Sequence[str]) -> str:
-    """Recompute a plain Merkle root over hex-string leaf hashes. Odd levels
-    duplicate the last leaf; an empty leaf set hashes the empty string. Mirrors
-    verify-core ``merkleRoot`` exactly (the function org_admin_reads STHs use).
-    """
-    if len(leaves) == 0:
+def _rfc9162_node(left: bytes, right: bytes) -> bytes:
+    return hashlib.sha256(b"\x01" + left + right).digest()
+
+
+def _is_safe_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and abs(value) <= 2**53 - 1
+
+
+def org_read_leaf_hash(cose_sign1: bytes) -> str:
+    """A read-log leaf's ``leaf_hash``: hex(SHA-256(0x00 || cose_sign1)), the
+    RFC 9162 leaf hash of the leaf's COSE_Sign1 bytes. It is also the next leaf
+    claim's signed ``previous_hash``. Mirrors verify-core ``orgReadLeafHash``."""
+    return hashlib.sha256(b"\x00" + cose_sign1).hexdigest()
+
+
+def _split_point(n: int) -> int:
+    """Largest power of two strictly below n (n >= 2), the RFC 9162 section 2.1.1 split point."""
+    k = 1
+    while k * 2 < n:
+        k *= 2
+    return k
+
+
+def _root_of(leaves: Sequence[bytes], lo: int, hi: int) -> bytes:
+    if hi - lo == 1:
+        return leaves[lo]
+    k = _split_point(hi - lo)
+    return _rfc9162_node(_root_of(leaves, lo, lo + k), _root_of(leaves, lo + k, hi))
+
+
+def org_read_merkle_root(leaf_hashes: Sequence[str]) -> str | None:
+    """RFC 9162 section 2.1.1 Merkle Tree Hash over leaf hashes already
+    computed with :func:`org_read_leaf_hash`, as hex. The empty tree is
+    SHA-256(""). A leaf hash that is not 64 lowercase hex characters cannot be
+    a stored ``leaf_hash``, so the result is ``None`` rather than a root over
+    bytes nobody wrote. Mirrors verify-core ``orgReadMerkleRoot``."""
+    if len(leaf_hashes) == 0:
         return hashlib.sha256(b"").hexdigest()
-    level = list(leaves)
-    while len(level) > 1:
-        nxt: list[str] = []
-        for i in range(0, len(level), 2):
-            left = level[i]
-            right = level[i + 1] if i + 1 < len(level) else left
-            nxt.append(_hash_pair(left, right))
-        level = nxt
-    return level[0]
+    leaves: list[bytes] = []
+    for h in leaf_hashes:
+        b = _hex_to_bytes(h)
+        if b is None:
+            return None
+        leaves.append(b)
+    return _root_of(leaves, 0, len(leaves)).hex()
+
+
+def verify_org_read_inclusion(
+    leaf_hash: str,
+    leaf_index: int,
+    tree_size: int,
+    path: Sequence[str],
+    expected_root: str,
+) -> bool:
+    """Verify an org_admin_reads inclusion proof (``GET
+    /v1/audit/org-reads/checkpoints/{id}/proof``): the RFC 9162 section
+    2.1.3.2 audit-path walk over hex values. A one-leaf tree has an empty
+    path. ``False`` on any value that is not 64 lowercase hex characters.
+    Mirrors verify-core ``verifyOrgReadInclusion``."""
+    leaf = _hex_to_bytes(leaf_hash)
+    root = _hex_to_bytes(expected_root)
+    if leaf is None or root is None:
+        return False
+    nodes: list[bytes] = []
+    for p in path:
+        b = _hex_to_bytes(p)
+        if b is None:
+            return False
+        nodes.append(b)
+    # Only a safe integer names a leaf or a size: the walk halves them, and a
+    # fraction or a value past 2^53 would walk some other tree in a verifier
+    # holding JSON numbers as doubles.
+    if not _is_safe_integer(leaf_index) or not _is_safe_integer(tree_size):
+        return False
+    if leaf_index < 0 or leaf_index >= tree_size:
+        return False
+    if tree_size == 1:
+        return len(nodes) == 0 and leaf == root
+    fn = leaf_index
+    sn = tree_size - 1
+    r = leaf
+    i = 0
+    while i < len(nodes):
+        if sn == 0:
+            return False
+        node = nodes[i]
+        if fn & 1 == 1 or fn == sn:
+            r = _rfc9162_node(node, r)
+            while fn & 1 == 0 and fn != 0:
+                fn >>= 1
+                sn >>= 1
+        else:
+            r = _rfc9162_node(r, node)
+        fn >>= 1
+        sn >>= 1
+        i += 1
+        if sn == 0:
+            break
+    if sn != 0 or i != len(nodes):
+        return False
+    return r == root

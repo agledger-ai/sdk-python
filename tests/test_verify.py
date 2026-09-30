@@ -135,7 +135,7 @@ def test_valid_export_verifies() -> None:
     assert result.signature_coverage.signed == 3
     # Embedded keys (no out-of-band override): provenance reflects the trust source.
     assert result.key_provenance.embedded == 3
-    assert result.key_provenance.out_of_band == 0
+    assert result.key_provenance.supplied == 0
 
 
 def test_rejects_unsupported_format_version() -> None:
@@ -339,11 +339,11 @@ def test_require_key_id_policy_violation() -> None:
     assert result.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
 
 
-def test_require_out_of_band_keys_rejects_embedded() -> None:
+def test_require_supplied_keys_rejects_embedded() -> None:
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
     # Only embedded keys present; high-assurance mode refuses them.
-    result = verify_export(exp, require_out_of_band_keys=True)
+    result = verify_export(exp, require_supplied_keys=True)
     assert result.valid is False
     assert result.broken_at is not None
     assert result.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
@@ -353,10 +353,10 @@ def test_require_out_of_band_keys_rejects_embedded() -> None:
 def test_out_of_band_keys_override_embedded_and_pass_policy() -> None:
     pub, priv = _make_keypair()
     exp = _make_export(pub, priv)
-    # Supplying the same key out of band satisfies require_out_of_band_keys.
-    result = verify_export(exp, public_keys={"vault-key-1": pub}, require_out_of_band_keys=True)
+    # Supplying the same key out of band satisfies require_supplied_keys.
+    result = verify_export(exp, public_keys={"vault-key-1": pub}, require_supplied_keys=True)
     assert result.valid is True
-    assert result.key_provenance.out_of_band == 3
+    assert result.key_provenance.supplied == 3
     assert result.key_provenance.embedded == 0
 
 
@@ -367,7 +367,7 @@ def test_public_keys_can_be_supplied_at_call_time() -> None:
     exp["exportMetadata"]["signingPublicKey"] = None
     result = verify_export(exp, public_keys={"vault-key-1": pub})
     assert result.valid is True
-    assert result.key_provenance.out_of_band == 3
+    assert result.key_provenance.supplied == 3
 
 
 def test_null_key_entry_fails_closed_under_key_policy() -> None:
@@ -391,7 +391,7 @@ def test_null_key_entry_fails_closed_under_key_policy() -> None:
     assert require_id.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
     assert require_id.broken_at.position == 1
 
-    require_oob = verify_export(unsigned, public_keys=oob, require_out_of_band_keys=True)
+    require_oob = verify_export(unsigned, public_keys=oob, require_supplied_keys=True)
     assert require_oob.valid is False
     assert require_oob.broken_at is not None
     assert require_oob.broken_at.code == "CHAIN_KEY_POLICY_VIOLATION"
@@ -415,7 +415,7 @@ def test_oob_keys_accepts_compact_record_form() -> None:
     exp = _make_export(pub, priv)
     result = verify_export(exp, public_keys={"vault-key-1": pub})
     assert result.valid is True
-    assert result.key_provenance.out_of_band > 0
+    assert result.key_provenance.supplied > 0
     assert result.key_provenance.embedded == 0
 
 
@@ -428,7 +428,7 @@ def test_oob_keys_accepts_sdk_natural_list_shape() -> None:
     keys_list = [{"keyId": "vault-key-1", "publicKey": pub, "algorithm": "Ed25519"}]
     result = verify_export(exp, public_keys=keys_list)
     assert result.valid is True
-    assert result.key_provenance.out_of_band > 0
+    assert result.key_provenance.supplied > 0
     assert result.key_provenance.embedded == 0
 
 
@@ -455,7 +455,7 @@ def test_oob_keys_accepts_pydantic_models() -> None:
     ]
     result = verify_export(exp, public_keys=models)
     assert result.valid is True
-    assert result.key_provenance.out_of_band > 0
+    assert result.key_provenance.supplied > 0
 
 
 def test_oob_keys_raises_typeerror_on_missing_fields() -> None:

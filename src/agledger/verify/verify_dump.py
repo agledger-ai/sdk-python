@@ -1,4 +1,4 @@
-"""Offline verification of a full-vault AGLedger dump (five NDJSON files).
+"""Offline verification of a full-vault AGLedger dump (six NDJSON files).
 
 The Python sibling of the TS ``@agledger/verify`` dump verifier. The per-record
 (and per-org schema-event) hash-chain walk is delegated to the SAME body the
@@ -9,11 +9,23 @@ integrity, the OIDC-actor cross-check, AND temporal key-validity
 (CHAIN_KEY_NOT_YET_ACTIVE / CHAIN_KEY_EXPIRED) all come from the shared walk
 for free.
 
+Key anchoring is the key-statement walk (:mod:`agledger.verify.key_statements`).
+With ``trust_anchors``, the dump's ``vault_key_statements`` are walked in write
+order (``created_at``, then the producer's row order) from the pinned SPKI
+digests, and each key in the registry is marked anchored, unanchored or
+undecided, an anchored key carrying the window its statements sign. Entries,
+vault checkpoints, read-log leaves and read-log tree heads under an unanchored
+key fail CHAIN_SIGNING_KEY_UNANCHORED, CHECKPOINT_KEY_UNANCHORED,
+TENANT_READ_KEY_UNANCHORED and TENANT_CHECKPOINT_KEY_UNANCHORED, as the
+engine's scan grades them. Without anchors no walk runs, the registry rows are
+taken as they stand, and a report with no failure has the verdict
+``unanchored``: it passes, flagged as not trusted.
+
 What stays LOCAL here is the dump-structural work the per-entry walk does not
 model: the vault-checkpoint cross-check against the live chain, and the
-org_admin_reads Merkle log + signed-tree-head + fork-detection passes. They use
-the shared ``verify_cose_sign1`` / ``merkle_root`` primitives and emit the
-canonical CHECKPOINT_* / TENANT_* codes.
+org_admin_reads log (RFC 9162 leaf hashes and tree heads, via
+``org_read_leaf_hash`` / ``org_read_merkle_root``) with its signed-tree-head and
+fork-detection passes. They emit the canonical CHECKPOINT_* / TENANT_* codes.
 
 Fail-closed posture: an empty vault is CHAIN_EMPTY (never a silent pass); a row
 lacking ``cose_sign1`` is a pre-2.0 shape → UNSUPPORTED_FORMAT (not parsed
@@ -24,10 +36,23 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Mapping, Sequence
+import json
+import re
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
+from agledger.verify.failures import FailureCode
+from agledger.verify.key_statements import (
+    DistrustedKey,
+    KeyTrust,
+    KeyTrustReport,
+    cbor_plain,
+    compute_key_trust,
+    key_statement_from_dump_row,
+    report_key_trust,
+    trust_key_from_dump_row,
+)
 from agledger.verify.types import (
     Dump,
     DumpRow,
@@ -40,7 +65,7 @@ from agledger.verify.types import (
 
 # The shared verification core lives in verify_export: the per-entry chain walk
 # (verify_entry), the key registry (KeyCache / RegisteredKey), and the
-# merkle_root / verify_cose_sign1 primitives. Reused here verbatim: the dump
+# org-read tree / verify_cose_sign1 primitives. Reused here verbatim: the dump
 # verifier adds only the dump-structural passes the per-entry walk does not model.
 from agledger.verify.verify_export import (
     AgentSignatureCounts,
@@ -48,8 +73,10 @@ from agledger.verify.verify_export import (
     EntryVerificationResult,
     KeyCache,
     RegisteredKey,
+    apply_key_trust,
     as_mapping,
     build_agent_key_registry,
+    cbor_whole,
     check_agent_signature,
     decode_cose_kid,
     decode_cose_parts,
@@ -57,8 +84,9 @@ from agledger.verify.verify_export import (
     describe_unsupported_algorithm,
     earliest_key_activation,
     ed25519_jwk_thumbprint,
-    merkle_root,
     optional_checks_report,
+    org_read_leaf_hash,
+    org_read_merkle_root,
     verify_cose_sign1,
     verify_entry,
     written_while_signing,
@@ -82,12 +110,16 @@ def _as_str(value: Any) -> str | None:
 def _checkpoint_signature_outcome(
     cose_sign1_b64: Any, signing_key_id: Any, keys: KeyCache
 ) -> str:
-    """Resolve a checkpoint/STH signing key and verify its COSE_Sign1 signature.
+    """Resolve a checkpoint/STH signing key and verify its COSE_Sign1 signature,
+    in the engine's order: a key the registry does not hold, then one nothing
+    anchors, then one only a signature this host cannot compute reaches.
 
     Returns ``"ok"`` (nothing to verify, or verified), ``"missing-key"`` (the
-    signing_key_id is not in the dumped registry), ``"unsupported"`` (the key's
-    algorithm is beyond this build; an upgrade signal, never a pass), or
-    ``"invalid"``. Fail-closed on every other non-ok outcome, including an
+    signing_key_id is not in the dumped registry), ``"unanchored"`` (a walk ran
+    and no signed statement links the key to a trust anchor), ``"undecided"``
+    (the key is reached only through a statement this host cannot compute),
+    ``"unsupported"`` (the key's algorithm is beyond this build; an upgrade
+    signal, never a pass), or ``"invalid"``. Fail-closed on every other non-ok outcome, including an
     all-zero signature on a checkpoint that CLAIMS a signing key: the engine
     never writes a signing_key_id it did not sign with, so ``unsigned`` there
     is tampering. Only None means unsigned; "" must resolve in the registry
@@ -99,12 +131,176 @@ def _checkpoint_signature_outcome(
     entry = keys.entry(str(signing_key_id))
     if entry is None:
         return "missing-key"
+    if entry.trust == "unanchored":
+        return "unanchored"
+    if entry.trust == "undecided":
+        return "undecided"
     outcome = verify_cose_sign1(base64.b64decode(str(cose_sign1_b64)), entry)
     if outcome == "ok":
         return "ok"
     if outcome == "unsupported-key-algorithm":
         return "unsupported"
     return "invalid"
+
+
+# --- the signed claim inside a checkpoint or read-log envelope ---
+#
+# Decoded the way the engine decodes it (its decodeCoseSign1ToClaim), so a dump
+# is held to the claim checks the engine's own scan applies. An envelope the
+# engine would not decode as a claim decodes to None here, and the caller
+# reports that as a claim mismatch, as the engine does. Mirrors
+# ``@agledger/verify``.
+
+_COSE_HEADER_KID = 4
+_COSE_HEADER_CWT_CLAIMS = 15
+_CWT_LABEL_ISS = 1
+_CWT_LABEL_SUB = 2
+_CWT_LABEL_IAT = 6
+_AGLEDGER_LABEL_CHAIN = -65537
+_AGLEDGER_LABEL_ACTOR = -65539
+_PREDICATE_TYPE = re.compile(r"https://agledger\.ai/predicates/(.+)/v1")
+#: A value the signed claim or the row does not carry (JavaScript's undefined).
+_MISSING: Any = object()
+
+
+@dataclass(frozen=True)
+class _SignedClaim:
+    position: int | float
+    previous_hash: str | None
+    kid: str
+    subject_sha256: Any
+    predicate: Mapping[str, Any]
+
+
+def _is_number(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _decode_signed_claim(envelope: bytes) -> _SignedClaim | None:
+    parts = decode_cose_parts(envelope)
+    if parts is None:
+        return None
+    try:
+        header: object = cbor_whole(parts[0])
+        payload: object = cbor_whole(parts[1])
+    except Exception:
+        return None
+    if not isinstance(header, Mapping) or not isinstance(payload, Mapping):
+        return None
+    ph = cast("Mapping[object, object]", header)
+    pl = cast("Mapping[object, object]", payload)
+    if not cbor_plain(ph, text_keys=False) or not cbor_plain(pl, text_keys=True):
+        return None
+    cwt, chain = ph.get(_COSE_HEADER_CWT_CLAIMS), ph.get(_AGLEDGER_LABEL_CHAIN)
+    if not isinstance(cwt, Mapping) or not isinstance(chain, Mapping):
+        return None
+    cwt_m, chain_m = cast("Mapping[object, object]", cwt), cast("Mapping[object, object]", chain)
+    actor = cwt_m.get(_AGLEDGER_LABEL_ACTOR)
+    if not isinstance(actor, Mapping):
+        return None
+    actor_m = cast("Mapping[object, object]", actor)
+    kid = ph.get(_COSE_HEADER_KID)
+    if not isinstance(kid, bytes):
+        return None
+    if not isinstance(cwt_m.get(_CWT_LABEL_ISS), str) or not isinstance(cwt_m.get(_CWT_LABEL_SUB), str):
+        return None
+    if not _is_number(cwt_m.get(_CWT_LABEL_IAT)):
+        return None
+    position = chain_m.get(1)
+    if not _is_number(position):
+        return None
+    prev = chain_m[2] if 2 in chain_m else _MISSING
+    if prev is not None and not isinstance(prev, bytes):
+        return None
+    if not isinstance(actor_m.get(1), bytes) or not isinstance(actor_m.get(3), bytes):
+        return None
+    if actor_m.get(2) not in ("admin", "agent", "platform"):
+        return None
+    predicate_type = pl.get("predicateType")
+    if not isinstance(predicate_type, str) or _PREDICATE_TYPE.fullmatch(predicate_type) is None:
+        return None
+    subject = pl.get("subject")
+    if not isinstance(subject, (list, tuple)):
+        return None
+    subjects = cast("Sequence[object]", subject)
+    first = subjects[0] if subjects else None
+    digest_map = cast("Mapping[str, object]", first).get("digest") if isinstance(first, Mapping) else None
+    digest = cast("Mapping[str, object]", digest_map).get("sha256") if isinstance(digest_map, Mapping) else None
+    predicate = pl.get("predicate")
+    return _SignedClaim(
+        position=cast("int | float", position),
+        previous_hash=None if prev is None else prev.hex(),
+        kid=kid.hex(),
+        subject_sha256=digest.hex() if isinstance(digest, bytes) else _MISSING,
+        predicate=cast("Mapping[str, Any]", predicate) if isinstance(predicate, Mapping) else {},
+    )
+
+
+def _uuid_subject_digest(uuid: object) -> str | None:
+    """sha256 of a UUID's 16 bytes, the digest the engine signs as a record's subject."""
+    if not isinstance(uuid, str):
+        return None
+    h = uuid.replace("-", "").lower()
+    return hashlib.sha256(bytes.fromhex(h)).hexdigest() if re.fullmatch(r"[0-9a-f]{32}", h) else None
+
+
+def _same(signed: object, row: object) -> bool:
+    """JavaScript's ``===`` over the values a claim and a row carry."""
+    if signed is _MISSING or row is _MISSING:
+        return signed is row
+    if isinstance(signed, bool) or isinstance(row, bool):
+        return type(signed) is type(row) and signed == row
+    if _is_number(signed) and _is_number(row):
+        return signed == row
+    if signed is None or row is None:
+        return signed is row
+    return type(signed) is type(row) and signed == row
+
+
+def _shown(value: object) -> str:
+    return json.dumps(None if value is _MISSING else value)
+
+
+def _claim_disagreement(
+    cose_sign1: object, expect: Callable[[_SignedClaim], list[tuple[str, object, object]]]
+) -> str | None:
+    """Why an envelope's signed claim disagrees with its row, or None when it agrees."""
+    try:
+        envelope = base64.b64decode(str(cose_sign1))
+    except (ValueError, TypeError):
+        envelope = b""
+    claim = _decode_signed_claim(envelope)
+    if claim is None:
+        return "cose_sign1 does not decode as a signed AGLedger claim"
+    for name, signed, row in expect(claim):
+        if not _same(signed, row):
+            return f"the signed {name} {_shown(signed)} is not the row's {_shown(row)}"
+    return None
+
+
+def _kid_column(cp: Mapping[str, Any]) -> Any:
+    """The key id a checkpoint row names, or the unsigned sentinel when it
+    names none (only a missing or null column, never an empty string)."""
+    kid = cp.get("signing_key_id")
+    return UNSIGNED_KID_SENTINEL if kid is None else kid
+
+
+def _row(r: Mapping[str, Any], column: str) -> Any:
+    return r[column] if column in r else _MISSING
+
+
+def _unanchored_message(at: str, what: str, key_id: object) -> str:
+    return (
+        f'{at}: {what} "{key_id}" is in the dumped key registry, but no signed key statement '
+        "links it to a trust anchor, so a row written into the database alone could have put it there"
+    )
+
+
+def _undecided_message(at: str, key_id: object) -> str:
+    return (
+        f"{at}: the signature could NOT BE CHECKED. Key {key_id} is reached only through a key "
+        "statement signed under an algorithm this host cannot compute; verify the dump on a host that can"
+    )
 
 
 def _build_vault_key_registry(signing_keys: list[DumpRow]) -> KeyCache:
@@ -336,6 +532,28 @@ def _verify_vault_checkpoints(
             )
             continue
 
+        # Engine mirror of `checkpoint_claim_mismatch`, after the row and hash
+        # cross-checks and before anything about the key, as the engine orders it.
+        vault_claim = _claim_disagreement(
+            cp.get("cose_sign1"),
+            lambda c: [
+                ("position", c.position, _row(cp, "chain_position")),
+                ("chain_tip_hash", c.predicate.get("chain_tip_hash", _MISSING), f"sha256:{cp.get('payload_hash')}"),
+                ("subject digest", c.subject_sha256, _uuid_subject_digest(cp.get("record_id"))),
+                ("kid", c.kid, _kid_column(cp)),
+            ],
+        )
+        if vault_claim is not None:
+            failures.append(
+                Failure(
+                    code="CHECKPOINT_CLAIM_MISMATCH",
+                    message=f"{label} pos {position}: checkpoint claim does not match its row: {vault_claim}",
+                    scope_id=chain_key,
+                    position=_as_int(position),
+                )
+            )
+            continue
+
         signing_key_id = cp.get("signing_key_id")
         # An unsigned checkpoint is legitimate only from before the install
         # began signing (engine mirror: checkpoint_unsigned).
@@ -362,6 +580,26 @@ def _verify_vault_checkpoints(
                         f"{label} pos {position}: checkpoint signing_key_id "
                         f'"{signing_key_id}" not in dumped key registry'
                     ),
+                    scope_id=chain_key,
+                    position=_as_int(position),
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "unanchored":
+            failures.append(
+                Failure(
+                    code="CHECKPOINT_KEY_UNANCHORED",
+                    message=_unanchored_message(f"{label} pos {position}", "checkpoint signing_key_id", signing_key_id),
+                    scope_id=chain_key,
+                    position=_as_int(position),
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "undecided":
+            failures.append(
+                Failure(
+                    code="CHAIN_UNSUPPORTED_ALGORITHM",
+                    message=_undecided_message(f"{label} pos {position}", signing_key_id),
                     scope_id=chain_key,
                     position=_as_int(position),
                     signing_key_id=_as_str(signing_key_id),
@@ -589,6 +827,22 @@ def _check_leaf_signature(
             leaf_index=leaf_index,
             signing_key_id=kid,
         )
+    if key.trust == "unanchored":
+        return Failure(
+            code="TENANT_READ_KEY_UNANCHORED",
+            message=_unanchored_message(at, "leaf kid", kid),
+            scope_id=org_id,
+            leaf_index=leaf_index,
+            signing_key_id=kid,
+        )
+    if key.trust == "undecided":
+        return Failure(
+            code="CHAIN_UNSUPPORTED_ALGORITHM",
+            message=_undecided_message(at, kid),
+            scope_id=org_id,
+            leaf_index=leaf_index,
+            signing_key_id=kid,
+        )
     # Fail closed on ANY non-ok outcome; an all-zero signature under a real kid
     # is a wiped signature, as the engine grades it.
     outcome = verify_cose_sign1(envelope, key)
@@ -638,15 +892,15 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return  # a gap stops the whole org: the log is incomplete
-        # leaf_hash is sha256(cose_sign1) post-cutover.
+        # leaf_hash is the RFC 9162 leaf hash, sha256(0x00 || cose_sign1).
         envelope = base64.b64decode(str(leaf.get("cose_sign1")))
-        recomputed = hashlib.sha256(envelope).hexdigest()
+        recomputed = org_read_leaf_hash(envelope)
         if recomputed != leaf.get("leaf_hash"):
             failures.append(
                 Failure(
                     code="TENANT_READ_LEAF_HASH_MISMATCH",
                     message=(
-                        f"Org {org_id} leaf {leaf.get('leaf_index')}: sha256(cose_sign1) "
+                        f"Org {org_id} leaf {leaf.get('leaf_index')}: sha256(0x00 || cose_sign1) "
                         f"does not match stored leaf_hash"
                     ),
                     scope_id=org_id,
@@ -654,6 +908,28 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return  # a tampered leaf stops the whole org
+        # Engine mirror of `leaf_claim_mismatch`: the claim is what links each
+        # leaf to the one before it and to the record it says was read.
+        previous = None if i == 0 else leaves[i - 1].get("leaf_hash")
+        leaf_claim = _claim_disagreement(
+            leaf.get("cose_sign1"),
+            lambda c, previous=previous: [
+                ("position", c.position, i + 1),
+                ("previous_hash", c.previous_hash, previous),
+                ("record_id", c.predicate.get("record_id", _MISSING), _row(leaf, "record_id")),
+                ("subject digest", c.subject_sha256, _uuid_subject_digest(leaf.get("record_id"))),
+            ],
+        )
+        if leaf_claim is not None:
+            failures.append(
+                Failure(
+                    code="TENANT_READ_CLAIM_MISMATCH",
+                    message=f"Org {org_id} leaf {leaf.get('leaf_index')}: leaf claim does not match its row: {leaf_claim}",
+                    scope_id=org_id,
+                    leaf_index=_as_int(leaf.get("leaf_index")),
+                )
+            )
+            return
         leaf_failure = _check_leaf_signature(org_id, leaf, envelope, keys, must_sign)
         if leaf_failure is not None:
             failures.append(leaf_failure)
@@ -676,16 +952,39 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             continue
-        root = merkle_root(leaf_hashes[:tree_size])
-        if root != cp.get("root_hash"):
+        root = org_read_merkle_root(leaf_hashes[:tree_size])
+        if root is None or root != cp.get("root_hash"):
             failures.append(
                 Failure(
                     code="TENANT_CHECKPOINT_ROOT_MISMATCH",
                     message=(
                         f"Org {org_id}: checkpoint {cp.get('id')} root_hash "
                         f"{str(cp.get('root_hash'))[:16]} does not match recomputed root "
-                        f"{root[:16]}"
+                        f"{(root or 'none')[:16]}"
                     ),
+                    scope_id=org_id,
+                    tree_size=tree_size,
+                )
+            )
+            continue
+
+        # Engine mirror of the read log's `checkpoint_claim_mismatch`, after the
+        # leaf-count and root cross-checks and before anything about the key.
+        head_claim = _claim_disagreement(
+            cp.get("cose_sign1"),
+            lambda c: [
+                ("position", c.position, tree_size),
+                ("chain_tip_hash", c.predicate.get("chain_tip_hash", _MISSING), f"sha256:{cp.get('root_hash')}"),
+                ("count", c.predicate.get("count", _MISSING), tree_size),
+                ("subject digest", c.subject_sha256, _row(cp, "root_hash")),
+                ("kid", c.kid, _kid_column(cp)),
+            ],
+        )
+        if head_claim is not None:
+            failures.append(
+                Failure(
+                    code="TENANT_CHECKPOINT_CLAIM_MISMATCH",
+                    message=f"Org {org_id}: checkpoint {cp.get('id')} claim does not match its row: {head_claim}",
                     scope_id=org_id,
                     tree_size=tree_size,
                 )
@@ -716,6 +1015,28 @@ def _verify_one_org_admin_reads_log(
                         f"Org {org_id}: checkpoint {cp.get('id')} signing_key_id "
                         f'"{signing_key_id}" not in dumped key registry'
                     ),
+                    scope_id=org_id,
+                    tree_size=tree_size,
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "unanchored":
+            failures.append(
+                Failure(
+                    code="TENANT_CHECKPOINT_KEY_UNANCHORED",
+                    message=_unanchored_message(
+                        f"Org {org_id}: checkpoint {cp.get('id')}", "signing_key_id", signing_key_id
+                    ),
+                    scope_id=org_id,
+                    tree_size=tree_size,
+                    signing_key_id=_as_str(signing_key_id),
+                )
+            )
+        elif sig == "undecided":
+            failures.append(
+                Failure(
+                    code="CHAIN_UNSUPPORTED_ALGORITHM",
+                    message=_undecided_message(f"Org {org_id}: checkpoint {cp.get('id')}", signing_key_id),
                     scope_id=org_id,
                     tree_size=tree_size,
                     signing_key_id=_as_str(signing_key_id),
@@ -797,26 +1118,95 @@ def verify_org_admin_reads_chains(
     )
 
 
-def verify_dump(dump: Dump, *, agent_keys: Sequence[Mapping[str, Any]] | None = None) -> VerifyReport:
-    """Verify a full-vault dump. Runs the vault-chain pass and the
-    org_admin_reads pass independently and ANDs their verdicts.
+def walk_dump_keys(
+    signing_keys: list[DumpRow],
+    key_statements: list[DumpRow],
+    *,
+    trust_anchors: str | Sequence[str] | None = None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+) -> tuple[KeyCache, KeyTrustReport]:
+    """Build the dump's key registry and, given ``trust_anchors``, run the
+    key-statement walk over its statements in write order, marking each key
+    anchored, unanchored or undecided. Returns the registry both passes grade
+    against and the report of the walk. Raises ``TypeError`` on a malformed
+    anchor or distrusted key, on ``distrusted_keys`` without
+    ``trust_anchors``, and on a statement file the walk cannot order (rows with
+    and without ``created_at``)."""
+    keys = _build_vault_key_registry(signing_keys)
+    trust: KeyTrust | None = None
+    if trust_anchors is not None and len(trust_anchors) > 0:
+        trust = compute_key_trust(
+            keys=[trust_key_from_dump_row(k) for k in signing_keys],
+            statements=[key_statement_from_dump_row(r) for r in key_statements],
+            trust_anchors=trust_anchors,
+            distrusted_keys=distrusted_keys,
+        )
+        keys = apply_key_trust(keys, trust)
+    elif distrusted_keys is not None and len(distrusted_keys) > 0:
+        raise TypeError(
+            "distrusted_keys act only inside the key-statement walk, which runs from "
+            "trust_anchors; pass trust_anchors as well."
+        )
+    return keys, report_key_trust(keys.trust_states(), trust, None)
+
+
+def verify_dump(
+    dump: Dump,
+    *,
+    agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    trust_anchors: str | Sequence[str] | None = None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+) -> VerifyReport:
+    """Verify a full-vault dump. Runs the key-statement walk (given
+    ``trust_anchors``), the vault-chain pass and the org_admin_reads pass, and
+    combines their verdicts.
 
     ``agent_keys``: Ed25519 JWKs of agent certs. Where an entry's signed
     payload carries an engine-validated agent signature whose cert thumbprint
     matches one, it is re-verified offline in every chain walk; one that does
     not verify fails ``CHAIN_AGENT_SIGNATURE_INVALID``. Without them the check
-    reports ``skipped_no_input`` and no verdict changes."""
+    reports ``skipped_no_input`` and no verdict changes.
+
+    ``trust_anchors``: SPKI digests (``sha256:<64 hex>``, a list or a comma
+    list) of vault keys held or taken out of band. The dump's key statements
+    are walked from them, and a key they do not reach anchors nothing it
+    signed. Nothing in the dump is ever an anchor. Omitted or empty, no walk
+    runs and the verdict is ``unanchored``: the report passes when nothing
+    failed, flagged as resting on keys nobody pinned.
+
+    ``distrusted_keys``: the operator's ``VAULT_DISTRUSTED_KEYS``
+    (``sha256:<64 hex>``, optionally ``@<RFC 3339 instant>``). What such a key
+    stored from the instant on (with none, from the retirement a trusted key
+    signed for it) counts for nothing in the walk. Requires ``trust_anchors``.
+    """
     # Build the signing-key registry once and share it across both passes; they
-    # draw from the same keys, so this also shares the lazy key-DER cache.
-    keys = _build_vault_key_registry(dump.signing_keys)
+    # draw from the same keys and the same walk, so this also shares the lazy
+    # key-DER cache.
+    keys, key_trust = walk_dump_keys(
+        dump.signing_keys, dump.key_statements, trust_anchors=trust_anchors, distrusted_keys=distrusted_keys
+    )
     vault = verify_vault_chains(
         dump.vault_entries, dump.vault_checkpoints, dump.signing_keys, keys, agent_keys=agent_keys
     )
     org_admin_reads = verify_org_admin_reads_chains(
         dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys, keys
     )
+    failed = bool(vault.failures or org_admin_reads.failures or key_trust.findings)
+    verdict = "failed" if failed else "unanchored" if key_trust.status == "no_anchor" else "trusted"
     return VerifyReport(
-        ok=len(vault.failures) == 0 and len(org_admin_reads.failures) == 0,
+        ok=not failed,
         vault=vault,
         org_admin_reads=org_admin_reads,
+        verdict=verdict,
+        key_trust=key_trust,
     )
+
+
+def report_codes(report: VerifyReport) -> list[FailureCode]:
+    """Every failure code a report carries: the key-statement findings, then
+    the vault and org_admin_reads failures."""
+    return [
+        *(f.code for f in report.key_trust.findings),
+        *(f.code for f in report.vault.failures),
+        *(f.code for f in report.org_admin_reads.failures),
+    ]

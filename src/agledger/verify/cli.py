@@ -6,12 +6,18 @@ Auto-detects the single positional argument:
                     exportMetadata + entries) -> verify_export
 
 The key-policy flags (``--keys``, ``--require-key-id``,
-``--require-out-of-band-keys``) apply to an ``/audit-export`` file only; a dump
-directory carries its own signed key history and rejects them. Without
-``--keys`` an export is verified against the keys carried inside that same
-export, which proves internal consistency and not independence.
+``--require-supplied-keys``) apply to an ``/audit-export`` file only; a dump
+directory carries its own key registry and rejects them.
 
-Exit codes: 0 clean, 1 verification failure, 2 usage / IO error. (The split of
+``--trust-anchor`` applies to both: the signed key statements the target
+carries are walked from the pinned SPKI digest, and anything signed by a key
+the walk does not reach fails. Without it the target is verified against keys
+nobody pinned, and a pass is reported as UNANCHORED: it passes, and it is not a
+trusted verdict, because a key written into the Server's database alone would
+pass too.
+
+Exit codes: 0 pass (trusted, or unanchored when no ``--trust-anchor`` was
+given), 1 verification failure, 2 usage / IO error. (The split of
 usage/IO into its own code refines the TS CLI's 0/1 so a missing file or bad
 argument is never mistaken for a tamper finding.) No network calls are made.
 
@@ -30,6 +36,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from agledger.verify.failures import suggestion
+from agledger.verify.key_statements import KeyTrustReport
 from agledger.verify.loader import DumpLoadError, load_dump
 from agledger.verify.types import VerifyReport
 from agledger.verify.verify_dump import verify_dump
@@ -56,9 +63,9 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
         epilog=(
             "TARGET is auto-detected: a directory is a full-vault NDJSON dump "
-            "(audit_vault.ndjson + the four companion files); a file is a single "
-            "/audit-export JSON document. Exit codes: 0 clean, 1 verification failure, "
-            "2 usage/IO error."
+            "(audit_vault.ndjson + the five companion files); a file is a single "
+            "/audit-export JSON document. Exit codes: 0 pass (trusted, or unanchored "
+            "without --trust-anchor), 1 verification failure, 2 usage/IO error."
         ),
     )
     parser.add_argument("target", help="dump directory or /audit-export JSON file")
@@ -89,16 +96,45 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--trust-anchor",
+        metavar="DIGEST",
+        action="append",
+        default=None,
+        help=(
+            "SPKI digest (sha256:<64 hex>) of a vault key you hold or took out of band: "
+            "the installer prints the first key's, and the Server's signing-key-digest.js "
+            "derives one from any key. Repeat it, or give a comma list, for more than one. "
+            "The signed key statements the target carries are walked from it, and "
+            "anything signed by a key the walk does not reach fails "
+            "(CHAIN_SIGNING_KEY_UNANCHORED and the checkpoint and read-log twins). An "
+            "export's anchoredFrom is the export's own word and never a pin. Without it "
+            "a pass is UNANCHORED, not trusted."
+        ),
+    )
+    parser.add_argument(
+        "--distrusted-key",
+        metavar="ENTRY",
+        action="append",
+        default=None,
+        help=(
+            "A key the operator distrusts, in the Server's VAULT_DISTRUSTED_KEYS form: "
+            "sha256:<64 hex>, optionally @<RFC 3339 instant>. What it signed from the "
+            "instant on (with none, from the retirement a trusted key signed for it) "
+            "counts for nothing in the walk. Repeat it for more than one. Requires "
+            "--trust-anchor."
+        ),
+    )
+    parser.add_argument(
         "-k",
         "--keys",
         metavar="FILE",
         help=(
-            "JSON file holding out-of-band public keys, for an /audit-export file. "
+            "JSON file holding public keys you supply, for an /audit-export file. "
             "Accepts a {keyId: SPKI-DER-base64} map, a [{keyId, publicKey, ...}] list, "
             "or the raw GET /v1/verification-keys response envelope (the .data array is "
-            "unwrapped automatically). Merged over any keys embedded in the export. "
-            "Without it an export is verified against its own embedded keys, which is "
-            "internal consistency rather than an independent audit."
+            "unwrapped automatically, and each key's statements are walked with the "
+            "export's own). Merged over any keys embedded in the export. Where a key "
+            "came from does not make it trusted; --trust-anchor does."
         ),
     )
     parser.add_argument(
@@ -111,12 +147,11 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--require-out-of-band-keys",
+        "--require-supplied-keys",
         action="store_true",
         help=(
-            "High-assurance: refuse keys embedded in the export. Verifying an export "
-            "against its own embedded keys is not an independent audit; supply keys "
-            "via --keys instead."
+            "Refuse keys embedded in the export: an entry whose only key is the "
+            "export's own fails CHAIN_KEY_POLICY_VIOLATION. Supply keys via --keys."
         ),
     )
     parser.add_argument(
@@ -181,12 +216,12 @@ _KEYS_SHAPE = (
 )
 
 
-def load_out_of_band_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
+def load_supplied_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
     """Read a ``--keys`` file into the shape ``verify_export`` accepts, or
     return the usage-error message. A ``GET /v1/verification-keys`` response is
     unwrapped to its ``data`` list so the file can be saved verbatim; every
     other shape passes through, and ``verify_export`` validates it at the
-    out-of-band-key boundary. Mirrors ``unwrapKeys`` in ``@agledger/verify``."""
+    supplied-key boundary. Mirrors ``unwrapKeys`` in ``@agledger/verify``."""
     try:
         with open(path, encoding="utf-8") as fh:
             raw: Any = json.load(fh)
@@ -246,14 +281,50 @@ def _agent_signature_summary(
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
+_PIN_HINT = (
+    "Pass --trust-anchor sha256:<hex> with the SPKI digest of a vault key you hold or took "
+    "out of band (the installer prints the first key's; the Server's signing-key-digest.js "
+    "derives one from any key)."
+)
+
+
+def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
+    """What the key-statement walk concluded, in the text report. A report with
+    no anchor says in plain words that its pass is not a trusted verdict."""
+    if key_trust.status == "no_anchor":
+        return [
+            (
+                "  key anchoring     : UNANCHORED. Not a trusted verdict: no --trust-anchor was "
+                "given, so no key was anchored, and a key written into the Server's database "
+                f"alone would pass. {_PIN_HINT}"
+            )
+        ]
+    lines = [
+        (
+            f"  key anchoring     : walked from {', '.join(key_trust.anchors)} ({key_trust.order} order); "
+            f"anchored {len(key_trust.anchored_key_ids)}, unanchored {len(key_trust.unanchored_key_ids)}, "
+            f"undecided {len(key_trust.undecided_key_ids)}"
+        )
+    ]
+    if key_trust.anchored_from is not None:
+        pinned = "is" if key_trust.anchored_from_pinned else "is NOT"
+        lines.append(f"  anchored from     : {key_trust.anchored_from} ({pinned} one of your anchors)")
+    for f in key_trust.findings:
+        lines.append(f"    [{f.code}] key {f.key_id or '-'}: {f.detail}")
+        lines.append(f"      -> {suggestion(f.code)}")
+    return lines
+
+
 def _looks_like_audit_export(value: Any) -> bool:
     return isinstance(value, dict) and "exportMetadata" in value and "entries" in value
 
 
 def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
     lines: list[str] = []
-    status = "PASS" if report.ok else "FAIL"
+    status = {"trusted": "PASS", "unanchored": "PASS, UNANCHORED", "failed": "FAIL"}[report.verdict]
     lines.append(f"[{status}] AGLedger offline verification (dump)")
+    lines.append("")
+    lines.extend(_key_trust_lines(report.key_trust))
     lines.append("")
     lines.append("audit_vault chain")
     lines.append(f"  records     : {report.vault.record_count}")
@@ -302,9 +373,10 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "total": result.signature_coverage.total,
         },
         "keyProvenance": {
-            "outOfBand": result.key_provenance.out_of_band,
+            "supplied": result.key_provenance.supplied,
             "embedded": result.key_provenance.embedded,
         },
+        "keyTrust": result.key_trust.to_json(),
         "optionalChecks": dict(result.optional_checks),
         "agentSignatures": {
             "present": result.agent_signatures.present,
@@ -322,7 +394,8 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
 
 def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
     lines: list[str] = []
-    status = "PASS" if result.valid else "FAIL"
+    unanchored = result.key_trust.status == "no_anchor"
+    status = ("PASS, UNANCHORED" if unanchored else "PASS") if result.valid else "FAIL"
     lines.append(f"[{status}] AGLedger offline verification (audit-export)")
     lines.append("")
     lines.append(f"  record            : {result.record_id}")
@@ -335,18 +408,8 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
         f"skipped={cov.skipped}"
     )
     prov = result.key_provenance
-    lines.append(
-        f"  key provenance    : out-of-band={prov.out_of_band} embedded={prov.embedded}"
-    )
-    # A PASS earned only against keys the export itself carries is not an
-    # independent verification: a full re-sign plus key swap would also pass.
-    # Say so beside the headline rather than leaving it encoded in the counters.
-    if result.valid and prov.out_of_band == 0 and prov.embedded > 0:
-        lines.append(
-            "  WARNING           : verified only against keys embedded in the export "
-            "itself. This proves internal consistency, not independence; supply --keys "
-            "(and --require-out-of-band-keys) with keys obtained out of band."
-        )
+    lines.append(f"  key provenance    : supplied={prov.supplied} embedded={prov.embedded}")
+    lines.extend(_key_trust_lines(result.key_trust))
     lines.append(
         "  agent signatures  : "
         f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given)}"
@@ -373,10 +436,19 @@ def run_cli(argv: Sequence[str]) -> int:
     report_format: str = args.report_format
 
     require_key_id: str | None = args.require_key_id
-    require_out_of_band_keys: bool = args.require_out_of_band_keys
+    require_supplied_keys: bool = args.require_supplied_keys
     has_key_policy_flags = (
-        args.keys is not None or require_key_id is not None or require_out_of_band_keys
+        args.keys is not None or require_key_id is not None or require_supplied_keys
     )
+    trust_anchors: list[str] = list(args.trust_anchor or [])
+    distrusted_keys: list[str] = list(args.distrusted_key or [])
+    if distrusted_keys and not trust_anchors:
+        print(
+            "--distrusted-key acts only inside the key-statement walk, which runs from "
+            "--trust-anchor; pass --trust-anchor as well.",
+            file=sys.stderr,
+        )
+        return _EXIT_USAGE
 
     agent_keys: list[dict[str, Any]] | None = None
     if args.agent_keys is not None:
@@ -388,20 +460,26 @@ def run_cli(argv: Sequence[str]) -> int:
 
     # Directory -> full-vault dump.
     if os.path.isdir(target):
-        # A dump carries its own signed key history, so an out-of-band key set
-        # has nothing to override and a silent no-op would read as an audit
-        # that honoured the policy. Mirrors @agledger/verify.
+        # A dump carries its own key registry, so a supplied key set has
+        # nothing to override and a silent no-op would read as an audit that
+        # honoured the policy. Mirrors @agledger/verify.
         if has_key_policy_flags:
             print(
-                "--keys / --require-key-id / --require-out-of-band-keys apply to "
-                "/audit-export files only; a dump directory carries its own signed "
-                "key history (vault_signing_keys.ndjson).",
+                "--keys / --require-key-id / --require-supplied-keys apply to "
+                "/audit-export files only; a dump directory carries its own key "
+                "registry and signed key statements (vault_signing_keys.ndjson, "
+                "vault_key_statements.ndjson). Anchor its keys with --trust-anchor.",
                 file=sys.stderr,
             )
             return _EXIT_USAGE
         try:
-            report = verify_dump(load_dump(target), agent_keys=agent_keys)
-        except DumpLoadError as err:
+            report = verify_dump(
+                load_dump(target),
+                agent_keys=agent_keys,
+                trust_anchors=trust_anchors,
+                distrusted_keys=distrusted_keys,
+            )
+        except (DumpLoadError, TypeError) as err:
             print(str(err), file=sys.stderr)
             return _EXIT_USAGE
         if not quiet:
@@ -433,25 +511,29 @@ def run_cli(argv: Sequence[str]) -> int:
 
     public_keys: Mapping[str, Any] | list[Any] | None = None
     if args.keys is not None:
-        loaded_keys = load_out_of_band_keys(args.keys)
+        loaded_keys = load_supplied_keys(args.keys)
         if isinstance(loaded_keys, str):
             print(loaded_keys, file=sys.stderr)
             return _EXIT_USAGE
         public_keys = loaded_keys
 
-    # verify_export raises TypeError at the out-of-band-key boundary when the
-    # file's shape is wrong ({keyId: 42}, [null]). Surface it as a usage error
-    # rather than an uncaught traceback, so a bad file never reads as a verdict.
+    # verify_export raises TypeError at the supplied-key boundary when the
+    # file's shape is wrong ({keyId: 42}, [null]), and on a malformed anchor or
+    # distrusted key. Surface it as a usage error rather than an uncaught
+    # traceback, so a bad input never reads as a verdict.
     try:
         result = verify_export(
             parsed,
             public_keys=public_keys,
             require_key_id=require_key_id,
-            require_out_of_band_keys=require_out_of_band_keys,
+            require_supplied_keys=require_supplied_keys,
             agent_keys=agent_keys,
+            trust_anchors=trust_anchors,
+            distrusted_keys=distrusted_keys,
         )
     except TypeError as err:
-        print(f"{err}\n{_KEYS_SHAPE}", file=sys.stderr)
+        hint = "" if "trust_anchors" in str(err) or "distrusted_keys" in str(err) else f"\n{_KEYS_SHAPE}"
+        print(f"{err}{hint}", file=sys.stderr)
         return _EXIT_USAGE
     if not quiet:
         if report_format == "json":

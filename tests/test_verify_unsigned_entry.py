@@ -315,7 +315,7 @@ def test_the_unsigned_break_is_reported_ahead_of_the_key_policy() -> None:
     assert result.broken_at is not None
     assert (result.broken_at.position, result.broken_at.code) == (1, "CHAIN_ENTRY_UNSIGNED")
 
-    oob = verify_export(_valid_all_nulled(), public_keys=_oob_keys(), require_out_of_band_keys=True)
+    oob = verify_export(_valid_all_nulled(), public_keys=_oob_keys(), require_supplied_keys=True)
     assert oob.broken_at is not None
     assert oob.broken_at.code == "CHAIN_ENTRY_UNSIGNED"
 
@@ -383,15 +383,15 @@ def _zero_signature_export() -> dict[str, Any]:
     return exp
 
 
-@pytest.mark.parametrize("policy", ["none", "require_key_id", "require_out_of_band_keys"])
+@pytest.mark.parametrize("policy", ["none", "require_key_id", "require_supplied_keys"])
 def test_a_zeroed_signature_under_a_named_key_fails_signature_invalid(policy: str) -> None:
     exp = _zero_signature_export()
     key_id = exp["entries"][0]["integrity"]["signingKeyId"]
     kwargs: dict[str, Any] = {"public_keys": _oob_keys()}
     if policy == "require_key_id":
         kwargs["require_key_id"] = key_id
-    elif policy == "require_out_of_band_keys":
-        kwargs["require_out_of_band_keys"] = True
+    elif policy == "require_supplied_keys":
+        kwargs["require_supplied_keys"] = True
     result = verify_export(exp, **kwargs)
     assert result.valid is False
     assert result.broken_at is not None

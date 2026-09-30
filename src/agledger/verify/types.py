@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agledger.verify.failures import FailureCode
+from agledger.verify.key_statements import KeyTrustReport, no_anchor_report
 
 #: One loaded dump row, keyed by DB column name (snake_case), as parsed from
 #: NDJSON. Aliased for readability at call sites.
@@ -23,13 +24,16 @@ DumpRow = dict[str, Any]
 
 @dataclass
 class Dump:
-    """The five NDJSON files of a full-vault dump, parsed into row lists."""
+    """The six NDJSON files of a full-vault dump, parsed into row lists."""
 
     vault_entries: list[DumpRow] = field(default_factory=list[DumpRow])
     vault_checkpoints: list[DumpRow] = field(default_factory=list[DumpRow])
     signing_keys: list[DumpRow] = field(default_factory=list[DumpRow])
     org_admin_reads: list[DumpRow] = field(default_factory=list[DumpRow])
     org_admin_reads_checkpoints: list[DumpRow] = field(default_factory=list[DumpRow])
+    key_statements: list[DumpRow] = field(default_factory=list[DumpRow])
+    """``vault_key_statements.ndjson``: the signed key statements, with the
+    write time the trust walk orders them by."""
 
 
 @dataclass
@@ -86,14 +90,16 @@ class VaultChainsReport:
                 "actor_attribution",
                 "key_temporal",
                 "agent_signature",
+                "key_anchoring",
             ),
             "skipped_no_input",
         )
     )
     """Which input-gated checks ran: ``payload_binding``, ``oidc_actor``,
-    ``actor_attribution``, ``key_temporal`` and ``agent_signature``, each
-    ``applied`` once it ran on any chain, so "not checked anywhere" never reads as "passed". Mirrors the
-    ``@agledger/verify`` report."""
+    ``actor_attribution``, ``key_temporal``, ``agent_signature`` and
+    ``key_anchoring``, each ``applied`` once it ran on any chain, so "not
+    checked anywhere" never reads as "passed". Mirrors the ``@agledger/verify``
+    report."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -139,15 +145,38 @@ class TenantAdminReadsReport:
         }
 
 
+#: The overall verdict of a dump.
+#:
+#: - ``trusted``: every check ran clean, and every signing key was anchored by
+#:   signed key statements to a ``trust_anchors`` pin.
+#: - ``unanchored``: nothing failed, but no ``trust_anchors`` were given, so
+#:   every key was taken from the dump's own ``vault_signing_keys``. The report
+#:   passes (``ok``) and is flagged: a key written into the database alone would
+#:   pass too, so it is not a trusted verdict until a pin is given.
+#: - ``failed``: at least one failure, or a finding on the key statements.
+Verdict = Literal["trusted", "unanchored", "failed"]
+
+
 @dataclass
 class VerifyReport:
     ok: bool
+    """False only for the ``failed`` verdict. An ``unanchored`` report passes
+    and is flagged; read ``verdict`` (or ``key_trust.status``) before treating
+    a pass as trusted."""
     vault: VaultChainsReport
     org_admin_reads: TenantAdminReadsReport
+    verdict: Verdict = "unanchored"
+    key_trust: KeyTrustReport = field(default_factory=no_anchor_report)
+    """The key-statement walk: which keys the ``trust_anchors`` reach, and any
+    finding about the statements themselves (``KEY_STATEMENT_INVALID``,
+    ``KEY_CLOSURE_INVALID``, ``CHAIN_KEY_WINDOW_DRIFT``), each of which fails
+    the dump. ``status`` is ``no_anchor`` when no anchors were given."""
 
     def to_json(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
+            "verdict": self.verdict,
+            "keyTrust": self.key_trust.to_json(),
             "vault": self.vault.to_json(),
             "orgAdminReads": self.org_admin_reads.to_json(),
         }
