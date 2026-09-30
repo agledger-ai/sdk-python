@@ -2318,8 +2318,6 @@ class WebhookTestResult(BaseModel):
     """Response body from the endpoint, truncated to 1024 characters."""
     duration_ms: int | None = Field(None, alias="durationMs")
     """Round-trip duration in milliseconds."""
-    latency_ms: int | None = Field(None, alias="latencyMs")
-    """Alias of ``duration_ms``."""
     delivery_id: str | None = Field(None, alias="deliveryId")
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
 
