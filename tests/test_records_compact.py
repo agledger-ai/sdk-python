@@ -96,14 +96,15 @@ def test_list_and_search_compact_return_a_compact_page() -> None:
     listing = respx.get(f"{BASE}/v1/records").mock(return_value=httpx.Response(200, json=COMPACT_PAGE))
     search = respx.get(f"{BASE}/v1/records/search").mock(return_value=httpx.Response(200, json=COMPACT_PAGE))
     with AgledgerClient(api_key="agl_agt_test", base_url=BASE) as client:
-        page = client.records.list(view="compact", limit=10, offset=20)
+        page = client.records.list(view="compact", limit=10)
         found = client.records.search(view="compact", status="ACTIVE")
-    assert dict(listing.calls[0].request.url.params) == {"view": "compact", "limit": "10", "offset": "20"}
+    assert dict(listing.calls[0].request.url.params) == {"view": "compact", "limit": "10"}
     assert search.calls[0].request.url.params["view"] == "compact"
     for p in (page, found):
         assert isinstance(p, RecordRowCompactPage)
         assert isinstance(p.data[0], RecordRowCompact)
-        assert (p.limit, p.offset, p.has_more) == (50, 0, False)
+        assert (p.limit, p.has_more) == (50, False)
+        assert "offset" not in type(p).model_fields
         assert p.next_steps is not None
         assert isinstance(p.next_steps[0], NextStepCompact)
 
@@ -148,7 +149,7 @@ async def test_async_compact_reads_match_sync() -> None:
     respx.get(f"{BASE}/v1/records/search").mock(return_value=httpx.Response(200, json=COMPACT_PAGE))
     async with AsyncAgledgerClient(api_key="agl_agt_test", base_url=BASE) as client:
         row = await client.records.get(RID, view="compact")
-        page = await client.records.list(view="compact", offset=5)
+        page = await client.records.list(view="compact", cursor="c1")
         found = await client.records.search(view="compact")
         rows = [r async for r in client.records.list_all(view="compact")]
     assert get.calls[0].request.url.params["view"] == "compact"

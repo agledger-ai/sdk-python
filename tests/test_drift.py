@@ -161,7 +161,6 @@ def test_get_agent_history_maps_from_to_the_wire_name():
     page = _client().drift.get_agent_history(
         "agt-1",
         limit=50,
-        offset=0,
         cursor="cur-0",
         type="notarize-generic-v1",
         outcome="accept",
@@ -172,7 +171,6 @@ def test_get_agent_history_maps_from_to_the_wire_name():
     assert route.calls.last.request.url.path == "/v1/agents/agt-1/history"
     assert dict(route.calls.last.request.url.params) == {
         "limit": "50",
-        "offset": "0",
         "cursor": "cur-0",
         "type": "notarize-generic-v1",
         "outcome": "accept",

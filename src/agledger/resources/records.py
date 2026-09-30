@@ -39,8 +39,7 @@ def _build_list_params(
     performer_agent_id: str | None, role: str | None, from_: str | None,
     to: str | None, has_dispute: bool | None, dispute_status: DisputeStatus | str | None,
     imported: bool | None, source: str | None, actionable: bool | None,
-    limit: int | None, cursor: str | None, offset: int | None = None,
-    view: RecordView | None = None,
+    limit: int | None, cursor: str | None, view: RecordView | None = None,
 ) -> dict[str, Any]:
     """Assemble the query params for GET /v1/records, mapping snake_case to the wire names."""
     return {
@@ -59,7 +58,6 @@ def _build_list_params(
             ("source", source),
             ("actionable", actionable),
             ("limit", limit),
-            ("offset", offset),
             ("cursor", cursor),
             ("view", view),
         )
@@ -214,7 +212,6 @@ class RecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
     ) -> Page[RecordRow]: ...
@@ -236,7 +233,6 @@ class RecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
     ) -> RecordRowCompactPage: ...
@@ -257,7 +253,6 @@ class RecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
     ) -> Page[RecordRow] | RecordRowCompactPage:
@@ -278,7 +273,7 @@ class RecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, cursor,
-            offset, view,
+            view,
         )
         return _parse_page(self._http.get_page("/v1/records", params=params), view)
 
@@ -362,7 +357,7 @@ class RecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, None,
-            None, view,
+            view,
         )
         for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield _parse_row(item, view)
@@ -401,7 +396,6 @@ class RecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
     ) -> Page[RecordRow]: ...
@@ -440,7 +434,6 @@ class RecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
     ) -> RecordRowCompactPage: ...
@@ -478,7 +471,6 @@ class RecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
     ) -> Page[RecordRow] | RecordRowCompactPage:
@@ -529,7 +521,6 @@ class RecordsResource:
         if ref_type is not None: params["ref.type"] = ref_type
         if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         if view is not None: params["view"] = view
         return _parse_page(self._http.get_page("/v1/records/search", params=params), view)
@@ -843,7 +834,6 @@ class AsyncRecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
     ) -> Page[RecordRow]: ...
@@ -865,7 +855,6 @@ class AsyncRecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
     ) -> RecordRowCompactPage: ...
@@ -886,7 +875,6 @@ class AsyncRecordsResource:
         source: str | None = None,
         actionable: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
     ) -> Page[RecordRow] | RecordRowCompactPage:
@@ -907,7 +895,7 @@ class AsyncRecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, cursor,
-            offset, view,
+            view,
         )
         return _parse_page(await self._http.get_page("/v1/records", params=params), view)
 
@@ -991,7 +979,7 @@ class AsyncRecordsResource:
         params = _build_list_params(
             org_id, status, type, performer_agent_id, role, from_, to,
             has_dispute, dispute_status, imported, source, actionable, limit, None,
-            None, view,
+            view,
         )
         async for item in self._http.paginate("/v1/records", params=params, max_pages=max_pages):
             yield _parse_row(item, view)
@@ -1030,7 +1018,6 @@ class AsyncRecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
     ) -> Page[RecordRow]: ...
@@ -1069,7 +1056,6 @@ class AsyncRecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
     ) -> RecordRowCompactPage: ...
@@ -1107,7 +1093,6 @@ class AsyncRecordsResource:
         ref_type: str | None = None,
         ref_id: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
     ) -> Page[RecordRow] | RecordRowCompactPage:
@@ -1158,7 +1143,6 @@ class AsyncRecordsResource:
         if ref_type is not None: params["ref.type"] = ref_type
         if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         if view is not None: params["view"] = view
         return _parse_page(await self._http.get_page("/v1/records/search", params=params), view)

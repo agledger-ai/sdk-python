@@ -28,7 +28,6 @@ class OrgReadsCheckpointsResource:
         self,
         *,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> OrgReadsCheckpointPage:
         """List recent signed checkpoints for the calling org.
@@ -40,7 +39,6 @@ class OrgReadsCheckpointsResource:
         """
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         return OrgReadsCheckpointPage.model_validate(
             self._http.get("/v1/audit/org-reads/checkpoints", params=params)
@@ -109,12 +107,10 @@ class AsyncOrgReadsCheckpointsResource:
         self,
         *,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> OrgReadsCheckpointPage:
         params: dict[str, Any] = {}
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         return OrgReadsCheckpointPage.model_validate(
             await self._http.get("/v1/audit/org-reads/checkpoints", params=params)

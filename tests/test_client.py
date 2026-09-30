@@ -675,7 +675,7 @@ def test_events_list_all_sends_until():
 
 
 @respx.mock
-def test_events_list_sends_record_id_event_type_and_offset():
+def test_events_list_sends_record_id_and_event_type_and_no_offset():
     respx.get("https://agledger.example.com/v1/events").mock(
         return_value=httpx.Response(200, json={"data": [], "hasMore": False})
     )
@@ -684,13 +684,12 @@ def test_events_list_sends_record_id_event_type_and_offset():
         since="2026-04-01T00:00:00Z",
         record_id="rec-1",
         event_type="record.created",
-        offset=20,
     )
 
     sent = respx.calls[0].request.url.params
     assert sent["recordId"] == "rec-1"
     assert sent["eventType"] == "record.created"
-    assert sent["offset"] == "20"
+    assert "offset" not in sent
 
 
 @respx.mock
@@ -828,7 +827,6 @@ def test_admin_list_api_keys_sends_camel_case_filters():
         is_active=True,
         created_before="2026-08-01T00:00:00Z",
         limit=2,
-        offset=0,
         cursor="b2Zmc2V0OjE=",
     )
 
@@ -841,7 +839,6 @@ def test_admin_list_api_keys_sends_camel_case_filters():
         "isActive": "true",
         "createdBefore": "2026-08-01T00:00:00Z",
         "limit": "2",
-        "offset": "0",
         "cursor": "b2Zmc2V0OjE=",
     }
 
