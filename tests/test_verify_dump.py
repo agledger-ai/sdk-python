@@ -16,6 +16,8 @@ import pytest
 from agledger.verify import load_dump, verify_dump
 from agledger.verify.cli import run_cli
 from agledger.verify.loader import DumpLoadError
+from agledger.verify.types import VerifyReport
+from agledger.verify.verify_dump import report_codes
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONFORMANCE_DIR = _REPO_ROOT / "testdata" / "conformance"
@@ -306,3 +308,65 @@ def test_a_rewritten_key_id_is_drift_before_any_question_about_the_key_it_names(
         f for f in verify_dump(dump).vault.failures if f.scope_id == entry.get("chain_key") and f.position == entry["chain_position"]
     ]
     assert [f.code for f in failures] == ["CHAIN_SIGNING_KEY_DRIFT"]
+
+
+# --- producer order and missing envelopes, as @agledger/verify streams them ---
+
+_STRANGER = "sha256:" + "ab" * 32
+
+
+def _codes(report: VerifyReport) -> set[str]:
+    return set(report_codes(report))
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_a_chain_that_reappears_after_it_closed_is_refused_as_out_of_producer_order() -> None:
+    dump = load_dump(str(_VALID_DUMP))
+    first = dump.vault_entries[0]
+    assert any(e["chain_key"] != first["chain_key"] for e in dump.vault_entries)
+    dump.vault_entries = [*dump.vault_entries[1:], first]
+    report = verify_dump(dump)
+    assert not report.ok
+    assert any(
+        f.code == "UNSUPPORTED_FORMAT" and "not in producer order" in f.message for f in report.vault.failures
+    )
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_a_row_without_cose_sign1_stops_the_walk_and_keeps_what_the_chains_closed_before_it_found() -> None:
+    # Under a pin nothing links to, every chain closed before the refused row
+    # has already failed on its keys; the refusal does not erase that.
+    dump = load_dump(str(_VALID_DUMP))
+    dump.vault_entries[-1]["cose_sign1"] = None
+    codes = _codes(verify_dump(dump, trust_anchors=[_STRANGER]))
+    assert {"UNSUPPORTED_FORMAT", "CHAIN_SIGNING_KEY_UNANCHORED"} <= codes
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+@pytest.mark.parametrize(
+    ("table", "code"),
+    [
+        ("vault_checkpoints", "CHECKPOINT_CLAIM_MISMATCH"),
+        ("org_admin_reads", "TENANT_READ_LEAF_HASH_MISMATCH"),
+        ("org_admin_reads_checkpoints", "TENANT_CHECKPOINT_CLAIM_MISMATCH"),
+    ],
+)
+def test_a_null_envelope_on_a_checkpoint_leaf_or_tree_head_is_a_finding_not_a_crash(table: str, code: str) -> None:
+    dump = load_dump(str(_VALID_DUMP))
+    rows = getattr(dump, table)
+    rows[0]["cose_sign1"] = None
+    if table != "org_admin_reads":
+        rows[0]["signing_key_id"] = None
+    report = verify_dump(dump)
+    assert not report.ok
+    assert code in _codes(report)
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_signing_key_statements_given_as_a_list_are_read_by_index_as_verify_core_reads_them() -> None:
+    from agledger.verify import verify_export
+
+    doc = json.loads((_CONFORMANCE_DIR / "export" / "valid-es256.json").read_text())
+    doc["exportMetadata"]["signingKeyStatements"] = []
+    result = verify_export(doc, trust_anchors=[doc["exportMetadata"]["anchoredFrom"]])
+    assert result.key_trust.status == "walked"
