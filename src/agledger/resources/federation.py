@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import (
+    DisputeGrounds,
+    DisputeProtocolAction,
+    EuAiActDomain,
     FederationSettlementSignal,
     FederationVerdict,
+    OperatingMode,
     PeerHandshakeResult,
+    RiskClassification,
 )
 
 
@@ -28,10 +33,13 @@ def _handshake_body(
 
 def _state_transition_body(
     record_id: str, state: str, type: str, idempotency_key: str,
-    schema_ref: dict[str, Any] | None, principal_agent_id: str | None,
-    performer_agent_id: str | None, co_sign_required: bool | None,
+    schema_ref: dict[str, Any], principal_agent_id: str,
+    performer_agent_id: str, operating_mode: OperatingMode,
+    co_sign_required: bool | None,
     correlation_id: str | None, project_ref: str | None,
-    external_task_id: str | None, operating_mode: str | None,
+    external_task_id: str | None, platform_ref: str | None,
+    risk_classification: RiskClassification | None,
+    eu_ai_act_domain: EuAiActDomain | None,
     parent_record_id: str | None, root_record_id: str | None,
     chain_depth: int | None,
 ) -> dict[str, Any]:
@@ -40,15 +48,18 @@ def _state_transition_body(
         "state": state,
         "type": type,
         "idempotencyKey": idempotency_key,
+        "schemaRef": schema_ref,
+        "principalAgentId": principal_agent_id,
+        "performerAgentId": performer_agent_id,
+        "operatingMode": operating_mode,
     }
-    if schema_ref is not None: body["schemaRef"] = schema_ref
-    if principal_agent_id is not None: body["principalAgentId"] = principal_agent_id
-    if performer_agent_id is not None: body["performerAgentId"] = performer_agent_id
     if co_sign_required is not None: body["coSignRequired"] = co_sign_required
     if correlation_id is not None: body["correlationId"] = correlation_id
     if project_ref is not None: body["projectRef"] = project_ref
     if external_task_id is not None: body["externalTaskId"] = external_task_id
-    if operating_mode is not None: body["operatingMode"] = operating_mode
+    if platform_ref is not None: body["platformRef"] = platform_ref
+    if risk_classification is not None: body["riskClassification"] = risk_classification
+    if eu_ai_act_domain is not None: body["euAiActDomain"] = eu_ai_act_domain
     if parent_record_id is not None: body["parentRecordId"] = parent_record_id
     if root_record_id is not None: body["rootRecordId"] = root_record_id
     if chain_depth is not None: body["chainDepth"] = chain_depth
@@ -58,23 +69,62 @@ def _state_transition_body(
 def _signal_body(
     record_id: str, recommendation: FederationSettlementSignal, outcome_hash: str,
     valid_until: str, idempotency_key: str, outcome: FederationVerdict | None,
-    counter_signature: str | None,
-    schema_ref: dict[str, Any] | None, reason_code: str | None,
-    failing_rule_ids: list[str] | None, reason: str | None,
+    schema_ref: dict[str, Any], reason_code: str | None,
+    failing_rule_ids: list[str] | None, counter_signature: str | None,
+) -> dict[str, Any]:
+    """``outcome``, ``reasonCode`` and ``failingRuleIds`` are required and
+    nullable, so they go out as JSON null rather than being left off."""
+    body: dict[str, Any] = {
+        "recordId": record_id,
+        "recommendation": recommendation,
+        "outcome": outcome,
+        "outcomeHash": outcome_hash,
+        "validUntil": valid_until,
+        "idempotencyKey": idempotency_key,
+        "schemaRef": schema_ref,
+        "reasonCode": reason_code,
+        "failingRuleIds": failing_rule_ids,
+    }
+    if counter_signature is not None: body["counterSignature"] = counter_signature
+    return body
+
+
+def _co_sign_body(
+    record_id: str, recommendation: FederationSettlementSignal, outcome_hash: str,
+    state: str, performer_hub_id: str, valid_until: str, idempotency_key: str,
+    schema_ref: dict[str, Any], outcome: FederationVerdict | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "recordId": record_id,
         "recommendation": recommendation,
         "outcomeHash": outcome_hash,
+        "state": state,
+        "performerHubId": performer_hub_id,
         "validUntil": valid_until,
         "idempotencyKey": idempotency_key,
+        "schemaRef": schema_ref,
     }
     if outcome is not None: body["outcome"] = outcome
-    if counter_signature is not None: body["counterSignature"] = counter_signature
-    if schema_ref is not None: body["schemaRef"] = schema_ref
-    if reason_code is not None: body["reasonCode"] = reason_code
-    if failing_rule_ids is not None: body["failingRuleIds"] = failing_rule_ids
-    if reason is not None: body["reason"] = reason
+    return body
+
+
+def _dispute_body(
+    record_id: str, action: DisputeProtocolAction, dispute_id: str,
+    dispute_status: str, idempotency_key: str, schema_ref: dict[str, Any],
+    grounds: DisputeGrounds | None, outcome: str | None,
+    initiated_by_role: str | None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "recordId": record_id,
+        "action": action,
+        "disputeId": dispute_id,
+        "disputeStatus": dispute_status,
+        "idempotencyKey": idempotency_key,
+        "schemaRef": schema_ref,
+    }
+    if grounds is not None: body["grounds"] = grounds
+    if outcome is not None: body["outcome"] = outcome
+    if initiated_by_role is not None: body["initiatedByRole"] = initiated_by_role
     return body
 
 
@@ -129,24 +179,32 @@ class FederationResource:
         state: str,
         type: str,
         idempotency_key: str,
-        schema_ref: dict[str, Any] | None = None,
-        principal_agent_id: str | None = None,
-        performer_agent_id: str | None = None,
+        schema_ref: dict[str, Any],
+        principal_agent_id: str,
+        performer_agent_id: str,
+        operating_mode: OperatingMode,
         co_sign_required: bool | None = None,
         correlation_id: str | None = None,
         project_ref: str | None = None,
         external_task_id: str | None = None,
-        operating_mode: str | None = None,
+        platform_ref: str | None = None,
+        risk_classification: RiskClassification | None = None,
+        eu_ai_act_domain: EuAiActDomain | None = None,
         parent_record_id: str | None = None,
         root_record_id: str | None = None,
         chain_depth: int | None = None,
     ) -> dict[str, Any]:
-        """Submit a cross-boundary state transition to a peer."""
+        """Submit a cross-boundary state transition to a peer.
+
+        ``schema_ref`` (``{"publisher", "type", "version", "manifestDigest"}``),
+        both agent ids and ``operating_mode`` are required: a record with no
+        separate performer sends the principal as ``performer_agent_id``. The
+        body is ``additionalProperties: false``."""
         body = _state_transition_body(
             record_id, state, type, idempotency_key, schema_ref, principal_agent_id,
-            performer_agent_id, co_sign_required, correlation_id, project_ref,
-            external_task_id, operating_mode, parent_record_id, root_record_id,
-            chain_depth,
+            performer_agent_id, operating_mode, co_sign_required, correlation_id,
+            project_ref, external_task_id, platform_ref, risk_classification,
+            eu_ai_act_domain, parent_record_id, root_record_id, chain_depth,
         )
         return self._http.post("/federation/v1/state-transitions", json=body)
 
@@ -155,15 +213,14 @@ class FederationResource:
         *,
         record_id: str,
         recommendation: FederationSettlementSignal,
+        outcome: FederationVerdict | None,
         outcome_hash: str,
         valid_until: str,
         idempotency_key: str,
-        outcome: FederationVerdict | None = None,
+        schema_ref: dict[str, Any],
+        reason_code: str | None,
+        failing_rule_ids: list[str] | None,
         counter_signature: str | None = None,
-        schema_ref: dict[str, Any] | None = None,
-        reason_code: str | None = None,
-        failing_rule_ids: list[str] | None = None,
-        reason: str | None = None,
     ) -> dict[str, Any]:
         """Relay a Settlement Signal (SETTLE / HOLD / RELEASE) to a counterparty peer.
 
@@ -171,25 +228,70 @@ class FederationResource:
         ``coSignRequired: true`` refuses a signal without ``counter_signature``
         with 422, ``retryable: false``, reason ``co_sign_required``.
 
-        ``reason`` is ignored by the receiver. Peers on API 1.8.0 and earlier
-        send the signal's free-text reason here, so the field is still
-        accepted, but it is neither stored nor forwarded: free text does not
-        cross the federation wire, and ``reason_code`` and ``failing_rule_ids``
-        carry the cause."""
+        ``outcome``, ``reason_code`` and ``failing_rule_ids`` are required and
+        nullable: pass None for a RELEASE that binds no verdict, a signal with
+        no classifiable cause, or a terminal no rule failed, and each goes out
+        as JSON null. Free text does not cross the federation wire, so the body
+        takes no ``reason``: ``reason_code`` and ``failing_rule_ids`` carry the
+        cause."""
         body = _signal_body(
             record_id, recommendation, outcome_hash, valid_until, idempotency_key,
-            outcome, counter_signature, schema_ref, reason_code, failing_rule_ids,
-            reason,
+            outcome, schema_ref, reason_code, failing_rule_ids, counter_signature,
         )
         return self._http.post("/federation/v1/signals", json=body)
 
-    def submit_co_sign_request(self, **params: Any) -> dict[str, Any]:
-        """Request a co-signature on a federated artifact."""
-        return self._http.post("/federation/v1/co-sign-requests", json=params)
+    def submit_co_sign_request(
+        self,
+        *,
+        record_id: str,
+        recommendation: FederationSettlementSignal,
+        outcome_hash: str,
+        state: str,
+        performer_hub_id: str,
+        valid_until: str,
+        idempotency_key: str,
+        schema_ref: dict[str, Any],
+        outcome: FederationVerdict | None = None,
+    ) -> dict[str, Any]:
+        """Ask a counterparty Server to counter-sign a Settlement Signal over its
+        canonical co-sign payload. ``state`` is the terminal RecordStatus the
+        firing Server asserts, which the receiver checks its own record sits at.
+        ``schema_ref`` is required."""
+        return self._http.post(
+            "/federation/v1/co-sign-requests",
+            json=_co_sign_body(
+                record_id, recommendation, outcome_hash, state, performer_hub_id,
+                valid_until, idempotency_key, schema_ref, outcome,
+            ),
+        )
 
-    def submit_dispute_protocol(self, **params: Any) -> dict[str, Any]:
-        """Submit a dispute-protocol message to a federated counterparty."""
-        return self._http.post("/federation/v1/disputes", json=params)
+    def submit_dispute_protocol(
+        self,
+        *,
+        record_id: str,
+        action: DisputeProtocolAction,
+        dispute_id: str,
+        dispute_status: str,
+        idempotency_key: str,
+        schema_ref: dict[str, Any],
+        grounds: DisputeGrounds | None = None,
+        outcome: Literal["OVERTURNED", "UPHELD", "SPLIT"] | None = None,
+        initiated_by_role: str | None = None,
+    ) -> dict[str, Any]:
+        """Send a dispute-protocol message to a federated counterparty.
+
+        ``action`` is ``opened``, ``resolved`` or ``withdrawn``, and
+        ``dispute_status`` the status after it (``EVIDENCE_WINDOW`` on opened,
+        ``RESOLVED`` on resolved, ``WITHDRAWN`` on withdrawn). ``schema_ref`` is
+        required. There is no tier: the body is ``additionalProperties: false``,
+        so a ``tier`` is a 400."""
+        return self._http.post(
+            "/federation/v1/disputes",
+            json=_dispute_body(
+                record_id, action, dispute_id, dispute_status, idempotency_key,
+                schema_ref, grounds, outcome, initiated_by_role,
+            ),
+        )
 
 
 class AsyncFederationResource:
@@ -223,23 +325,26 @@ class AsyncFederationResource:
         state: str,
         type: str,
         idempotency_key: str,
-        schema_ref: dict[str, Any] | None = None,
-        principal_agent_id: str | None = None,
-        performer_agent_id: str | None = None,
+        schema_ref: dict[str, Any],
+        principal_agent_id: str,
+        performer_agent_id: str,
+        operating_mode: OperatingMode,
         co_sign_required: bool | None = None,
         correlation_id: str | None = None,
         project_ref: str | None = None,
         external_task_id: str | None = None,
-        operating_mode: str | None = None,
+        platform_ref: str | None = None,
+        risk_classification: RiskClassification | None = None,
+        eu_ai_act_domain: EuAiActDomain | None = None,
         parent_record_id: str | None = None,
         root_record_id: str | None = None,
         chain_depth: int | None = None,
     ) -> dict[str, Any]:
         body = _state_transition_body(
             record_id, state, type, idempotency_key, schema_ref, principal_agent_id,
-            performer_agent_id, co_sign_required, correlation_id, project_ref,
-            external_task_id, operating_mode, parent_record_id, root_record_id,
-            chain_depth,
+            performer_agent_id, operating_mode, co_sign_required, correlation_id,
+            project_ref, external_task_id, platform_ref, risk_classification,
+            eu_ai_act_domain, parent_record_id, root_record_id, chain_depth,
         )
         return await self._http.post("/federation/v1/state-transitions", json=body)
 
@@ -248,25 +353,61 @@ class AsyncFederationResource:
         *,
         record_id: str,
         recommendation: FederationSettlementSignal,
+        outcome: FederationVerdict | None,
         outcome_hash: str,
         valid_until: str,
         idempotency_key: str,
-        outcome: FederationVerdict | None = None,
+        schema_ref: dict[str, Any],
+        reason_code: str | None,
+        failing_rule_ids: list[str] | None,
         counter_signature: str | None = None,
-        schema_ref: dict[str, Any] | None = None,
-        reason_code: str | None = None,
-        failing_rule_ids: list[str] | None = None,
-        reason: str | None = None,
     ) -> dict[str, Any]:
         body = _signal_body(
             record_id, recommendation, outcome_hash, valid_until, idempotency_key,
-            outcome, counter_signature, schema_ref, reason_code, failing_rule_ids,
-            reason,
+            outcome, schema_ref, reason_code, failing_rule_ids, counter_signature,
         )
         return await self._http.post("/federation/v1/signals", json=body)
 
-    async def submit_co_sign_request(self, **params: Any) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/co-sign-requests", json=params)
+    async def submit_co_sign_request(
+        self,
+        *,
+        record_id: str,
+        recommendation: FederationSettlementSignal,
+        outcome_hash: str,
+        state: str,
+        performer_hub_id: str,
+        valid_until: str,
+        idempotency_key: str,
+        schema_ref: dict[str, Any],
+        outcome: FederationVerdict | None = None,
+    ) -> dict[str, Any]:
+        """See :meth:`FederationResource.submit_co_sign_request`."""
+        return await self._http.post(
+            "/federation/v1/co-sign-requests",
+            json=_co_sign_body(
+                record_id, recommendation, outcome_hash, state, performer_hub_id,
+                valid_until, idempotency_key, schema_ref, outcome,
+            ),
+        )
 
-    async def submit_dispute_protocol(self, **params: Any) -> dict[str, Any]:
-        return await self._http.post("/federation/v1/disputes", json=params)
+    async def submit_dispute_protocol(
+        self,
+        *,
+        record_id: str,
+        action: DisputeProtocolAction,
+        dispute_id: str,
+        dispute_status: str,
+        idempotency_key: str,
+        schema_ref: dict[str, Any],
+        grounds: DisputeGrounds | None = None,
+        outcome: Literal["OVERTURNED", "UPHELD", "SPLIT"] | None = None,
+        initiated_by_role: str | None = None,
+    ) -> dict[str, Any]:
+        """See :meth:`FederationResource.submit_dispute_protocol`."""
+        return await self._http.post(
+            "/federation/v1/disputes",
+            json=_dispute_body(
+                record_id, action, dispute_id, dispute_status, idempotency_key,
+                schema_ref, grounds, outcome, initiated_by_role,
+            ),
+        )

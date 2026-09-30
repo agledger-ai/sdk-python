@@ -2537,4 +2537,9 @@ class PeerHandshakeResult(BaseModel):
     server_signing_public_key: str = Field(alias="serverSigningPublicKey")
     """The receiving Server's Ed25519 signing public key, SPKI-DER base64. Verify
     every federation message it sends you against this."""
+    server_hub_id: str | None = Field(None, alias="serverHubId")
+    """The receiving Server's own hub id (its ``AGLEDGER_INSTANCE_ID``). Name it
+    as ``peer_hub_id`` when you mint the reverse peering token on your Server.
+    None when that Server has no UUID instance id, and then it cannot send you
+    anything until one is set."""
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")

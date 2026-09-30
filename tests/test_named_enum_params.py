@@ -43,6 +43,9 @@ def calls(client: AgledgerClient) -> None:
         valid_until="t",
         idempotency_key="k",
         outcome="accept",
+        schema_ref={},
+        reason_code=None,
+        failing_rule_ids=None,
     )
     client.schemas.update_version("t", 2, {"compatibilityMode": "backward"})
 
@@ -109,7 +112,8 @@ def test_the_typed_params_reach_the_wire_unchanged() -> None:
     client = AgledgerClient(api_key="agl_agt_test", base_url=BASE)
     client.federation.relay_signal(
         record_id="r", recommendation="HOLD", outcome_hash="h", valid_until="t",
-        idempotency_key="k", outcome="reject",
+        idempotency_key="k", outcome="reject", schema_ref={}, reason_code=None,
+        failing_rule_ids=None,
     )
     client.schemas.update_version("t", 2, {"compatibilityMode": "full"})
     sent = json.loads(signal.calls.last.request.content)
