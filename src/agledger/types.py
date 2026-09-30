@@ -134,7 +134,11 @@ EnforcementSource = Literal["org", "default"]
 the engine default. One entry per field in the org config's
 ``enforcementSource`` block."""
 
-AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED"]
+AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED", "BYPASSED"]
+"""A Record's proposal status. ``BYPASSED`` is a Record registered or activated
+without the performer's acceptance, a normal outcome since the proposal
+handshake is optional. Unpinned: the spec types the field as a plain string and
+lists the values only in prose."""
 
 
 RecordStatusFilter = RecordStatus
