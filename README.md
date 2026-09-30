@@ -17,20 +17,23 @@ pip install agledger
 
 ## Quick Start
 
+A Record has two sides: the principal that asks for the work and renders the
+verdict, and the performer that does it and submits the completion. Each is an
+agent with its own key, so the walk-through below runs two clients.
+
 ```python
 import os
 import time
 
 from agledger import AgledgerClient
 
-client = AgledgerClient(
-    api_key=os.environ["AGLEDGER_API_KEY"],
-    base_url=os.environ["AGLEDGER_EXTERNAL_URL"],  # your AGLedger instance URL
-)
+base_url = os.environ["AGLEDGER_EXTERNAL_URL"]  # your AGLedger instance URL
+principal = AgledgerClient(api_key=os.environ["AGLEDGER_API_KEY"], base_url=base_url)
+performer = AgledgerClient(api_key=os.environ["AGLEDGER_PERFORMER_API_KEY"], base_url=base_url)
 
 # Create a Record. An agent key defaults the principal to itself; an admin
 # key names the principal explicitly via principal_agent_id.
-record = client.records.create(
+record = principal.records.create(
     type="principal-gate-generic-v1",
     contract_version="1",
     platform="internal",
@@ -41,8 +44,8 @@ record = client.records.create(
     criteria={"summary": "Procure 100 widgets", "amount": 500, "currency": "USD"},
 )
 
-# Submit a completion
-completion = client.completions.submit(
+# The performer submits the completion.
+completion = performer.completions.submit(
     record.id,
     evidence={"summary": "Delivered 95 widgets", "evidenceUrl": "https://files.example.com/out.pdf"},
 )
@@ -50,12 +53,13 @@ completion = client.completions.submit(
 # The worker validates the completion, then holds the Record at PROCESSING
 # until the principal renders its verdict.
 for _ in range(30):
-    if client.records.get(record.id).status == "PROCESSING":
+    if principal.records.get(record.id).status == "PROCESSING":
         break
     time.sleep(1)
 
 # Principal verdict
-client.records.submit_verdict(record.id, completion_id=completion.id, verdict="accept")
+verdict = principal.records.submit_verdict(record.id, completion_id=completion.id, verdict="accept")
+print(verdict.record_status)  # FULFILLED
 ```
 
 ## Configuration
@@ -189,7 +193,7 @@ except UnprocessableError as err:
         )
 ```
 
-Branch on `err.type`, not on the message. Schema reads take the same pin (`client.schemas.get("acme-po-v1", publisher="acme-corp")`), and `client.schemas.list()` returns one row per (publisher, type) so you can choose before reading.
+Branch on `err.type`, not on `str(err)`, which is the body's human-readable `detail`. Schema reads take the same pin (`client.schemas.get("acme-po-v1", publisher="acme-corp")`), and `client.schemas.list()` returns one row per (publisher, type) so you can choose before reading.
 
 Every Record reports the binding the engine used, whether or not you pinned it:
 
@@ -205,19 +209,21 @@ Single-publisher orgs, which is nearly every install, never pass `publisher` and
 
 ### Disputes
 
-`client.disputes` lists, files, resolves and withdraws disputes. Filing, withdrawing, reading and submitting evidence all take the **record** id. Resolving takes the **dispute** id, because the outcome is rendered on the dispute itself:
+`client.disputes` lists, files, resolves and withdraws disputes. Filing, withdrawing, reading and submitting evidence all take the **record** id. Resolving takes the **dispute** id, because the outcome is rendered on the dispute itself. Each call is made by the party the Server expects: here the principal has rejected the completion (the Quick Start with `verdict="reject"`), the performer disputes that verdict, the principal renders the outcome, and the org-wide listing takes an org admin key:
 
 ```python
-page = client.disputes.list(status="PENDING_RESOLUTION")
+admin = AgledgerClient(api_key=os.environ["AGLEDGER_ADMIN_API_KEY"], base_url=base_url)
 
-filed = client.disputes.create(record.id, grounds="quality_issue")
+filed = performer.disputes.create(record.id, grounds="quality_issue")
 
 # The dispute id, not the record id. `filed.id` is the one to pass.
-resolved = client.disputes.resolve(
+resolved = principal.disputes.resolve(
     filed.id,
     outcome="OVERTURNED",
     rationale="The completion met the tolerance band on re-read.",
 )
+
+page = admin.disputes.list(status="RESOLVED")
 ```
 
 `UPHELD` leaves the disputed verdict standing and returns the Record to the status it held before the dispute. `OVERTURNED` says the verdict does not stand: a Record that had failed settles at FULFILLED with the verdict re-rendered as `accept`, and a RELEASE Settlement Signal follows. The rendering is the caller's; AGLedger holds and serves the signed decision and never makes it.
@@ -464,11 +470,12 @@ bundle = client.records.get_attestation_bundle(record_id)
 
 ## Vault Checkpoints
 
-Per-record signed Merkle anchors are emitted every 6 hours, letting an auditor
-detect audit-vault TRUNCATE / DELETE tampering offline:
+Per-record signed Merkle anchors are written on a schedule (every 6 hours by
+default), letting an auditor detect audit-vault TRUNCATE / DELETE tampering
+offline. Listing them takes an org admin key:
 
 ```python
-checkpoints = client.audit.vault_checkpoints.list(record_id="rec-123")
+checkpoints = admin.audit.vault_checkpoints.list(record_id=record.id)
 ```
 
 ## Licensing
