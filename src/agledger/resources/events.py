@@ -22,7 +22,6 @@ class EventsResource:
         event_type: EventType | str | None = None,
         order: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[Event]:
         """List events globally. Requires ``since`` (ISO timestamp, inclusive:
@@ -39,7 +38,6 @@ class EventsResource:
         if event_type is not None: params["eventType"] = event_type
         if order is not None: params["order"] = order
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         raw = self._http.get_page("/v1/events", params=params)
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
@@ -54,7 +52,6 @@ class EventsResource:
         event_type: EventType | str | None = None,
         order: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         max_pages: int | None = None,
     ) -> Iterator[Event]:
         """Auto-paginating iterator. Yields individual events across all pages.
@@ -75,8 +72,6 @@ class EventsResource:
             params["order"] = order
         if limit is not None:
             params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
         for item in self._http.paginate("/v1/events", params=params, max_pages=max_pages):
             yield Event.model_validate(item)
 
@@ -94,7 +89,6 @@ class AsyncEventsResource:
         event_type: EventType | str | None = None,
         order: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> Page[Event]:
         """See the sync counterpart: ``since`` is inclusive, ``until`` exclusive,
@@ -105,7 +99,6 @@ class AsyncEventsResource:
         if event_type is not None: params["eventType"] = event_type
         if order is not None: params["order"] = order
         if limit is not None: params["limit"] = limit
-        if offset is not None: params["offset"] = offset
         if cursor is not None: params["cursor"] = cursor
         raw = await self._http.get_page("/v1/events", params=params)
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
@@ -120,7 +113,6 @@ class AsyncEventsResource:
         event_type: EventType | str | None = None,
         order: str | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         max_pages: int | None = None,
     ) -> AsyncIterator[Event]:
         params: dict[str, Any] = {"since": since}
@@ -134,7 +126,5 @@ class AsyncEventsResource:
             params["order"] = order
         if limit is not None:
             params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
         async for item in self._http.paginate("/v1/events", params=params, max_pages=max_pages):
             yield Event.model_validate(item)

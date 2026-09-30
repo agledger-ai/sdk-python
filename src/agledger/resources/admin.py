@@ -201,7 +201,6 @@ def _api_key_filters(
     expires_before: str | None,
     never_expires: bool | None,
     limit: int | None,
-    offset: int | None,
     cursor: str | None,
     last_used_before: str | None = None,
     never_used: bool | None = None,
@@ -235,8 +234,6 @@ def _api_key_filters(
         params["neverUsed"] = never_used
     if limit is not None:
         params["limit"] = limit
-    if offset is not None:
-        params["offset"] = offset
     if cursor is not None:
         params["cursor"] = cursor
     return params
@@ -632,7 +629,6 @@ class AdminResource:
         last_used_before: str | None = None,
         never_used: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> dict[str, Any]:
         """List API keys: one owner's when ``owner_id`` is set, otherwise every
@@ -658,7 +654,6 @@ class AdminResource:
             expires_before,
             never_expires,
             limit,
-            offset,
             cursor,
             last_used_before=last_used_before,
             never_used=never_used,
@@ -679,7 +674,6 @@ class AdminResource:
         last_used_before: str | None = None,
         never_used: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         max_pages: int | None = None,
     ) -> Iterator[dict[str, Any]]:
@@ -688,7 +682,7 @@ class AdminResource:
         Resends the filters with each cursor, which the single-owner cursor
         requires: it carries the owner it was minted under, and replaying it
         without the matching ``ownerId`` is a 400 rather than a silent slide
-        into the install-wide listing at the same offset.
+        into the install-wide listing.
 
         Raises :class:`PaginationLimitError` if the walk hits the runaway guard
         rather than returning a prefix, because a key audit that stops early and
@@ -705,7 +699,6 @@ class AdminResource:
             expires_before,
             never_expires,
             limit,
-            offset,
             cursor,
             last_used_before=last_used_before,
             never_used=never_used,
@@ -1286,7 +1279,6 @@ class AsyncAdminResource:
         last_used_before: str | None = None,
         never_used: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
     ) -> dict[str, Any]:
         """List API keys: one owner's when ``owner_id`` is set, otherwise every
@@ -1301,7 +1293,6 @@ class AsyncAdminResource:
             expires_before,
             never_expires,
             limit,
-            offset,
             cursor,
             last_used_before=last_used_before,
             never_used=never_used,
@@ -1322,7 +1313,6 @@ class AsyncAdminResource:
         last_used_before: str | None = None,
         never_used: bool | None = None,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         max_pages: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
@@ -1339,7 +1329,6 @@ class AsyncAdminResource:
             expires_before,
             never_expires,
             limit,
-            offset,
             cursor,
             last_used_before=last_used_before,
             never_used=never_used,

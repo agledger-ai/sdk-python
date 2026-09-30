@@ -608,7 +608,8 @@ class RecordRowCompactPage(BaseModel):
     next_cursor: str | None = Field(None, alias="nextCursor")
     total: int | None = None
     limit: int | None = None
-    offset: int | None = None
+    """Page size the search served. ``records.search()`` only; ``records.list()``
+    leaves it None."""
     next_steps: list[NextStepCompact] | None = Field(None, alias="nextSteps")
     record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
 

@@ -44,7 +44,6 @@ def _fleet_params(window: int | None, limit: int | None, cursor: str | None) -> 
 
 def _history_params(
     limit: int | None,
-    offset: int | None,
     cursor: str | None,
     type: str | None,
     outcome: str | None,
@@ -58,7 +57,6 @@ def _history_params(
     """
     params: dict[str, Any] = {}
     if limit is not None: params["limit"] = limit
-    if offset is not None: params["offset"] = offset
     if cursor is not None: params["cursor"] = cursor
     if type is not None: params["type"] = type
     if outcome is not None: params["outcome"] = outcome
@@ -122,7 +120,7 @@ class DriftResource:
 
         ``window`` is resent with each cursor, which the cursor requires: the
         query parameters are bound into the token, and a page replayed under
-        different ones is refused rather than answered from a stale offset.
+        different ones is refused rather than answered from a stale position.
         Every page is therefore computed over the same window, so the rows are
         comparable across the walk.
 
@@ -142,7 +140,6 @@ class DriftResource:
         agent_id: str,
         *,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         type: str | None = None,
         outcome: str | None = None,
@@ -158,7 +155,7 @@ class DriftResource:
         """
         raw = self._http.get_page(
             f"/v1/agents/{agent_id}/history",
-            params=_history_params(limit, offset, cursor, type, outcome, from_, to),
+            params=_history_params(limit, cursor, type, outcome, from_, to),
         )
         raw["data"] = [AgentHistoryEntry.model_validate(d) for d in raw.get("data", [])]
         return Page[AgentHistoryEntry].model_validate(raw)
@@ -217,7 +214,6 @@ class AsyncDriftResource:
         agent_id: str,
         *,
         limit: int | None = None,
-        offset: int | None = None,
         cursor: str | None = None,
         type: str | None = None,
         outcome: str | None = None,
@@ -227,7 +223,7 @@ class AsyncDriftResource:
         """Per-record history for an agent. ``from_`` goes out as ``from``."""
         raw = await self._http.get_page(
             f"/v1/agents/{agent_id}/history",
-            params=_history_params(limit, offset, cursor, type, outcome, from_, to),
+            params=_history_params(limit, cursor, type, outcome, from_, to),
         )
         raw["data"] = [AgentHistoryEntry.model_validate(d) for d in raw.get("data", [])]
         return Page[AgentHistoryEntry].model_validate(raw)
