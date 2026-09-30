@@ -592,19 +592,12 @@ def test_suggestion_text_mirrors_the_typescript_verifier_core_verbatim() -> None
         for m in re.finditer(r"(\w+):\s*\n?\s*'((?:[^'\\]|\\.)*)'", block)
     }
 
-    # The read-log findings only a dump can produce are declared by
-    # @agledger/verify on top of the core set (its FailureCode is the core
-    # union plus these), and carry no core suggestion text.
-    dump_only = {"TENANT_READ_LEAF_UNSIGNED", "TENANT_CHECKPOINT_UNSIGNED"}
-    verify_types = Path.home() / "projects" / "agledger-verify" / "src" / "types.ts"
-    if verify_types.exists():
-        for code in dump_only:
-            assert f"'{code}'" in verify_types.read_text(), f"@agledger/verify no longer declares {code}"
-    python_core = set(FAILURE_SUGGESTIONS) - dump_only
-    assert set(ts_map) == python_core, (
+    # The core taxonomy carries every code, the dump-only ones included, so
+    # the two sets are the same set.
+    assert set(ts_map) == set(FAILURE_SUGGESTIONS), (
         "failure-code sets diverged: "
-        f"only in TS {sorted(set(ts_map) - python_core)}, "
-        f"only in Python {sorted(python_core - set(ts_map))}"
+        f"only in TS {sorted(set(ts_map) - set(FAILURE_SUGGESTIONS))}, "
+        f"only in Python {sorted(set(FAILURE_SUGGESTIONS) - set(ts_map))}"
     )
     mismatched = [c for c in ts_map if ts_map[c].strip() != FAILURE_SUGGESTIONS[c].strip()]
     assert not mismatched, f"suggestion text drifted for: {mismatched}"
