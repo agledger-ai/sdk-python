@@ -324,6 +324,68 @@ A signature that does not verify fails as `CHAIN_AGENT_SIGNATURE_INVALID`. A key
 is matched to an entry only through the certificate thumbprint the entry signed,
 so a key for another certificate is simply never used.
 
+### Anchoring keys
+
+A vault key the Server publishes comes from its database, and anything with
+write access to that database can add a key row and entries signed with it.
+What it cannot add is a key statement: a COSE_Sign1 signed by a key the Server
+already trusted (and, for a new key, by the new key too). Pass the SPKI digest
+of a vault key you hold or took out of band as `trust_anchors`, and the
+verifier walks the statements from it. The installer prints the digest of the
+first vault key, and the Server's `signing-key-digest.js` derives one from any
+key you hold. The export's own `exportMetadata.anchoredFrom` names the Server's
+key and is reported against your anchors (`key_trust.anchored_from_pinned`),
+but it is the export's word and never counts as an anchor.
+
+```python
+import json
+
+from agledger.verify import verify_export
+
+with open("audit-export.json") as fh:
+    export_data = json.load(fh)
+
+result = verify_export(
+    export_data,
+    trust_anchors=["sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"],
+    # The operator's VAULT_DISTRUSTED_KEYS, when a key leaked: what it signed
+    # from the instant on (or, with none, from its retirement) counts for nothing.
+    distrusted_keys=[],
+)
+trust = result.key_trust
+print(result.valid, trust.status, trust.anchored_key_ids, trust.unanchored_key_ids)
+for finding in trust.findings:
+    print(finding.code, finding.key_id, finding.detail)
+```
+
+An entry signed by a key the walk does not anchor fails
+`CHAIN_SIGNING_KEY_UNANCHORED`, and each anchored key is held to the window its
+statements sign. The statements walked are the export's own
+(`exportMetadata.signingKeyStatements`) plus any `statements` on keys you pass
+as `public_keys` (the `.data` list of `client.verification_keys.list()` carries
+them). Findings about the statements themselves make the result invalid, at
+position 0: `KEY_STATEMENT_INVALID` (a statement that does not verify, disagrees
+with what it is filed under, touches no anchored key, or was signed after a
+closure or a second admission), `KEY_CLOSURE_INVALID` (a retired key with no
+closure that counts for it, or a closure that should not count), and
+`CHAIN_KEY_WINDOW_DRIFT` (a listed window or status that differs from the
+signed value).
+
+Without `trust_anchors` the result still passes when nothing failed, flagged:
+`result.key_trust.status` is `"no_anchor"` and
+`result.optional_checks["key_anchoring"]` is `"skipped_no_input"`. That is not a
+trusted verdict, because a key written into the Server's database alone would
+pass too.
+
+A key document carries no write times, so a walk over an export or
+`GET /v1/verification-keys` orders statements by the instant each one signs;
+for a document the Server served that agrees with the order it wrote them. A
+dump carries the write time and is walked in write order, which is the only
+order that holds a leaked key to when it actually wrote a statement. The walk
+is `agledger.verify.compute_key_trust`, with
+`key_statements_from_verification_keys()` for a saved `GET
+/v1/verification-keys` response.
+
 `broken_at.code` is a canonical SCREAMING_SNAKE `FailureCode` (e.g.
 `CHAIN_HASH_MISMATCH`, `CHAIN_SIGNATURE_INVALID`) shared with the TypeScript
 verification core, so both languages report identical verdicts over the shared
@@ -338,11 +400,13 @@ pip install 'agledger[verify]'
 
 Decodes canonical COSE_Sign1 envelopes (RFC 9052), walks the hash chain, and
 verifies each signature under the algorithm the verification key commits to
-(Ed25519 or ES256). Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply out-of-band keys (these override the
+(Ed25519 or ES256). Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply keys yourself (these override the
 export's embedded keys), `require_key_id="key-id"` to reject exports signed by an
-unexpected key, or `require_out_of_band_keys=True` for a high-assurance audit that
-refuses the export's own embedded keys. `result.key_provenance` reports how many
-signatures were checked against out-of-band vs embedded keys.
+unexpected key, or `require_supplied_keys=True` to refuse the export's own
+embedded keys. `result.key_provenance` reports how many signatures were checked
+against supplied vs embedded keys. That says where a key came from, not that it
+is trusted: a key fetched from the Server comes from its database too, and
+`trust_anchors` is what establishes trust.
 
 On a **FIPS-locked host** there is no EdDSA, so an Ed25519 chain cannot be
 verified there (ES256 chains can). That is reported as
@@ -354,19 +418,49 @@ is entirely offline, so the export and keys are portable.
 
 ## Offline Full-Vault Dump Verification
 
-For a whole-instance audit (not just one Record), verify a five-file NDJSON dump
-produced by the API's dump-vault tool. This walks every per-record and per-org
-schema-event chain, cross-checks the signed vault checkpoints against the live
-chain, and verifies the `org_admin_reads` Merkle log + signed tree heads
+For a whole-instance audit (not just one Record), verify a six-file NDJSON dump
+produced by the API's dump-vault tool. This walks the signed key statements
+from your trust anchors, walks every per-record and per-org schema-event chain,
+cross-checks the signed vault checkpoints against the live chain, and verifies
+the `org_admin_reads` log: each leaf's RFC 9162 leaf hash, signed claim and
+signature, and each signed tree head's RFC 9162 root, claim and signature
 (including fork detection):
 
 ```python
 from agledger.verify import load_dump, verify_dump
 
-report = verify_dump(load_dump("./vault-dump-dir"))
-if not report.ok:
-    for f in report.vault.failures + report.org_admin_reads.failures:
-        print(f"[{f.code}] {f.message}")
+report = verify_dump(
+    load_dump("./vault-dump-dir"),
+    trust_anchors=["sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"],
+)
+print(report.verdict)  # "trusted", "unanchored" (no trust_anchors) or "failed"
+for finding in report.key_trust.findings:
+    print(f"[{finding.code}] key {finding.key_id}: {finding.detail}")
+for f in report.vault.failures + report.org_admin_reads.failures:
+    print(f"[{f.code}] {f.message}")
+```
+
+A dump walks `vault_key_statements.ndjson` in write order. Entries, vault
+checkpoints, read-log leaves and read-log tree heads signed by a key the walk
+does not anchor fail `CHAIN_SIGNING_KEY_UNANCHORED`, `CHECKPOINT_KEY_UNANCHORED`,
+`TENANT_READ_KEY_UNANCHORED` and `TENANT_CHECKPOINT_KEY_UNANCHORED`. The signed
+claim inside each checkpoint, leaf and tree head is held to its row
+(`CHECKPOINT_CLAIM_MISMATCH`, `TENANT_READ_CLAIM_MISMATCH`,
+`TENANT_CHECKPOINT_CLAIM_MISMATCH`). `report.ok` is false only for the `failed`
+verdict: an `unanchored` report passes, and is not a trusted verdict until you
+give it a pin.
+
+The org-read tree primitives are exported for checking an inclusion proof from
+`GET /v1/audit/org-reads/checkpoints/{id}/proof`:
+
+```python
+from agledger.verify import org_read_leaf_hash, org_read_merkle_root, verify_org_read_inclusion
+
+# leaf_hash = hex(sha256(0x00 || cose_sign1)); a checkpoint's root is the RFC 9162 root over them.
+leaf = org_read_leaf_hash(b"cose-sign1-bytes")
+root = org_read_merkle_root([leaf])
+# A one-leaf tree has an empty path.
+print(root == leaf, verify_org_read_inclusion(leaf, 0, 1, [], root))  # True True
 ```
 
 ### `agledger-verify` CLI (turnkey)
@@ -379,12 +473,13 @@ no network calls:
 ```bash
 pip install 'agledger[verify]'
 
-agledger-verify ./vault-dump-dir              # full-vault dump
-agledger-verify audit-export.json             # single record export
-agledger-verify ./vault-dump-dir -f json      # machine-readable report
+PIN=sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e
+agledger-verify ./vault-dump-dir --trust-anchor "$PIN"      # full-vault dump
+agledger-verify audit-export.json --trust-anchor "$PIN"     # single record export
+agledger-verify ./vault-dump-dir -f json      # machine-readable report (unanchored)
 agledger-verify ./vault-dump-dir --quiet      # exit code only
 agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check agent signatures
-agledger-verify audit-export.json --keys verification-keys.json --require-out-of-band-keys
+agledger-verify audit-export.json --keys verification-keys.json --require-supplied-keys
 ```
 
 `--agent-keys` takes a JSON file of agent certificate keys: one JWK, a list, a
@@ -407,20 +502,25 @@ entry, checkpoint or read-log row written at or after the earliest
 `TENANT_CHECKPOINT_UNSIGNED`, as the engine grades it. Each read-log leaf's
 signature is verified too.
 
-Without `--keys`, an `/audit-export` file is verified against the signing keys
-carried inside that same export, and the report says so (`key provenance :
-out-of-band=0`). That proves internal consistency, not independence: anyone who
-re-signs the chain with their own embedded key also passes. For an independent
-audit, save `GET /v1/verification-keys` and pass it as `--keys` (the `{keyId:
-...}` map, a `[{keyId, publicKey}]` list, or the raw response envelope all
-work), with `--require-out-of-band-keys` to refuse the embedded ones outright
-and `--require-key-id <id>` to pin the key every entry must reference. The three
-key-policy flags apply to an `/audit-export` file only; a dump directory carries
-its own signed key history and rejects them. In code they are the `public_keys`,
-`require_out_of_band_keys` and `require_key_id` arguments to `verify_export`.
+`--trust-anchor` (repeat it, or give a comma list) pins the SPKI digest of a
+vault key you hold, on a dump directory and on an `/audit-export` file alike,
+and `--distrusted-key` passes the operator's `VAULT_DISTRUSTED_KEYS` entries.
+Without a pin the report headline reads `[PASS, UNANCHORED]` and says plainly
+that the pass is not a trusted verdict: anyone who re-signs the chain with a
+key of their own, and writes that key into the registry, also passes.
 
-Exit codes: `0` clean, `1` verification failure, `2` usage/IO error (so a missing
-file is never mistaken for tamper). Every failure carries an actionable next step
+`--keys` supplies keys for an `/audit-export` file: save `GET
+/v1/verification-keys` and pass it (the `{keyId: ...}` map, a `[{keyId,
+publicKey}]` list, or the raw response envelope all work; the statements the
+response carries are walked with the export's own). `--require-supplied-keys`
+refuses the export's embedded keys outright and `--require-key-id <id>` pins
+the key every entry must reference. The three key-policy flags apply to an
+`/audit-export` file only; a dump directory carries its own key registry and
+rejects them. In code they are the `public_keys`, `require_supplied_keys` and
+`require_key_id` arguments to `verify_export`.
+
+Exit codes: `0` pass (trusted, or unanchored without a pin), `1` verification
+failure, `2` usage/IO error (so a missing file is never mistaken for tamper). Every failure carries an actionable next step
 via `agledger.verify.suggestion(code)`. The dump verifier emits the same
 canonical `FailureCode` taxonomy as the TypeScript `@agledger/verify` and is held
 to the same shared conformance corpus, so the two agree verdict-for-verdict.
