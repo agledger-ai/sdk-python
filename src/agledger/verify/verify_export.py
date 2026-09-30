@@ -491,11 +491,13 @@ def _early_failure(
         verified_entries=0,
         record_id=record_id,
         entries=[
+            # No signature state: the walk never started, as verify-core reports it.
             EntryVerificationResult(
                 position=0,
                 valid=False,
                 code="UNSUPPORTED_FORMAT",
                 detail=detail,
+                signature=None,
             )
         ],
         broken_at=BrokenAt(position=0, code="UNSUPPORTED_FORMAT", detail=detail),
@@ -1682,8 +1684,9 @@ def check_agent_signature(
                 "compute Ed25519 (an active OpenSSL FIPS provider carries no EdDSA). Not "
                 "verified, and not tamper evidence."
             ),
+            # Failed on the agent signature, the entry no longer counts toward
+            # key provenance, as verify-core tallies it.
             signature=result.signature,
-            key_source=result.key_source,
         )
     detail = (
         f"Sealed agent_signature for cert {label} has a shape nothing can verify (alg must "
@@ -1698,7 +1701,6 @@ def check_agent_signature(
         code="CHAIN_AGENT_SIGNATURE_INVALID",
         detail=detail,
         signature=result.signature,
-        key_source=result.key_source,
     )
 
 
