@@ -398,11 +398,13 @@ def test_verification_keys_carry_the_envelope_and_per_key_verifier_floor():
 def test_webhook_ping_reports_what_the_route_returns():
     respx.post(f"{BASE}/v1/webhooks/wh-1/ping").mock(return_value=httpx.Response(200, json={
         "statusCode": 502, "body": "bad gateway", "durationMs": 41, "success": False,
-        "deliveryId": "d-1", "httpStatus": 502, "latencyMs": 41, "nextSteps": [],
+        "deliveryId": "d-1", "nextSteps": [],
     }))
     result = _client().webhooks.ping("wh-1")
     assert (result.status_code, result.duration_ms, result.body, result.delivery_id) == (502, 41, "bad gateway", "d-1")
-    assert "response_time_ms" not in type(result).model_fields
+    # API 2.0 dropped the httpStatus / latencyMs twins of statusCode / durationMs.
+    for gone in ("response_time_ms", "http_status", "latency_ms"):
+        assert gone not in type(result).model_fields
 
 
 def test_models_no_longer_declare_fields_the_server_never_sent():
