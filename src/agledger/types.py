@@ -818,15 +818,10 @@ EvidenceType = (
 """The kind of evidence submitted on a dispute. A strict enum on the submit
 route; open with ``| str`` so a kind a newer Server adds is not a typing break."""
 
-DisputeProtocolAction = Literal["opened", "resolved", "withdrawn", "escalated"]
+DisputeProtocolAction = Literal["opened", "resolved", "withdrawn"]
 """The ``action`` of a federation dispute-protocol message, lowercase and past
 tense, unlike :data:`DisputeGrounds` and :data:`DisputeStatus`. Closed: the
-route declares a strict enum, so anything else is a 400.
-
-``escalated`` is inbound compatibility only. The tier ladder is gone, so this
-Server never emits it; it stays accepted for one release so a peer still on the
-previous version can finish a rolling upgrade, and the receiver projects such a
-message to ``PENDING_RESOLUTION``. Do not send it."""
+route declares a strict enum, so anything else is a 400."""
 
 
 class Dispute(BaseModel):
@@ -945,9 +940,7 @@ WebhookEventType = (
 """Exactly the set of event types ``webhooks.create()`` can subscribe to: the
 ``POST /v1/webhooks`` ``eventTypes`` enum plus the ``"*"`` wildcard.
 
-``record.settled`` (deprecated alias of ``record.fulfilled``),
-``record.released``, ``dispute.evidence_window_closed``,
-``record.proposal_counter_proposed``, ``dispute.escalated`` and the two
+``record.released``, ``dispute.evidence_window_closed`` and the two
 ``system.*`` types are NOT here: they are persisted-event/replay surface only,
 queryable through :data:`EventType` but rejected 400 by ``POST /v1/webhooks``.
 Settlement outcomes reach webhooks via ``signal.emitted``/``signal.received``,
@@ -971,7 +964,6 @@ EventType = Literal[
     "record.proposed",
     "record.proposal_accepted",
     "record.proposal_rejected",
-    "record.proposal_counter_proposed",
     "record.delegated",
     "record.revision_requested",
     # Cascading gate
@@ -982,10 +974,8 @@ EventType = Literal[
     # Settlement & disputes
     "signal.emitted",
     "signal.received",
-    "record.settled",
     "record.released",
     "dispute.opened",
-    "dispute.escalated",
     "dispute.evidence_window_closed",
     "dispute.resolved",
     "dispute.withdrawn",
@@ -1013,12 +1003,13 @@ EventType = Literal[
 ]
 """The full ``GET /v1/events`` ``eventType`` query enum: a deliberate superset
 of :data:`WebhookEventType`. Types queryable here but not subscribable there
-(``record.released``, ``record.settled``, ``dispute.evidence_window_closed``,
-``record.proposal_counter_proposed``, ``dispute.escalated`` and the two
-``system.*`` types) are persisted-event/replay surface only. The two the
-Server stopped emitting keep their place here so a replay of history that
-already holds them still parses. No ``"*"``: that is a subscription wildcard,
-not a queryable event type."""
+(``record.released``, ``dispute.evidence_window_closed`` and the two
+``system.*`` types) are persisted-event/replay surface only. No ``"*"``: that
+is a subscription wildcard, not a queryable event type.
+
+The query refuses any other value with a 400 that lists ``allowedValues``.
+``record.settled`` is not a query value: ask for ``record.fulfilled``, the
+persisted type, or ``signal.emitted`` for every settlement-signal variant."""
 
 
 WebhookSigningAlg = Literal["hmac", "ed25519", "ecdsa-p256-sha256"]
@@ -1199,6 +1190,9 @@ AuditChainIntegrityReasonCode = (
         "checkpoint_signature_invalid",
         "checkpoint_key_unknown",
         "checkpoint_claim_mismatch",
+        # A checkpoint signed under a key no signed key statement links to a
+        # key the Server trusts from outside its database.
+        "checkpoint_key_unanchored",
         "payload_drift",
         "oidc_actor_drift",
         "cert_actor_drift",
@@ -1229,6 +1223,11 @@ AuditChainIntegrityReasonCode = (
         "key_expired",
         "key_not_yet_active",
         "signing_key_unpublished",
+        # The registry holds the key, but no signed key statement links it to
+        # a key the Server trusts from outside its database (the key it signs
+        # with, its predecessor, or a configured trust anchor). A database
+        # writer can insert a key row; it cannot produce the statement.
+        "signing_key_unanchored",
         # Signed under a COSE algorithm this engine build cannot verify. Not a
         # tamper signal: check minVerifierVersion on the key.
         "unsupported_algorithm",
@@ -1268,6 +1267,7 @@ AuditChainFailureCode = (
         "key_expired",
         "key_not_yet_active",
         "signing_key_unpublished",
+        "signing_key_unanchored",
         "unsupported_algorithm",
     ]
     | str
@@ -1562,6 +1562,7 @@ VaultScanBreakReason = (
         "signing_key_unknown",
         "signature_missing",
         "signing_key_unpublished",
+        "signing_key_unanchored",
         "unsupported_algorithm",
         "signing_key_drift",
         "key_expired",
@@ -1570,6 +1571,7 @@ VaultScanBreakReason = (
         "checkpoint_hash_mismatch",
         "checkpoint_signature_invalid",
         "checkpoint_key_unknown",
+        "checkpoint_key_unanchored",
         "checkpoint_unsigned",
         "checkpoint_claim_mismatch",
         "schema_chain_missing_for_subjects",
@@ -1596,12 +1598,14 @@ OrgReadsBreakReason = (
         "leaf_claim_mismatch",
         "leaf_signature_invalid",
         "leaf_key_unknown",
+        "leaf_key_unanchored",
         "leaf_signature_missing",
         "checkpoint_leaf_count_mismatch",
         "checkpoint_root_mismatch",
         "checkpoint_claim_mismatch",
         "checkpoint_signature_invalid",
         "checkpoint_key_unknown",
+        "checkpoint_key_unanchored",
         "checkpoint_unsigned",
         "verification_error",
     ]
@@ -1609,8 +1613,9 @@ OrgReadsBreakReason = (
 )
 """Why the cross-party read log broke for one org. ``leaf_signature_missing``
 and ``checkpoint_unsigned`` are the read-log twins of the vault chain's
-``signature_missing`` and ``checkpoint_unsigned``. Open with ``| str`` so a
-code a newer Server adds still type-checks."""
+``signature_missing`` and ``checkpoint_unsigned``, and ``leaf_key_unanchored``
+is the twin of ``signing_key_unanchored``. Open with ``| str`` so a code a
+newer Server adds still type-checks."""
 
 
 class VaultScanFirstFinding(TypedDict):
@@ -2106,10 +2111,13 @@ LicenseValidity = (
         "instance_mismatch",
         "version_too_new",
         "marketplace_unreachable",
+        "marketplace_refused",
     ]
     | str
 )
-"""Outcome of validating the install's license key."""
+"""Outcome of validating the install's license key. ``marketplace_refused`` is
+AWS License Manager answering with no entitlement; like every other value,
+nothing is gated on it."""
 
 
 LicenseNoticeKind = Literal["unlicensed", "dev-external", "error"] | str

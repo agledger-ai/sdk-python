@@ -263,6 +263,8 @@ SPEC_CHAIN_INTEGRITY_REASON = {
     "checkpoint_signature_invalid", "checkpoint_unsigned", "key_expired", "key_not_yet_active",
     "oidc_actor_drift", "payload_drift", "signature_invalid", "signature_missing",
     "signing_key_drift", "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
+    # API 2.0: a key no signed key statement anchors.
+    "checkpoint_key_unanchored", "signing_key_unanchored",
 }
 SPEC_CHAIN_FAILURE = {
     "agent_signature_invalid", "audit_vault_truncated", "cert_actor_drift", "cert_expired",
@@ -270,6 +272,7 @@ SPEC_CHAIN_FAILURE = {
     "key_not_yet_active", "oidc_actor_drift", "payload_drift", "payload_hash_mismatch",
     "previous_hash_mismatch", "signature_invalid", "signature_missing", "signing_key_drift",
     "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
+    "signing_key_unanchored",
 }
 
 
