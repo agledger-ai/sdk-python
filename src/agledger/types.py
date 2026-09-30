@@ -2314,8 +2314,6 @@ class WebhookTestResult(BaseModel):
     success: bool
     status_code: int | None = Field(None, alias="statusCode")
     """HTTP status from the endpoint, 0 when the connection failed."""
-    http_status: int | None = Field(None, alias="httpStatus")
-    """Alias of ``status_code``."""
     body: str | None = None
     """Response body from the endpoint, truncated to 1024 characters."""
     duration_ms: int | None = Field(None, alias="durationMs")
