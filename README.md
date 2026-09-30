@@ -480,7 +480,7 @@ checkpoints = admin.audit.vault_checkpoints.list(record_id=record.id)
 
 ## Licensing
 
-Running AGLedger in production requires a license. The Developer Edition license is free; see https://agledger.ai/license and https://agledger.ai/pricing.
+Running AGLedger in production requires a license. Get a Developer Edition License Key, or read the terms at https://agledger.ai/license and the editions at https://agledger.ai/pricing.
 
 ## SDK License
 
