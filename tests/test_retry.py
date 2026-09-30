@@ -24,7 +24,7 @@ RECORD_JSON = {
 def test_retries_on_429():
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.side_effect = [
-        httpx.Response(429, json={"message": "Rate limited"}, headers={"retry-after": "0"}),
+        httpx.Response(429, json={"detail": "Rate limited"}, headers={"retry-after": "0"}),
         httpx.Response(200, json=RECORD_JSON),
     ]
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
@@ -37,7 +37,7 @@ def test_retries_on_429():
 def test_retries_on_500():
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.side_effect = [
-        httpx.Response(500, json={"message": "Server error"}),
+        httpx.Response(500, json={"detail": "Server error"}),
         httpx.Response(200, json=RECORD_JSON),
     ]
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
@@ -49,7 +49,7 @@ def test_retries_on_500():
 @respx.mock
 def test_no_retry_on_400():
     route = respx.post("https://agledger.example.com/v1/records")
-    route.mock(return_value=httpx.Response(400, json={"message": "Bad request"}))
+    route.mock(return_value=httpx.Response(400, json={"detail": "Bad request"}))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
         client.records.create(type="notarize-generic-v1", criteria={})
@@ -59,7 +59,7 @@ def test_no_retry_on_400():
 @respx.mock
 def test_no_retry_on_404():
     route = respx.get("https://agledger.example.com/v1/records/x")
-    route.mock(return_value=httpx.Response(404, json={"message": "Not found"}))
+    route.mock(return_value=httpx.Response(404, json={"detail": "Not found"}))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
         client.records.get("x")
@@ -70,9 +70,9 @@ def test_no_retry_on_404():
 def test_max_retries_exhausted():
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.side_effect = [
-        httpx.Response(500, json={"message": "fail"}),
-        httpx.Response(500, json={"message": "fail"}),
-        httpx.Response(500, json={"message": "fail"}),
+        httpx.Response(500, json={"detail": "fail"}),
+        httpx.Response(500, json={"detail": "fail"}),
+        httpx.Response(500, json={"detail": "fail"}),
     ]
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=2)
     with pytest.raises(APIError):
@@ -83,7 +83,7 @@ def test_max_retries_exhausted():
 @respx.mock
 def test_zero_retries():
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
-    route.mock(return_value=httpx.Response(500, json={"message": "fail"}))
+    route.mock(return_value=httpx.Response(500, json={"detail": "fail"}))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
     with pytest.raises(APIError):
         client.records.get("rec-123")
@@ -128,7 +128,7 @@ def test_no_retry_on_409_conflict():
     """A 409 is structural (idempotency conflict). Must NOT auto-retry;
     retrying would mask the client error and waste API budget."""
     route = respx.post("https://agledger.example.com/v1/records")
-    route.mock(return_value=httpx.Response(409, json={"message": "Idempotency conflict", "code": "IDEMPOTENCY_CONFLICT"}))
+    route.mock(return_value=httpx.Response(409, json={"detail": "Idempotency conflict", "error": "IDEMPOTENCY_CONFLICT"}))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=3)
     with pytest.raises(APIError):
         client.records.create(type="notarize-generic-v1", criteria={})
@@ -139,7 +139,7 @@ def test_no_retry_on_409_conflict():
 def test_no_retry_on_408():
     """408 is excluded from retry set (the API never emits it)."""
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
-    route.mock(return_value=httpx.Response(408, json={"message": "Request timeout"}))
+    route.mock(return_value=httpx.Response(408, json={"detail": "Request timeout"}))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=3)
     with pytest.raises(APIError):
         client.records.get("rec-123")
@@ -160,7 +160,7 @@ def test_retry_after_falls_back_to_the_429_body():
     """A 429 body carries `retryAfterSeconds`. Reading only the header left
     retry_after None behind a proxy that strips it, with the answer in the body."""
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
-        return_value=httpx.Response(429, json={"message": "Rate limited", "retryAfterSeconds": 7})
+        return_value=httpx.Response(429, json={"detail": "Rate limited", "retryAfterSeconds": 7})
     )
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
     with pytest.raises(RateLimitError) as excinfo:
@@ -173,7 +173,7 @@ def test_retry_after_header_wins_over_the_body():
     respx.get("https://agledger.example.com/v1/records/rec-123").mock(
         return_value=httpx.Response(
             429,
-            json={"message": "Rate limited", "retryAfterSeconds": 7},
+            json={"detail": "Rate limited", "retryAfterSeconds": 7},
             headers={"retry-after": "3"},
         )
     )

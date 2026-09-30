@@ -134,7 +134,7 @@ def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
     try:
         return response.json()
     except Exception:
-        return {"message": response.text or f"HTTP {response.status_code}"}
+        return {"detail": response.text or f"HTTP {response.status_code}"}
 
 
 def _str_or_none(value: object) -> str | None:
@@ -154,14 +154,12 @@ def build_error(response: httpx.Response) -> APIError:
     cls = _ERROR_MAP.get(status, APIError)
 
     kwargs: dict[str, Any] = {
-        "message": body.get("message") or body.get("detail") or body.get("title") or f"API error {status}",
-        "code": body.get("code") or body.get("error", "unknown"),
+        "detail": _str_or_none(body.get("detail")) or _str_or_none(body.get("title")) or f"API error {status}",
+        "code": _str_or_none(body.get("error")) or "unknown",
         "request_id": body.get("requestId") or response.headers.get("x-request-id"),
         "details": body.get("details"),
         "retryable": body.get("retryable"),
         "suggestion": body.get("suggestion"),
-        "doc_url": body.get("docUrl"),
-        "docs": body.get("docs"),
         "recovery_hint": body.get("recoveryHint"),
         "refresh_url": body.get("refreshUrl"),
         "deadline": body.get("deadline"),
@@ -184,14 +182,7 @@ def build_error(response: httpx.Response) -> APIError:
     }
 
     if cls is PermissionDeniedError:
-        details: dict[str, Any] = body.get("details") or {}
-        # RFC 9457 surfaces missingScopes as a top-level extension field;
-        # older bodies nested it under details.
-        missing: Any = body.get("missingScopes")
-        if not isinstance(missing, list):
-            missing = details.get("missingScopes", [])
-        kwargs["missing_scopes"] = missing
-        kwargs["key_scopes"] = details.get("keyScopes")
+        kwargs["missing_scopes"] = _str_list_or_none(body.get("missingScopes")) or []
     elif cls is RateLimitError:
         # The header is the primary source, but a 429 body also carries
         # `retryAfterSeconds`, and a proxy that strips headers used to leave
@@ -255,7 +246,7 @@ def resolve_api_key(api_key: str | None) -> str:
     key = api_key or os.environ.get("AGLEDGER_API_KEY")
     if not key:
         raise AuthenticationError(
-            message=(
+            detail=(
                 "No credential provided. Pass api_key or bearer_token, or set AGLEDGER_API_KEY."
             )
         )

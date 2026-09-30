@@ -245,12 +245,11 @@ class _CertState:
                 summary = f"OIDC cert exchange failed ({response.status_code}): {source}"
             raise OidcCertExchangeError(
                 response.status_code,
-                message=_scrub(summary, token),
+                detail=_scrub(summary, token),
                 code=source.code,
                 request_id=source.request_id,
                 details=_scrub(source.details, token),
                 retryable=source.retryable,
-                docs=source.docs,
                 recovery_hint=_scrub(source.recovery_hint, token),
                 type=source.type,
                 reason=source.reason,
@@ -272,7 +271,7 @@ class _CertState:
             raise OidcCertExchangeError(
                 response.status_code,
                 code="invalid_exchange_response",
-                message=(
+                detail=(
                     "OIDC cert exchange failed: the response carried no certJws or no cert "
                     "validity window."
                 ),
