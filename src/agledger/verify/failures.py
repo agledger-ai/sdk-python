@@ -8,6 +8,7 @@ problem-detail codes, namespaced by sub-system:
     CHAIN_*      per-record (and per-org schema-event) hash-chain entry checks
     CHECKPOINT_* vault checkpoint cross-check against the live chain
     TENANT_*     org_admin_reads Merkle log + signed tree heads
+    KEY_*        the vault key statements themselves (the key registry)
     <bare>       input/format-level failures that precede any chain walk
 
 Every code carries an actionable next step (:func:`suggestion`) so a result is a
@@ -34,8 +35,6 @@ from __future__ import annotations
 from typing import Literal
 
 #: The full canonical taxonomy. The export path can only emit a subset (the
-#: dump-only ``CHAIN_OIDC_ACTOR_MISMATCH`` / ``CHAIN_KEY_EXPIRED`` /
-#: ``CHAIN_KEY_NOT_YET_ACTIVE`` /
 #: ``CHECKPOINT_*`` / ``TENANT_*`` codes need inputs the export wire lacks), but
 #: both verifiers share this one type so the strings can never drift apart.
 FailureCode = Literal[
@@ -63,21 +62,29 @@ FailureCode = Literal[
     "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
     "CHAIN_AGENT_SIGNATURE_INVALID",
     "CHAIN_ENTRY_UNSIGNED",
+    "CHAIN_SIGNING_KEY_UNANCHORED",
+    "CHAIN_KEY_WINDOW_DRIFT",
     # --- vault checkpoints ---
     "CHECKPOINT_ROW_MISSING",
     "CHECKPOINT_HASH_MISMATCH",
     "CHECKPOINT_SIGNATURE_INVALID",
     "CHECKPOINT_UNSIGNED",
+    "CHECKPOINT_KEY_UNANCHORED",
     # --- org_admin_reads Merkle log + STH ---
     "TENANT_READ_LEAF_HASH_MISMATCH",
     "TENANT_READ_LEAF_INDEX_GAP",
     "TENANT_READ_SIGNATURE_INVALID",
     "TENANT_READ_LEAF_UNSIGNED",
+    "TENANT_READ_KEY_UNANCHORED",
     "TENANT_CHECKPOINT_LEAF_COUNT_MISMATCH",
     "TENANT_CHECKPOINT_ROOT_MISMATCH",
     "TENANT_CHECKPOINT_SIGNATURE_INVALID",
     "TENANT_CHECKPOINT_UNSIGNED",
+    "TENANT_CHECKPOINT_KEY_UNANCHORED",
     "TENANT_CHECKPOINT_FORK",
+    # --- vault key statements ---
+    "KEY_STATEMENT_INVALID",
+    "KEY_CLOSURE_INVALID",
 ]
 
 
@@ -86,8 +93,8 @@ FailureCode = Literal[
 _SUGGESTIONS: dict[str, str] = {
     "UNSUPPORTED_FORMAT": (
         "This verifier reads exportFormatVersion 2.0 / RFC8949-CDE canonicalization. "
-        "Re-export the chain from a current AGLedger instance, or upgrade the verifier "
-        "to match the producing engine."
+        "Re-export the chain from a current AGLedger instance, or upgrade the verifier to"
+        " match the producing engine."
     ),
     "CHAIN_EMPTY": (
         "No entries were present to verify. Confirm the record id / dump directory is "
@@ -95,7 +102,8 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "CHAIN_POSITION_GAP": (
         "A chain position is missing or out of order. The chain was truncated or "
-        "reordered. Obtain a complete, unmodified export/dump from the operator and re-run."
+        "reordered. Obtain a complete, unmodified export/dump from the operator and "
+        "re-run."
     ),
     "CHAIN_GENESIS_INVALID": (
         "The first entry must carry previousHash = null. A non-null genesis link means "
@@ -103,8 +111,8 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "CHAIN_LINK_BROKEN": (
         "An entry's previousHash does not match the prior entry's payloadHash. The chain "
-        "was edited between these two entries. Treat every entry from this position on as "
-        "untrusted."
+        "was edited between these two entries. Treat every entry from this position on as"
+        " untrusted."
     ),
     "CHAIN_HASH_MISMATCH": (
         "sha256(cose_sign1) does not equal the stored payloadHash. The envelope bytes or "
@@ -112,8 +120,8 @@ _SUGGESTIONS: dict[str, str] = {
         "tampered with."
     ),
     "CHAIN_MALFORMED_ENTRY": (
-        "An entry is missing a required field (coseSign1 or payloadHash). The export/dump "
-        "is incomplete or corrupt. Regenerate it."
+        "An entry is missing a required field (coseSign1 or payloadHash). The export/dump"
+        " is incomplete or corrupt. Regenerate it."
     ),
     "CHAIN_COSE_DECODE_FAILED": (
         "The COSE_Sign1 envelope did not decode as a tagged 4-element structure. The "
@@ -121,17 +129,18 @@ _SUGGESTIONS: dict[str, str] = {
     ),
     "CHAIN_COSE_HEADER_MISMATCH": (
         "The position/previousHash signed in the COSE protected header disagree with the "
-        "row columns. The visible columns were renumbered after signing. Trust the signed "
-        "header, not the columns."
+        "row columns. The visible columns were renumbered after signing. Trust the signed"
+        " header, not the columns."
     ),
     "CHAIN_PAYLOAD_BINDING_MISMATCH": (
-        "The signed payload's structure no longer matches the canonical projection of the "
-        "row columns it is bound to: the visible (denormalised) payload was altered after "
-        "signing. This is a binding-integrity failure, not a judgement on content."
+        "The signed payload's structure no longer matches the canonical projection of the"
+        " row columns it is bound to: the visible (denormalised) payload was altered "
+        "after signing. This is a binding-integrity failure, not a judgement on content."
     ),
     "CHAIN_OIDC_ACTOR_MISMATCH": (
         "The denormalised actor OIDC issuer/subject columns disagree with the identity "
-        "signed in predicate.on_behalf_of. The actor columns were tampered with after signing."
+        "signed in predicate.on_behalf_of. The actor columns were tampered with after "
+        "signing."
     ),
     "CHAIN_SIGNATURE_INVALID": (
         "The COSE_Sign1 signature did not verify against the entry's signing key, under "
@@ -143,19 +152,21 @@ _SUGGESTIONS: dict[str, str] = {
         "band (GET /v1/verification-keys or /.well-known/scitt-keys) and re-run."
     ),
     "CHAIN_KEY_POLICY_VIOLATION": (
-        "The entry's signing key violates the caller's trust policy (requireKeyId, or "
-        "out-of-band keys required). Re-run with the expected key id, or with keys obtained "
-        "out of band rather than the engine-embedded set."
+        "The entry's signing key violates the caller's key policy (requireKeyId, or "
+        "requireSuppliedKeys refusing a key the artifact embeds). Re-run with the "
+        "expected key id, or supply the keys yourself. Where a key came from does not "
+        "make it trusted: pin a trust anchor (trustAnchors) for that."
     ),
     "CHAIN_KEY_EXPIRED": (
         "The entry was written AFTER its signing key was retired. Possible use of a "
-        "compromised retired key: check the key rotation and retention record for that key id."
+        "compromised retired key: check the key rotation and retention record for that "
+        "key id."
     ),
     "CHAIN_KEY_NOT_YET_ACTIVE": (
-        "The entry was written BEFORE its signing key was activated. Not a rotation problem: "
-        "the usual causes are a backdated entry or clock skew between the signer and the key "
-        "registry. Compare the entry write time against the key activation time before "
-        "treating this as tamper."
+        "The entry was written BEFORE its signing key was activated. Not a rotation "
+        "problem: the usual causes are a backdated entry or clock skew between the signer"
+        " and the key registry. Compare the entry write time against the key activation "
+        "time before treating this as tamper."
     ),
     "CHAIN_ALG_MISMATCH": (
         "The algorithm in the signed protected header (label 1) is not one the entry's "
@@ -165,101 +176,147 @@ _SUGGESTIONS: dict[str, str] = {
         "out of band and re-run."
     ),
     "CHAIN_UNSUPPORTED_ALGORITHM": (
-        "The entry's trusted verification key commits to a signature algorithm that "
-        "could not be computed, either because this verifier build does not implement "
-        "it or because the host runtime refused it (an active OpenSSL FIPS provider "
-        "carries no EdDSA). The chain is NOT verified, and this is NOT tamper evidence: "
-        "the signature was never checked. Upgrade the verifier, or re-run on a host "
-        "without the restriction. Never treat this result as a pass."
+        "The entry's trusted verification key commits to a signature algorithm that could"
+        " not be computed, either because this verifier build does not implement it or "
+        "because the host runtime refused it (an active OpenSSL FIPS provider carries no "
+        "EdDSA). The chain is NOT verified, and this is NOT tamper evidence: the "
+        "signature was never checked. Upgrade the verifier, or re-run on a host without "
+        "the restriction. Never treat this result as a pass."
     ),
     "CHAIN_SIGNING_KEY_DRIFT": (
-        "The entry's signingKeyId column names a different key than the signature-covered "
-        "kid in the COSE protected header. The column is a denormalized convenience and was "
-        "rewritten after signing (possibly to point verification at another key). Trust the "
-        "signed kid; treat the row as tampered."
+        "The entry's signingKeyId column names a different key than the signature-covered"
+        " kid in the COSE protected header. The column is a denormalized convenience and "
+        "was rewritten after signing (possibly to point verification at another key). "
+        "Trust the signed kid; treat the row as tampered."
     ),
     "CHAIN_ACTOR_ATTRIBUTION_MISMATCH": (
         "The entry's actorId / actorOwnerId columns name a different actor than the "
-        "signature-covered actor claim in the COSE protected header (CWT_Claims label 15, "
-        "private label -65539). The columns are the projection a report displays and they "
-        "were rewritten after signing, re-attributing the action to another actor. Trust "
-        "the signed claim; treat the row as tampered and re-obtain the export from the "
-        "operator."
+        "signature-covered actor claim in the COSE protected header (CWT_Claims label 15,"
+        " private label -65539). The columns are the projection a report displays and "
+        "they were rewritten after signing, re-attributing the action to another actor. "
+        "Trust the signed claim; treat the row as tampered and re-obtain the export from "
+        "the operator."
     ),
     "CHAIN_AGENT_SIGNATURE_INVALID": (
         "The agent signature sealed in predicate.on_behalf_of.agent_signature does not "
-        "verify under the supplied key whose RFC 7638 thumbprint the entry itself names, or "
-        "is sealed in a shape nothing can verify. The engine checks this signature at intake "
-        "and the envelope signature says the engine wrote it, so this is not a caller "
-        "mistake: treat the agent attribution of this entry as unproven and escalate to the "
-        "operator."
+        "verify under the supplied key whose RFC 7638 thumbprint the entry itself names, "
+        "or is sealed in a shape nothing can verify. The engine checks this signature at "
+        "intake and the envelope signature says the engine wrote it, so this is not a "
+        "caller mistake: treat the agent attribution of this entry as unproven and "
+        "escalate to the operator."
     ),
     "CHAIN_ENTRY_UNSIGNED": (
         "The entry carries no signing key id where the install could not have written an "
-        "unsigned entry: after a signed entry in the same chain, or at or after the earliest "
-        "activation time in the signing key set (retired keys included). From that instant "
-        "every writer holds a registered key, so this is what a writer without one leaves on "
-        "the chain, or a signed row whose key id was nulled. Treat the entry as forged and "
-        "escalate to the operator. Unsigned entries from before the first key activation stay "
-        "reduced signature coverage, not a break."
+        "unsigned entry: after a signed entry in the same chain, or at or after the "
+        "earliest activation time in the signing key set (retired keys included). From "
+        "that instant every writer holds a registered key, so this is what a writer "
+        "without one leaves on the chain, or a signed row whose key id was nulled. Treat "
+        "the entry as forged and escalate to the operator. Unsigned entries from before "
+        "the first key activation stay reduced signature coverage, not a break."
+    ),
+    "CHAIN_SIGNING_KEY_UNANCHORED": (
+        "The entry is signed by a key that no signed key statement links to a trust "
+        "anchor you pinned. Anything with write access to the Server's database can "
+        "register a key and sign entries with it; what it cannot write is a statement "
+        "signed by a key you trust. Treat the entry as forged. If the key is one you "
+        "vouch for, pin it (trustAnchors) from a source outside the Server, never from "
+        "the document that served it."
+    ),
+    "CHAIN_KEY_WINDOW_DRIFT": (
+        "A key registry column (activatedAt, retiredAt or status in a dump row or key "
+        "document) differs from the value its signed key statements carry. The signed "
+        "value is the one entries are graded against; the column was rewritten, or the "
+        "retirement was written without its closure statement. Treat the registry as "
+        "tampered and compare it with the Server's own scan (key_window_drift)."
     ),
     "CHECKPOINT_ROW_MISSING": (
-        "A signed checkpoint anchors a position that has no matching chain row. The chain was "
-        "truncated below a checkpoint (out-of-band DELETE/TRUNCATE). The checkpoint is proof "
-        "of the missing rows."
+        "A signed checkpoint anchors a position that has no matching chain row. The chain"
+        " was truncated below a checkpoint (out-of-band DELETE/TRUNCATE). The checkpoint "
+        "is proof of the missing rows."
     ),
     "CHECKPOINT_HASH_MISMATCH": (
-        "A checkpoint's payloadHash does not match the chain row at its position. The chain "
-        "diverged from what was checkpointed. Treat the chain as tampered."
+        "A checkpoint's payloadHash does not match the chain row at its position. The "
+        "chain diverged from what was checkpointed. Treat the chain as tampered."
     ),
     "CHECKPOINT_SIGNATURE_INVALID": (
-        "A checkpoint's COSE_Sign1 signature did not verify. The checkpoint was forged or "
-        "altered. Re-run with out-of-band verification keys."
+        "A checkpoint's COSE_Sign1 signature did not verify. The checkpoint was forged or"
+        " altered. Re-run with out-of-band verification keys."
     ),
     "CHECKPOINT_UNSIGNED": (
         "A checkpoint carries no signing key id but was written at or after the earliest "
-        "activation time in the signing key set (retired keys included), when every writer "
-        "holds a registered key. The checkpoint was forged or its key id nulled, and nothing "
-        "it anchors can be trusted. Escalate to the operator."
+        "activation time in the signing key set (retired keys included), when every "
+        "writer holds a registered key. The checkpoint was forged or its key id nulled, "
+        "and nothing it anchors can be trusted. Escalate to the operator."
+    ),
+    "CHECKPOINT_KEY_UNANCHORED": (
+        "A vault checkpoint is signed by a key that no signed key statement links to a "
+        "trust anchor you pinned. Nothing it anchors can be trusted; treat it as forged "
+        "(see CHAIN_SIGNING_KEY_UNANCHORED)."
     ),
     "TENANT_READ_LEAF_HASH_MISMATCH": (
-        "An org_admin_reads leaf hash does not match sha256(cose_sign1). The read-log leaf "
-        "was altered after recording."
+        "An org_admin_reads leaf_hash does not match the RFC 9162 leaf hash of its "
+        "envelope, sha256(0x00 || cose_sign1). The read-log leaf was altered after "
+        "recording."
     ),
     "TENANT_READ_LEAF_INDEX_GAP": (
-        "org_admin_reads leaf indices are not gap-free for this org. A read-log entry was "
-        "removed. Obtain the complete log."
+        "org_admin_reads leaf indices are not gap-free for this org. A read-log entry was"
+        " removed. Obtain the complete log."
     ),
     "TENANT_READ_SIGNATURE_INVALID": (
-        "An org_admin_reads leaf's COSE_Sign1 signature did not verify. The read-log leaf "
-        "was forged or altered."
+        "An org_admin_reads leaf's COSE_Sign1 signature did not verify. The read-log leaf"
+        " was forged or altered."
     ),
     "TENANT_READ_LEAF_UNSIGNED": (
-        "An org_admin_reads leaf carries the unsigned key id where the install could not have "
-        "written an unsigned leaf: after a signed leaf in the same org's log, or at or after "
-        "the earliest activation time in the signing key set (retired keys included). The "
-        "read-log leaf was forged or its signature stripped. Escalate to the operator."
+        "An org_admin_reads leaf carries the unsigned kid where the install could not "
+        "have written one: after a signed leaf in the same org log, or at or after the "
+        "earliest activation time in the signing key set. Treat the leaf as forged and "
+        "escalate to the operator."
+    ),
+    "TENANT_READ_KEY_UNANCHORED": (
+        "An org_admin_reads leaf is signed by a key that no signed key statement links to"
+        " a trust anchor you pinned. Treat the leaf as forged (see "
+        "CHAIN_SIGNING_KEY_UNANCHORED)."
     ),
     "TENANT_CHECKPOINT_LEAF_COUNT_MISMATCH": (
-        "A signed tree head commits to more leaves than the dump contains. The read log was "
-        "truncated below a checkpoint."
+        "A signed tree head commits to more leaves than the dump contains. The read log "
+        "was truncated below a checkpoint."
     ),
     "TENANT_CHECKPOINT_ROOT_MISMATCH": (
-        "The recomputed Merkle root does not match the signed root_hash. The read log "
-        "diverged from what was checkpointed."
+        "The RFC 9162 Merkle root recomputed over the leaves does not match the signed "
+        "root_hash. The read log diverged from what was checkpointed."
     ),
     "TENANT_CHECKPOINT_SIGNATURE_INVALID": (
-        "A signed-tree-head COSE_Sign1 signature did not verify. The STH was forged or altered."
+        "A signed-tree-head COSE_Sign1 signature did not verify. The STH was forged or "
+        "altered."
     ),
     "TENANT_CHECKPOINT_UNSIGNED": (
-        "A signed tree head of the org_admin_reads log carries no signing key id but was "
-        "written at or after the earliest activation time in the signing key set (retired "
-        "keys included), when every writer holds a registered key. The tree head was forged "
-        "or its key id nulled. Escalate to the operator."
+        "An org_admin_reads signed tree head carries no signing key id but was written at"
+        " or after the earliest activation time in the signing key set. The tree head was"
+        " forged or its key id nulled; escalate to the operator."
+    ),
+    "TENANT_CHECKPOINT_KEY_UNANCHORED": (
+        "An org_admin_reads signed tree head is signed by a key that no signed key "
+        "statement links to a trust anchor you pinned. Treat it as forged (see "
+        "CHAIN_SIGNING_KEY_UNANCHORED)."
     ),
     "TENANT_CHECKPOINT_FORK": (
-        "Two signed tree heads at the same tree_size carry different roots. This is an engine "
-        "fork or signing-key compromise. Escalate immediately."
+        "Two signed tree heads at the same tree_size carry different roots. This is an "
+        "engine fork or signing-key compromise. Escalate immediately."
+    ),
+    "KEY_STATEMENT_INVALID": (
+        "A key statement does not verify, disagrees with the columns it was stored under,"
+        " touches no anchored key, or was signed by a key after its closure or after the "
+        "key was already admitted. It admits nothing. One that does not verify, or that a"
+        " key signed after its closure, is what a writer with database access or a leaked"
+        " retired key produces: have the operator retire that key with force and add it "
+        "to VAULT_DISTRUSTED_KEYS, and pass the same entry as distrustedKeys."
+    ),
+    "KEY_CLOSURE_INVALID": (
+        "A key is retired with no closure that counts for it, or a closure is signed by a"
+        " key the walk does not anchor, by a key after its own retirement, or dates a "
+        "retirement before its subject was activated. A closure that still counts ends "
+        "its subject's window whoever wrote it; if its signer leaked, have the operator "
+        "add it to VAULT_DISTRUSTED_KEYS and pass the same entry as distrustedKeys."
     ),
 }
 
