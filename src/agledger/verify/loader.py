@@ -1,4 +1,4 @@
-"""NDJSON dump-directory loader. Reads the five expected files and returns a
+"""NDJSON dump-directory loader. Reads the six expected files and returns a
 typed :class:`Dump`. A missing file raises :class:`DumpLoadError` rather than
 producing a silent empty array: a verifier that reports OK on a half-empty dump
 is the wrong default. Mirrors the TS ``loader.ts``.
@@ -25,13 +25,15 @@ class DumpLoadError(Exception):
     """
 
 
-#: The five required files, in (attribute, filename) form.
+#: The six required files, in (attribute, filename) form. API 2.0 dumps always
+#: write ``vault_key_statements.ndjson``; the trust walk reads it.
 DEFAULT_FILENAMES: dict[str, str] = {
     "vault_entries": "audit_vault.ndjson",
     "vault_checkpoints": "vault_checkpoints.ndjson",
     "signing_keys": "vault_signing_keys.ndjson",
     "org_admin_reads": "org_admin_reads.ndjson",
     "org_admin_reads_checkpoints": "org_admin_reads_checkpoints.ndjson",
+    "key_statements": "vault_key_statements.ndjson",
 }
 
 
@@ -55,7 +57,7 @@ def _read_ndjson(path: str) -> list[DumpRow]:
 
 
 def load_dump(dump_dir: str, filenames: dict[str, str] = DEFAULT_FILENAMES) -> Dump:
-    """Load a five-file NDJSON dump directory into a :class:`Dump`.
+    """Load a six-file NDJSON dump directory into a :class:`Dump`.
 
     :raises DumpLoadError: if a required file is missing or a line is malformed.
     """
@@ -67,4 +69,5 @@ def load_dump(dump_dir: str, filenames: dict[str, str] = DEFAULT_FILENAMES) -> D
         org_admin_reads_checkpoints=_read_ndjson(
             os.path.join(dump_dir, filenames["org_admin_reads_checkpoints"])
         ),
+        key_statements=_read_ndjson(os.path.join(dump_dir, filenames["key_statements"])),
     )

@@ -17,7 +17,6 @@ signed tree head, one key activated before all of it.
 from __future__ import annotations
 
 import base64
-import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -32,7 +31,7 @@ from agledger.verify.verify_dump import (
     UNSIGNED_KID_SENTINEL,
     verify_org_admin_reads_chains,
 )
-from agledger.verify.verify_export import merkle_root
+from agledger.verify.verify_export import org_read_leaf_hash, org_read_merkle_root
 
 VALID = Path(__file__).resolve().parent.parent / "testdata" / "conformance" / "dump" / "valid"
 
@@ -75,14 +74,23 @@ def _long_chain(d: Dump) -> list[dict[str, Any]]:
     return sorted(chain, key=lambda r: r["chain_position"])
 
 
-def _as_unsigned_envelope(cose_b64: str, kid_hex: str = UNSIGNED_KID_SENTINEL, zero_signature: bool = True) -> str:
+def _as_unsigned_envelope(
+    cose_b64: str,
+    kid_hex: str = UNSIGNED_KID_SENTINEL,
+    zero_signature: bool = True,
+    previous_hash: str | None = None,
+) -> str:
     """Re-encode a real envelope as the engine writes an unsigned one: the kid
     is the eight-zero-byte sentinel and the signature slot is zeroed. The
-    protected header is otherwise unchanged, so every chain claim still holds."""
+    protected header is otherwise unchanged, so every chain claim still holds;
+    ``previous_hash`` restamps the chain claim when the leaf before was
+    rewritten too."""
     tagged = cbor2.loads(base64.b64decode(cose_b64))
     protected, _unprotected, payload, signature = tagged.value
-    header = cbor2.loads(protected)
+    header = dict(cbor2.loads(protected))
     header[4] = bytes.fromhex(kid_hex)
+    if previous_hash is not None:
+        header[-65537] = {**header[-65537], 2: bytes.fromhex(previous_hash)}
     new_protected = cbor2.dumps(header, canonical=True)
     new_signature = bytes(len(signature)) if zero_signature else signature
     envelope = cbor2.dumps(cbor2.CBORTag(18, [new_protected, {}, payload, new_signature]), canonical=True)
@@ -96,16 +104,36 @@ def _replace_leaf(d: Dump, index: int, cose_b64: str) -> dict[str, Any]:
     (now stale) signatures, so tests that reach them make them unsigned too."""
     leaf = d.org_admin_reads[index]
     leaf["cose_sign1"] = cose_b64
-    leaf["leaf_hash"] = hashlib.sha256(base64.b64decode(cose_b64)).hexdigest()
+    leaf["leaf_hash"] = org_read_leaf_hash(base64.b64decode(cose_b64))
     for cp in d.org_admin_reads_checkpoints:
         hashes = [str(r["leaf_hash"]) for r in d.org_admin_reads if r["org_id"] == cp["org_id"]]
-        cp["root_hash"] = merkle_root(hashes[: cp["tree_size"]])
+        cp["root_hash"] = org_read_merkle_root(hashes[: cp["tree_size"]])
     return leaf
 
 
+def _unsign(cp: dict[str, Any]) -> None:
+    """Make a checkpoint row unsigned the way the engine writes one: no key id,
+    and an envelope carrying the unsigned kid and a zeroed signature. Nulling
+    the column alone leaves the signed kid disagreeing with it, which is a
+    claim mismatch rather than an unsigned checkpoint."""
+    cp["signing_key_id"] = None
+    cp["cose_sign1"] = _as_unsigned_envelope(cp["cose_sign1"])
+
+
 def _unsign_tree_heads(d: Dump, before: str) -> None:
+    """Make every read-log tree head unsigned and written before ``before``,
+    its signed root restamped to the row's (which ``_replace_leaf`` may have
+    re-rooted), as an engine writing that tree head unsigned would have signed it."""
     for cp in d.org_admin_reads_checkpoints:
-        cp["signing_key_id"] = None
+        _unsign(cp)
+        tagged = cbor2.loads(base64.b64decode(cp["cose_sign1"]))
+        protected, _unprotected, payload, signature = tagged.value
+        stmt = cbor2.loads(payload)
+        stmt["subject"][0]["digest"]["sha256"] = bytes.fromhex(cp["root_hash"])
+        stmt["predicate"]["chain_tip_hash"] = f"sha256:{cp['root_hash']}"
+        new_payload = cbor2.dumps(stmt, canonical=True)
+        envelope = cbor2.dumps(cbor2.CBORTag(18, [protected, {}, new_payload, signature]), canonical=True)
+        cp["cose_sign1"] = base64.b64encode(envelope).decode()
         cp["checkpoint_at"] = _shift_ms(before, -1)
 
 
@@ -212,7 +240,7 @@ def test_a_tampered_hash_on_an_unsigned_entry_keeps_its_own_code() -> None:
 def test_an_unsigned_checkpoint_written_after_the_earliest_activation_fails() -> None:
     d = _dump()
     cp = d.vault_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     failure = _only(verify_dump(d))
     assert (failure.code, failure.position, failure.scope_id) == (
         "CHECKPOINT_UNSIGNED", cp["chain_position"], cp["chain_key"],
@@ -223,7 +251,7 @@ def test_an_unsigned_checkpoint_written_after_the_earliest_activation_fails() ->
 def test_an_unsigned_checkpoint_before_the_earliest_activation_passes_and_at_it_fails() -> None:
     d = _dump()
     cp = d.vault_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     cp["created_at"] = _shift_ms(_activation(d), -1)
     report = verify_dump(d)
     assert report.ok, _codes(report)
@@ -235,7 +263,7 @@ def test_an_unsigned_checkpoint_before_the_earliest_activation_passes_and_at_it_
 def test_an_unsigned_checkpoint_with_no_write_time_cannot_be_placed() -> None:
     d = _dump()
     cp = d.vault_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     del cp["created_at"]
     assert verify_dump(d).ok
 
@@ -243,9 +271,9 @@ def test_an_unsigned_checkpoint_with_no_write_time_cannot_be_placed() -> None:
 def test_a_diverged_or_orphaned_unsigned_checkpoint_keeps_its_own_code() -> None:
     d = _dump()
     diverged, orphaned = d.vault_checkpoints[0], d.vault_checkpoints[1]
-    diverged["signing_key_id"] = None
+    _unsign(diverged)
     diverged["payload_hash"] = "e" * 64
-    orphaned["signing_key_id"] = None
+    _unsign(orphaned)
     d.vault_entries = [e for e in d.vault_entries if e["chain_key"] != orphaned["chain_key"]]
     assert sorted(_codes(verify_dump(d))) == ["CHECKPOINT_HASH_MISMATCH", "CHECKPOINT_ROW_MISSING"]
 
@@ -286,8 +314,10 @@ def test_an_all_unsigned_log_before_the_first_key_passes_and_a_leaf_at_it_fails(
     d = _dump()
     at = _shift_ms(d.org_admin_reads[1]["read_at"], 1)
     d.signing_keys[0]["activated_at"] = at
-    _replace_leaf(d, 0, _as_unsigned_envelope(d.org_admin_reads[0]["cose_sign1"]))
-    _replace_leaf(d, 1, _as_unsigned_envelope(d.org_admin_reads[1]["cose_sign1"]))
+    first = _replace_leaf(d, 0, _as_unsigned_envelope(d.org_admin_reads[0]["cose_sign1"]))
+    _replace_leaf(
+        d, 1, _as_unsigned_envelope(d.org_admin_reads[1]["cose_sign1"], previous_hash=first["leaf_hash"])
+    )
     _unsign_tree_heads(d, at)
 
     def verify() -> list[Failure]:
@@ -343,11 +373,11 @@ def test_a_leaf_restamped_over_altered_envelope_bytes_fails_its_signature() -> N
     assert (failure.code, failure.leaf_index) == ("TENANT_READ_SIGNATURE_INVALID", 0)
 
 
-def test_a_leaf_that_is_not_a_cose_sign1_envelope_is_signature_invalid() -> None:
+def test_a_leaf_that_is_not_a_cose_sign1_envelope_is_a_claim_mismatch_as_the_engine_grades_it() -> None:
     d = _dump()
     _replace_leaf(d, 0, base64.b64encode(b"not an envelope").decode())
     failure = _only(verify_dump(d))
-    assert (failure.code, failure.leaf_index) == ("TENANT_READ_SIGNATURE_INVALID", 0)
+    assert (failure.code, failure.leaf_index) == ("TENANT_READ_CLAIM_MISMATCH", 0)
     assert "does not decode" in failure.message
 
 
@@ -357,7 +387,7 @@ def test_a_leaf_that_is_not_a_cose_sign1_envelope_is_signature_invalid() -> None
 def test_an_unsigned_tree_head_written_after_the_earliest_activation_fails() -> None:
     d = _dump()
     cp = d.org_admin_reads_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     failure = _only(verify_dump(d))
     assert (failure.code, failure.scope_id, failure.tree_size) == (
         "TENANT_CHECKPOINT_UNSIGNED", cp["org_id"], cp["tree_size"],
@@ -368,7 +398,7 @@ def test_an_unsigned_tree_head_written_after_the_earliest_activation_fails() -> 
 def test_an_unsigned_tree_head_before_the_earliest_activation_passes_and_at_it_fails() -> None:
     d = _dump()
     cp = d.org_admin_reads_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     cp["checkpoint_at"] = _shift_ms(_activation(d), -1)
     assert verify_dump(d).ok
 
@@ -379,7 +409,7 @@ def test_an_unsigned_tree_head_before_the_earliest_activation_passes_and_at_it_f
 def test_an_unsigned_tree_head_over_the_wrong_root_reports_the_root() -> None:
     d = _dump()
     cp = d.org_admin_reads_checkpoints[0]
-    cp["signing_key_id"] = None
+    _unsign(cp)
     cp["root_hash"] = "c" * 64
     assert _codes(verify_dump(d)) == ["TENANT_CHECKPOINT_ROOT_MISMATCH"]
 
@@ -392,14 +422,15 @@ def test_the_cli_exits_1_and_names_each_unsigned_finding(tmp_path: Path, capsys:
 
     d = _dump()
     _long_chain(d)[1]["signing_key_id"] = None
-    d.vault_checkpoints[0]["signing_key_id"] = None
-    d.org_admin_reads_checkpoints[0]["signing_key_id"] = None
+    _unsign(d.vault_checkpoints[0])
+    _unsign(d.org_admin_reads_checkpoints[0])
     for name, rows in (
         ("audit_vault.ndjson", d.vault_entries),
         ("vault_checkpoints.ndjson", d.vault_checkpoints),
         ("vault_signing_keys.ndjson", d.signing_keys),
         ("org_admin_reads.ndjson", d.org_admin_reads),
         ("org_admin_reads_checkpoints.ndjson", d.org_admin_reads_checkpoints),
+        ("vault_key_statements.ndjson", d.key_statements),
     ):
         (tmp_path / name).write_text("".join(json.dumps(r) + "\n" for r in rows))
     code = run_cli([str(tmp_path)])

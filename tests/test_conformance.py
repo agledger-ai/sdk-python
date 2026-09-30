@@ -25,6 +25,7 @@ from typing import Any
 import pytest
 
 from agledger.verify import load_dump, verify_dump, verify_export
+from agledger.verify.verify_dump import report_codes
 
 # tests/ -> repo root (standalone source-of-truth layout; corpus vendored at
 # repo-root testdata/conformance/).
@@ -74,7 +75,9 @@ def _vector_id(vector: dict[str, Any]) -> str:
     if opts.get("requireKeyId"):
         suffix += "+requireKeyId"
     if opts.get("requireOutOfBandKeys"):
-        suffix += "+requireOOB"
+        suffix += "+requireSupplied"
+    if opts.get("trustAnchors"):
+        suffix += "+pinned"
     return f"{label}:{suffix}"
 
 
@@ -108,8 +111,11 @@ def test_conformance_vector(vector: dict[str, Any]) -> None:
         kwargs["public_keys"] = json.loads((_CONFORMANCE_DIR / keys_file).read_text())
     if options.get("requireKeyId"):
         kwargs["require_key_id"] = options["requireKeyId"]
+    # The manifest keeps the engine's pre-2.0 option name.
     if options.get("requireOutOfBandKeys"):
-        kwargs["require_out_of_band_keys"] = True
+        kwargs["require_supplied_keys"] = True
+    if options.get("trustAnchors"):
+        kwargs["trust_anchors"] = options["trustAnchors"]
     # Unmapped, a vector expecting CHAIN_AGENT_SIGNATURE_INVALID runs with no
     # agent keys, the check reports skipped_no_input, the export passes, and
     # the suite fails on a vector that was never actually exercised.
@@ -147,10 +153,10 @@ def test_conformance_vector(vector: dict[str, Any]) -> None:
 
 # --- DUMP-kind conformance vectors (manifest-dump.json) ---
 # The full-vault dump verifier (agledger.verify.verify_dump) replays the SAME
-# corpus as the TS @agledger/verify dump verifier. Assertion style mirrors
-# packages/verify/test/corpus.test.ts: a pass vector must verify clean; a fail
-# vector must NOT verify clean AND its canonical failureCode must appear in the
-# flattened failure list (vault + org_admin_reads).
+# corpus as the TS @agledger/verify dump verifier. A pass vector must verify
+# with no failure (and, when it pins trustAnchors, as trusted); a fail vector
+# must fail AND its canonical failureCode must appear among the report's codes
+# (the key-statement findings, then vault and org_admin_reads failures).
 
 
 def _dump_vectors() -> list[dict[str, Any]]:
@@ -162,7 +168,8 @@ def _dump_vectors() -> list[dict[str, Any]]:
 
 def _dump_vector_id(vector: dict[str, Any]) -> str:
     label = vector["file"].split("/")[-1]
-    return f"{label}:{vector.get('failureCode') or vector['expect']}"
+    pinned = "+pinned" if (vector.get("options") or {}).get("trustAnchors") else ""
+    return f"{label}:{vector.get('failureCode') or vector['expect']}{pinned}"
 
 
 _DUMP_VECTORS = _dump_vectors()
@@ -197,15 +204,17 @@ def test_dump_manifest_present_and_nonempty() -> None:
 @pytest.mark.skipif(not _DUMP_VECTORS, reason="no dump vectors in conformance manifest")
 @pytest.mark.parametrize("vector", _DUMP_VECTORS, ids=[_dump_vector_id(v) for v in _DUMP_VECTORS])
 def test_dump_conformance_vector(vector: dict[str, Any]) -> None:
-    report = verify_dump(load_dump(str(_CONFORMANCE_DIR / vector["file"])))
-    all_failures = report.vault.failures + report.org_admin_reads.failures
-    codes = [f.code for f in all_failures]
+    anchors = (vector.get("options") or {}).get("trustAnchors")
+    report = verify_dump(load_dump(str(_CONFORMANCE_DIR / vector["file"])), trust_anchors=anchors)
+    codes = report_codes(report)
 
     if vector["expect"] == "pass":
         assert report.ok, f"{vector['file']}: expected pass but got failures {codes}"
+        assert report.verdict == ("trusted" if anchors else "unanchored")
         return
 
     assert not report.ok, f"{vector['file']}: expected fail but verified clean"
+    assert report.verdict == "failed"
     assert vector["failureCode"] in codes, (
         f"{vector['file']}: expected {vector['failureCode']} in {codes}"
     )

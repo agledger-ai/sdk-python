@@ -2,13 +2,11 @@
 
 The cross-language behavioural contract is asserted by the dump conformance
 corpus in ``test_conformance.py``; these tests cover the pieces that live only in
-the dump package: the loader's fail-closed IO, the Merkle primitive, fork
-detection, and the CLI's auto-detect + exit-code wiring.
+the dump package: the loader's fail-closed IO, fork detection, and the CLI's auto-detect + exit-code wiring.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -18,7 +16,6 @@ import pytest
 from agledger.verify import load_dump, verify_dump
 from agledger.verify.cli import run_cli
 from agledger.verify.loader import DumpLoadError
-from agledger.verify.verify_export import _hash_pair, merkle_root
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CONFORMANCE_DIR = _REPO_ROOT / "testdata" / "conformance"
@@ -32,16 +29,17 @@ _HAS_CORPUS = _VALID_DUMP.is_dir()
 
 
 def test_loader_missing_file_raises(tmp_path: Path) -> None:
-    # An empty directory is missing all five required files.
+    # An empty directory is missing all six required files.
     with pytest.raises(DumpLoadError, match="Required dump file not found"):
         load_dump(str(tmp_path))
 
 
 def test_loader_malformed_json_raises(tmp_path: Path) -> None:
-    # Create four valid empty files and one with a broken line.
+    # Create five valid empty files and one with a broken line.
     for name in (
         "vault_checkpoints.ndjson",
         "vault_signing_keys.ndjson",
+        "vault_key_statements.ndjson",
         "org_admin_reads.ndjson",
         "org_admin_reads_checkpoints.ndjson",
     ):
@@ -55,6 +53,7 @@ def test_loader_blank_lines_ignored(tmp_path: Path) -> None:
     for name in (
         "vault_checkpoints.ndjson",
         "vault_signing_keys.ndjson",
+        "vault_key_statements.ndjson",
         "org_admin_reads.ndjson",
         "org_admin_reads_checkpoints.ndjson",
     ):
@@ -63,34 +62,6 @@ def test_loader_blank_lines_ignored(tmp_path: Path) -> None:
     dump = load_dump(str(tmp_path))
     assert len(dump.vault_entries) == 2
     assert dump.vault_checkpoints == []
-
-
-# --- Merkle primitive -------------------------------------------------------
-
-
-def test_merkle_root_empty_is_sha256_of_empty() -> None:
-    assert merkle_root([]) == hashlib.sha256(b"").hexdigest()
-
-
-def test_merkle_root_single_leaf_is_the_leaf() -> None:
-    assert merkle_root(["abc"]) == "abc"
-
-
-def test_merkle_root_two_leaves_is_hash_pair() -> None:
-    assert merkle_root(["aa", "bb"]) == _hash_pair("aa", "bb")
-
-
-def test_merkle_root_odd_duplicates_last_leaf() -> None:
-    # Three leaves: level1 = [H(a,b), H(c,c)]; root = H(level1[0], level1[1]).
-    a, b, c = "11", "22", "33"
-    level1 = [_hash_pair(a, b), _hash_pair(c, c)]
-    assert merkle_root([a, b, c]) == _hash_pair(level1[0], level1[1])
-
-
-def test_hash_pair_is_hex_string_concat_not_byte_concat() -> None:
-    # Guards the trap: the digest is over the concatenated hex TEXT,
-    # not over the decoded bytes.
-    assert _hash_pair("ab", "cd") == hashlib.sha256(b"abcd").hexdigest()
 
 
 # --- fork detection (no corpus needed) --------------------------------------
@@ -131,7 +102,21 @@ def test_cli_dump_pass_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     code = run_cli([str(_VALID_DUMP)])
     out = capsys.readouterr().out
     assert code == 0
+    # No pin: the dump passes, flagged as not a trusted verdict.
+    assert out.startswith("[PASS, UNANCHORED]")
+    assert "Not a trusted verdict" in out
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_cli_dump_pinned_on_its_key_is_trusted(capsys: pytest.CaptureFixture[str]) -> None:
+    from agledger.verify.key_statements import spki_sha256
+
+    key = json.loads((_VALID_DUMP / "vault_signing_keys.ndjson").read_text().splitlines()[0])
+    code = run_cli([str(_VALID_DUMP), "--trust-anchor", f"sha256:{spki_sha256(key['public_key'])}"])
+    out = capsys.readouterr().out
+    assert code == 0
     assert out.startswith("[PASS]")
+    assert "anchored 1, unanchored 0" in out
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
@@ -217,7 +202,36 @@ def _as_schema_chain(dump: object, chain_key: str) -> object:
             e["chain_key"] = chain_key
     cp["chain_key"] = chain_key
     cp["record_id"] = _DERIVED_V8
+    _resign_checkpoint_subject(dump, cp)
     return dump
+
+
+def _resign_checkpoint_subject(dump: object, cp: dict[str, object]) -> None:
+    """The engine signs the derived v8 as the checkpoint's subject, so the
+    envelope is re-signed over that subject, under a fresh key the dump's
+    registry lists beside the vault key."""
+    import base64
+    import hashlib
+
+    import cbor2
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    key = Ed25519PrivateKey.generate()
+    spki = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    kid = hashlib.sha256(spki).hexdigest()[:16]
+    registry = dump.signing_keys  # type: ignore[attr-defined]
+    registry.append({**registry[0], "key_id": kid, "public_key": base64.b64encode(spki).decode()})
+    protected, _u, payload, _sig = cbor2.loads(base64.b64decode(str(cp["cose_sign1"]))).value
+    header = dict(cbor2.loads(protected))
+    header[4] = bytes.fromhex(kid)
+    protected = cbor2.dumps(header, canonical=True)
+    stmt = cbor2.loads(payload)
+    stmt["subject"][0]["digest"]["sha256"] = hashlib.sha256(bytes.fromhex(_DERIVED_V8.replace("-", ""))).digest()
+    payload = cbor2.dumps(stmt, canonical=True)
+    signature = key.sign(cbor2.dumps(["Signature1", protected, b"", payload], canonical=True))
+    cp["cose_sign1"] = base64.b64encode(cbor2.dumps(cbor2.CBORTag(18, [protected, {}, payload, signature]), canonical=True)).decode()
+    cp["signing_key_id"] = kid
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not vendored")
@@ -276,3 +290,19 @@ def test_dump_without_chain_key_falls_back_to_record_id() -> None:
     for cp in dump.vault_checkpoints:
         cp.pop("chain_key", None)
     assert verify_dump(dump).ok
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_a_rewritten_key_id_is_drift_before_any_question_about_the_key_it_names() -> None:
+    """The signed-kid check runs ahead of the registry's algorithm check, the
+    order the engine applies: a row pointed at an alias whose declared
+    algorithm contradicts its material reports the rewrite, not the alias."""
+    dump = load_dump(str(_CONFORMANCE_DIR / "dump" / "chain-alg-registry-lie"))
+    lying = dump.signing_keys[0]
+    dump.signing_keys.append({**lying, "key_id": "ab" * 8})
+    entry = min(dump.vault_entries, key=lambda e: (str(e.get("chain_key")), e["chain_position"]))
+    entry["signing_key_id"] = "ab" * 8
+    failures = [
+        f for f in verify_dump(dump).vault.failures if f.scope_id == entry.get("chain_key") and f.position == entry["chain_position"]
+    ]
+    assert [f.code for f in failures] == ["CHAIN_SIGNING_KEY_DRIFT"]

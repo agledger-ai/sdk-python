@@ -2,7 +2,7 @@
 the package documents.
 
 ``verify_export`` has always honoured ``public_keys``, ``require_key_id`` and
-``require_out_of_band_keys``, and the package metadata tells a reader to use
+``require_supplied_keys``, and the package metadata tells a reader to use
 them, but the argument parser accepted none of them: every CLI run resolved
 signatures against the keys the document carried, with no flag to refuse them.
 A customer on the TypeScript CLI could run an independent-key audit and a
@@ -52,14 +52,42 @@ def test_the_documented_flags_are_accepted(capsys: pytest.CaptureFixture[str]) -
     assert "PASS" in capsys.readouterr().out
 
 
-def test_without_keys_a_pass_says_it_is_not_independent(
+def test_without_a_trust_anchor_a_pass_says_it_is_not_trusted_and_how_to_pin(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     assert run_cli([str(_EXPORT)]) == _EXIT_OK
     out = capsys.readouterr().out
-    assert "out-of-band=0" in out
-    assert "WARNING" in out
-    assert "not independence" in out
+    assert out.startswith("[PASS, UNANCHORED]")
+    assert "supplied=0" in out
+    assert "Not a trusted verdict" in out
+    assert "--trust-anchor sha256:<hex>" in out
+
+
+def test_with_a_trust_anchor_a_pass_is_trusted_and_names_the_anchor(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pin = json.loads(_EXPORT.read_text())["exportMetadata"]["anchoredFrom"]
+    assert run_cli([str(_EXPORT), "--trust-anchor", pin]) == _EXIT_OK
+    out = capsys.readouterr().out
+    assert out.startswith("[PASS]")
+    assert f"walked from {pin}" in out
+    assert "(is one of your anchors)" in out
+
+
+def test_a_trust_anchor_nothing_links_to_fails_every_signed_entry(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run_cli([str(_EXPORT), "--trust-anchor", f"sha256:{'ab' * 32}"]) == _EXIT_VERIFICATION_FAILED
+    assert "CHAIN_SIGNING_KEY_UNANCHORED" in capsys.readouterr().out
+
+
+def test_a_malformed_trust_anchor_or_a_distrusted_key_without_one_is_a_usage_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run_cli([str(_EXPORT), "--trust-anchor", "15d63684b387235c"]) == _EXIT_USAGE
+    assert "15d63684b387235c" in capsys.readouterr().err
+    assert run_cli([str(_EXPORT), "--distrusted-key", f"sha256:{'ab' * 32}"]) == _EXIT_USAGE
+    assert "--trust-anchor" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("shape", ["map", "list", "envelope"])
@@ -76,23 +104,24 @@ def test_keys_accepts_every_documented_file_shape(
     path.write_text(json.dumps(payload))
 
     assert (
-        run_cli([str(_EXPORT), "--keys", str(path), "--require-out-of-band-keys"])
+        run_cli([str(_EXPORT), "--keys", str(path), "--require-supplied-keys"])
         == _EXIT_OK
     )
     out = capsys.readouterr().out
-    assert "out-of-band=3 embedded=0" in out
-    # The independence warning is the no-out-of-band-keys case only.
-    assert "WARNING" not in out
+    assert "supplied=3 embedded=0" in out
+    # Where a key came from does not make it trusted: without a pin the pass
+    # is still flagged.
+    assert "UNANCHORED" in out
 
 
-def test_require_out_of_band_keys_without_keys_refuses_the_embedded_ones(
+def test_require_supplied_keys_without_keys_refuses_the_embedded_ones(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The flag's whole purpose: an export that passes on its own embedded keys
     must fail when the run demands independent ones. A flag that parsed but did
     not reach the verifier would still return 0 here."""
     assert (
-        run_cli([str(_EXPORT), "--require-out-of-band-keys"])
+        run_cli([str(_EXPORT), "--require-supplied-keys"])
         == _EXIT_VERIFICATION_FAILED
     )
     assert "CHAIN_KEY_POLICY_VIOLATION" in capsys.readouterr().out
@@ -113,7 +142,7 @@ def test_the_key_policy_flags_are_refused_on_a_dump(
     """A dump carries its own signed key history, so an out-of-band key set has
     nothing to override. Accepting the flag silently would report an audit that
     honoured a policy it never applied."""
-    assert run_cli([str(_DUMP), "--require-out-of-band-keys"]) == _EXIT_USAGE
+    assert run_cli([str(_DUMP), "--require-supplied-keys"]) == _EXIT_USAGE
     assert "audit-export files only" in capsys.readouterr().err
 
 
