@@ -34,7 +34,7 @@ BASE = "https://agledger.example.com"
 EXCHANGE = f"{BASE}/v1/auth/oidc/cert"
 ME = f"{BASE}/v1/auth/me"
 RECORDS = f"{BASE}/v1/records"
-LIVE = Path(__file__).parent / "fixtures" / "live-1.8.0"
+LIVE = Path(__file__).parent / "fixtures" / "live-2.0.0"
 
 
 def _b64url(data: bytes) -> str:

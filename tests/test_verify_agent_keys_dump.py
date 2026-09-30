@@ -2,9 +2,10 @@
 input-gated checks ran.
 
 The Python mirror of ``@agledger/verify``'s ``agent-keys.test.ts``, on the same
-unmodified 27-entry dump slice from a live 1.8.0 instance (three chains: a
-cert-signed lifecycle whose key was kept, a second cert whose key was not, and
-an API-key lifecycle) and the same cert-signed export.
+unmodified 27-entry dump slice from a scratch API 2.0.0 instance (three
+chains: a cert-signed lifecycle whose key was kept, a second cert whose key was
+not, and an API-key lifecycle), dumped with the engine's own tool and read in
+place, and the same cert-signed export.
 """
 
 from __future__ import annotations
@@ -20,14 +21,15 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from agledger.verify import load_dump, verify_dump, verify_export
 from agledger.verify.cli import run_cli
 
-LIVE = Path(__file__).parent / "fixtures" / "live-1.8.0"
+LIVE = Path(__file__).parent / "fixtures" / "live-2.0.0"
 DUMP = str(LIVE / "dump")
 EXPORT = str(LIVE / "export-cert-lifecycle.json")
 KEY_FILE = str(LIVE / "agent-cert-key.json")
 KEY_ENTRY: dict[str, Any] = json.loads((LIVE / "agent-cert-key.json").read_text())
 JWK: dict[str, str] = KEY_ENTRY["publicKeyJwk"]
-# A 1.8.0 artifact carries no key statements, so without trust anchors key
-# anchoring does not run, and says so.
+# The pin of the instance's vault key. Without it key anchoring does not run,
+# and says so.
+LIVE_PIN = "sha256:7319bc5f0f636d72778028cf069db7e7a4a62a7a44e5433ab94d66a53d9b23a4"
 ALL_APPLIED = {
     **dict.fromkeys(
         ("payload_binding", "oidc_actor", "actor_attribution", "key_temporal", "agent_signature"),
@@ -59,6 +61,13 @@ def test_the_dump_re_verifies_the_supplied_cert_and_leaves_the_others_unchecked(
     assert report.vault.entry_count == 27
     assert report.vault.optional_checks == ALL_APPLIED
     assert (report.vault.agent_signatures_present, report.vault.agent_signatures_verified) == (12, 6)
+
+
+def test_pinned_on_the_instance_key_the_dump_is_trusted_and_anchoring_ran():
+    report = verify_dump(load_dump(DUMP), agent_keys=[JWK], trust_anchors=[LIVE_PIN])
+    assert report.verdict == "trusted"
+    assert report.vault.optional_checks == {**ALL_APPLIED, "key_anchoring": "applied"}
+    assert report.key_trust.anchored_key_ids == [k["key_id"] for k in load_dump(DUMP).signing_keys]
 
 
 def test_without_keys_the_dump_reports_the_check_not_run_and_no_verdict_changes():

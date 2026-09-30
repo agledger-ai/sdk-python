@@ -2,7 +2,7 @@
 
 The Python mirror of verify-core's ``actor-attribution.test.ts`` and
 ``@agledger/verify``'s ``actor-attribution.test.ts``, on the same unmodified
-live 1.8.0 fixtures: the export's guide names ``actorDisplayName``,
+live 2.0.0 fixtures: the export's guide names ``actorDisplayName``,
 ``actorOwnerType`` and ``humanReadableLabel`` as unsigned display projections
 and tells the auditor that attribution IS the ``actorId``/``actorOwnerId``
 UUID. Those, plus ``actorRole``, ride in the COSE protected header at
@@ -25,8 +25,8 @@ from agledger.verify.verify_export import (  # pyright: ignore[reportPrivateUsag
     _extract_actor_claim,
 )
 
-LIVE = Path(__file__).parent / "fixtures" / "live-1.8.0"
-EXPORT = LIVE / "export-lifecycle.json"
+LIVE = Path(__file__).parent / "fixtures" / "live-2.0.0"
+EXPORT = LIVE / "export-cert-lifecycle.json"
 DUMP = str(LIVE / "dump")
 
 
