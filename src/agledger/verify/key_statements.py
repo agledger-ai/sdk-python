@@ -1441,9 +1441,16 @@ def key_statements_from_export(signing_key_statements: Mapping[str, Any] | None)
     """The key statements of an audit export's ``exportMetadata.signingKeyStatements``."""
     if signing_key_statements is None:
         return []
-    if not isinstance(signing_key_statements, Mapping):  # pyright: ignore[reportUnnecessaryIsInstance]
+    value = cast(object, signing_key_statements)
+    # verify-core reads any object here the way Object.entries does, so a list
+    # is keyed by index rather than refused.
+    if isinstance(value, (list, tuple)):
+        pairs = [(str(i), v) for i, v in enumerate(cast("Sequence[object]", value))]
+    elif isinstance(value, Mapping):
+        pairs = [(str(k), v) for k, v in cast("Mapping[object, object]", value).items()]
+    else:
         raise TypeError("signingKeyStatements must be a mapping keyed by key id.")
-    return _statements_from_map([(str(k), v) for k, v in signing_key_statements.items()], "signingKeyStatements")
+    return _statements_from_map(pairs, "signingKeyStatements")
 
 
 def key_statements_from_verification_keys(
