@@ -105,8 +105,8 @@ def test_cli_dump_pass_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert code == 0
     # No pin: the dump passes, flagged as not a trusted verdict.
-    assert out.startswith("[PASS, UNANCHORED]")
-    assert "Not a trusted verdict" in out
+    assert out.startswith("[VERIFIED, NOT ANCHORED]")
+    assert "this is NOT a trusted verdict" in out
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")

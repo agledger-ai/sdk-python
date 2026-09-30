@@ -49,7 +49,7 @@ def test_the_documented_flags_are_accepted(capsys: pytest.CaptureFixture[str]) -
         run_cli([str(_EXPORT), "--require-key-id", next(iter(_embedded_keys()))])
         == _EXIT_OK
     )
-    assert "PASS" in capsys.readouterr().out
+    assert "NOT ANCHORED" in capsys.readouterr().out
 
 
 def test_without_a_trust_anchor_a_pass_says_it_is_not_trusted_and_how_to_pin(
@@ -57,9 +57,9 @@ def test_without_a_trust_anchor_a_pass_says_it_is_not_trusted_and_how_to_pin(
 ) -> None:
     assert run_cli([str(_EXPORT)]) == _EXIT_OK
     out = capsys.readouterr().out
-    assert out.startswith("[PASS, UNANCHORED]")
+    assert out.startswith("[VERIFIED, NOT ANCHORED]")
     assert "supplied=0" in out
-    assert "Not a trusted verdict" in out
+    assert "this is NOT a trusted verdict" in out
     assert "--trust-anchor sha256:<hex>" in out
 
 
@@ -111,7 +111,7 @@ def test_keys_accepts_every_documented_file_shape(
     assert "supplied=3 embedded=0" in out
     # Where a key came from does not make it trusted: without a pin the pass
     # is still flagged.
-    assert "UNANCHORED" in out
+    assert out.startswith("[VERIFIED, NOT ANCHORED]")
 
 
 def test_require_supplied_keys_without_keys_refuses_the_embedded_ones(
@@ -164,3 +164,71 @@ def test_a_missing_keys_file_is_a_usage_error(
         run_cli([str(_EXPORT), "--keys", str(tmp_path / "absent.json")]) == _EXIT_USAGE
     )
     assert "Cannot read --keys file" in capsys.readouterr().err
+
+
+# --- the flag contract shared with @agledger/verify and `agledger verify` ---
+
+_PIN = f"sha256:{'a' * 64}"
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["/nonexistent", "--trust-anchor", "abc"], '--trust-anchor "abc" is not sha256:<64 hex>. Each anchor is the full SHA-256'),
+        (["/nonexistent", "--trust-anchor", f"{_PIN},{_PIN}"], f'--trust-anchor "{_PIN},{_PIN}" is not sha256:<64 hex>.'),
+        (
+            ["/nonexistent", "--trust-anchor", _PIN, "--distrusted-key", f"{_PIN}@2026-02-30T00:00:00Z"],
+            f'--distrusted-key "{_PIN}@2026-02-30T00:00:00Z" is not sha256:<64 hex>, optionally followed by @<RFC 3339 instant>',
+        ),
+        (
+            ["/nonexistent", "--trust-anchor", _PIN, "--distrusted-key", _PIN, "--distrusted-key", _PIN],
+            f"--distrusted-key names {_PIN} twice.",
+        ),
+        (
+            ["/nonexistent", "--distrusted-key", _PIN],
+            "--distrusted-key acts only inside the key-statement walk, which runs from --trust-anchor; pass the pin as well.",
+        ),
+        (["/nonexistent", "--trust-anchor", _PIN], "Cannot read /nonexistent: no such file or directory."),
+        (
+            ["/nonexistent", "--distrusted-keys", _PIN],
+            "--distrusted-keys is now --distrusted-key, given once per key: --distrusted-key sha256:<hex>[@<RFC 3339 instant>].",
+        ),
+        (["/nonexistent", "--require-out-of-band-keys"], "--require-out-of-band-keys is now --require-supplied-keys"),
+    ],
+)
+def test_a_refused_input_exits_2_with_the_shared_message(
+    capsys: pytest.CaptureFixture[str], argv: list[str], message: str
+) -> None:
+    assert run_cli(argv) == _EXIT_USAGE
+    assert capsys.readouterr().err.startswith(message)
+    assert run_cli([*argv, "-f", "json"]) == _EXIT_USAGE
+    out = capsys.readouterr().out
+    if out:
+        assert json.loads(out)["error"]["message"].startswith(message)
+
+
+def test_a_prefix_of_a_flag_is_not_that_flag() -> None:
+    with pytest.raises(SystemExit) as exc:
+        run_cli([str(_EXPORT), "--trust", _PIN])
+    assert exc.value.code == _EXIT_USAGE
+
+
+@pytest.mark.parametrize(
+    ("argv", "code", "first_line"),
+    [
+        ([str(_DUMP), "--trust-anchor", "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"], 0, "[PASS] AGLedger offline verification (dump)"),
+        ([str(_DUMP)], 0, "[VERIFIED, NOT ANCHORED] AGLedger offline verification (dump)"),
+        ([str(_DUMP), "--trust-anchor", f"sha256:{'ab' * 32}"], 1, "[FAIL] AGLedger offline verification (dump)"),
+    ],
+)
+def test_the_headline_and_exit_code_per_verdict(
+    capsys: pytest.CaptureFixture[str], argv: list[str], code: int, first_line: str
+) -> None:
+    assert run_cli(argv) == code
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == first_line
+    explanation = {
+        0: "  Nothing failed",
+        1: "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
+    }[code]
+    assert lines[1].startswith(explanation)

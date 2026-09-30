@@ -502,12 +502,22 @@ entry, checkpoint or read-log row written at or after the earliest
 `TENANT_CHECKPOINT_UNSIGNED`, as the engine grades it. Each read-log leaf's
 signature is verified too.
 
-`--trust-anchor` (repeat it, or give a comma list) pins the SPKI digest of a
-vault key you hold, on a dump directory and on an `/audit-export` file alike,
-and `--distrusted-key` passes the operator's `VAULT_DISTRUSTED_KEYS` entries.
-Without a pin the report headline reads `[PASS, UNANCHORED]` and says plainly
-that the pass is not a trusted verdict: anyone who re-signs the chain with a
-key of their own, and writes that key into the registry, also passes.
+`--trust-anchor` (repeat it once per key) pins the SPKI digest of a vault key
+you hold, on a dump directory and on an `/audit-export` file alike, and
+`--distrusted-key` (once per key: `sha256:<hex>`, optionally `@<RFC 3339
+instant>`) passes the operator's `VAULT_DISTRUSTED_KEYS` entries. A pass
+anchored to a pin is `[PASS]`. Without a pin the headline reads `[VERIFIED,
+NOT ANCHORED]` and says plainly that the pass is not a trusted verdict: anyone
+who re-signs the chain with a key of their own, and writes that key into the
+registry, also passes. A failure is `[FAIL]`.
+
+The exit code is `0` for a pass, anchored or not, `1` for a failed
+verification and `2` when no verdict was reached: a malformed pin or
+distrusted key, a key named twice, `--distrusted-key` without
+`--trust-anchor`, a target that does not exist, or a file that does not parse.
+The flags, these refusals and their messages, the headlines and the exit codes
+are the same as `@agledger/verify`'s `agledger-verify` and `agledger
+verify`'s.
 
 `--keys` supplies keys for an `/audit-export` file: save `GET
 /v1/verification-keys` and pass it (the `{keyId: ...}` map, a `[{keyId,
@@ -519,8 +529,7 @@ the key every entry must reference. The three key-policy flags apply to an
 rejects them. In code they are the `public_keys`, `require_supplied_keys` and
 `require_key_id` arguments to `verify_export`.
 
-Exit codes: `0` pass (trusted, or unanchored without a pin), `1` verification
-failure, `2` usage/IO error (so a missing file is never mistaken for tamper). Every failure carries an actionable next step
+Every failure carries an actionable next step
 via `agledger.verify.suggestion(code)`. The dump verifier emits the same
 canonical `FailureCode` taxonomy as the TypeScript `@agledger/verify` and is held
 to the same shared conformance corpus, so the two agree verdict-for-verdict.

@@ -17,9 +17,10 @@ trusted verdict, because a key written into the Server's database alone would
 pass too.
 
 Exit codes: 0 pass (trusted, or unanchored when no ``--trust-anchor`` was
-given), 1 verification failure, 2 usage / IO error. (The split of
-usage/IO into its own code refines the TS CLI's 0/1 so a missing file or bad
-argument is never mistaken for a tamper finding.) No network calls are made.
+given), 1 verification failure, 2 usage / IO error, so a missing file or bad
+argument is never mistaken for a tamper finding. The flags, their refusals and
+messages, the headlines and the exit codes are ``@agledger/verify``'s. No
+network calls are made.
 
 Honors ``NO_COLOR`` per no-color.org (the output is already uncolored, so this
 is a no-op today: declared for forward compatibility) and ``--quiet`` (exit
@@ -36,7 +37,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from agledger.verify.failures import suggestion
-from agledger.verify.key_statements import KeyTrustReport
+from agledger.verify.key_statements import (
+    KeyTrustReport,
+    parse_distrusted_keys,
+    parse_trust_anchors,
+)
 from agledger.verify.loader import DumpLoadError, load_dump
 from agledger.verify.types import VerifyReport
 from agledger.verify.verify_dump import verify_dump
@@ -57,6 +62,9 @@ _EXIT_USAGE = 2
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agledger-verify",
+        # A prefix of a flag is not that flag: @agledger/verify takes whole
+        # names only, and so does this CLI.
+        allow_abbrev=False,
         description=(
             "Offline verifier for AGLedger audit chains (hash chain + Ed25519 over "
             "COSE_Sign1). No network calls."
@@ -103,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "SPKI digest (sha256:<64 hex>) of a vault key you hold or took out of band: "
             "the installer prints the first key's, and the Server's signing-key-digest.js "
-            "derives one from any key. Repeat it, or give a comma list, for more than one. "
+            "derives one from any key. Repeat it once per key. "
             "The signed key statements the target carries are walked from it, and "
             "anything signed by a key the walk does not reach fails "
             "(CHAIN_SIGNING_KEY_UNANCHORED and the checkpoint and read-log twins). An "
@@ -120,7 +128,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "A key the operator distrusts, in the Server's VAULT_DISTRUSTED_KEYS form: "
             "sha256:<64 hex>, optionally @<RFC 3339 instant>. What it signed from the "
             "instant on (with none, from the retirement a trusted key signed for it) "
-            "counts for nothing in the walk. Repeat it for more than one. Requires "
+            "counts for nothing in the walk. Repeat it once per key. Requires "
             "--trust-anchor."
         ),
     )
@@ -281,24 +289,45 @@ def _agent_signature_summary(
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
-_PIN_HINT = (
-    "Pass --trust-anchor sha256:<hex> with the SPKI digest of a vault key you hold or took "
-    "out of band (the installer prints the first key's; the Server's signing-key-digest.js "
-    "derives one from any key)."
-)
+def headline(verdict: str, kind: str) -> list[str]:
+    """The headline and the lines saying what it means, as ``@agledger/verify``
+    prints them. ``unanchored`` gets its own words so that a run which found
+    nothing wrong but anchored nothing can never be read, or grepped, as a
+    trusted PASS."""
+    if verdict == "trusted":
+        return [
+            f"[PASS] AGLedger offline verification ({kind})",
+            "  Nothing failed, and every signature was checked under a key the signed key statements",
+            "  link to a --trust-anchor you gave.",
+        ]
+    if verdict == "failed":
+        return [
+            f"[FAIL] AGLedger offline verification ({kind})",
+            "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
+            "  Each finding is listed below.",
+        ]
+    return [
+        f"[VERIFIED, NOT ANCHORED] AGLedger offline verification ({kind})",
+        "  Nothing failed, but this is NOT a trusted verdict: no --trust-anchor was given, so every",
+        "  signing key was taken on the word of the artifact itself, and a key written into the",
+        "  Server's database alone would verify. Ask the operator for the SPKI digest of a vault",
+        "  key (the installer prints it; signing-key-digest.js derives it from any key) and",
+        "  re-run with --trust-anchor sha256:<hex>.",
+    ]
+
+
+def export_verdict(result: VerifyExportResult) -> str:
+    """The verdict of an /audit-export result, by the same rule as a dump's."""
+    if not result.valid:
+        return "failed"
+    return "unanchored" if result.key_trust.status == "no_anchor" else "trusted"
 
 
 def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
     """What the key-statement walk concluded, in the text report. A report with
     no anchor says in plain words that its pass is not a trusted verdict."""
     if key_trust.status == "no_anchor":
-        return [
-            (
-                "  key anchoring     : UNANCHORED. Not a trusted verdict: no --trust-anchor was "
-                "given, so no key was anchored, and a key written into the Server's database "
-                f"alone would pass. {_PIN_HINT}"
-            )
-        ]
+        return ["  key anchoring     : NOT RUN (no --trust-anchor given; no key is anchored)"]
     lines = [
         (
             f"  key anchoring     : walked from {', '.join(key_trust.anchors)} ({key_trust.order} order); "
@@ -320,10 +349,7 @@ def _looks_like_audit_export(value: Any) -> bool:
 
 
 def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
-    lines: list[str] = []
-    status = {"trusted": "PASS", "unanchored": "PASS, UNANCHORED", "failed": "FAIL"}[report.verdict]
-    lines.append(f"[{status}] AGLedger offline verification (dump)")
-    lines.append("")
+    lines: list[str] = [*headline(report.verdict, "dump"), ""]
     lines.extend(_key_trust_lines(report.key_trust))
     lines.append("")
     lines.append("audit_vault chain")
@@ -362,6 +388,7 @@ def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
 
 def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
     out: dict[str, Any] = {
+        "verdict": export_verdict(result),
         "valid": result.valid,
         "recordId": result.record_id,
         "totalEntries": result.total_entries,
@@ -393,11 +420,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
 
 
 def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
-    lines: list[str] = []
-    unanchored = result.key_trust.status == "no_anchor"
-    status = ("PASS, UNANCHORED" if unanchored else "PASS") if result.valid else "FAIL"
-    lines.append(f"[{status}] AGLedger offline verification (audit-export)")
-    lines.append("")
+    lines: list[str] = [*headline(export_verdict(result), "audit-export"), ""]
     lines.append(f"  record            : {result.record_id}")
     lines.append(
         f"  entries           : {result.verified_entries}/{result.total_entries} verified"
@@ -423,12 +446,52 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
     return "\n".join(lines)
 
 
+_REFUSED_FLAGS = {
+    "--distrusted-keys": (
+        "--distrusted-keys is now --distrusted-key, given once per key: "
+        "--distrusted-key sha256:<hex>[@<RFC 3339 instant>]."
+    ),
+    "--require-out-of-band-keys": (
+        "--require-out-of-band-keys is now --require-supplied-keys: a key fetched from the "
+        "Server is supplied, not independent of it. Pin --trust-anchor for that."
+    ),
+}
+
+
+def _flag_message(message: str) -> str:
+    """A pin parser's message, named by the flag that carried the value."""
+    for prefix, flag in (
+        ("trust_anchors entry ", "--trust-anchor "),
+        ("distrusted_keys entry ", "--distrusted-key "),
+        ("distrusted_keys names ", "--distrusted-key names "),
+    ):
+        if message.startswith(prefix):
+            return flag + message[len(prefix) :]
+    return message
+
+
+def _cannot_verify(message: str, report_format: str) -> int:
+    """Report "no verdict was reached" in the format the caller asked for:
+    under ``--report-format json`` it is still JSON, so a machine consumer can
+    tell an unreadable target from a broken chain."""
+    if report_format == "json":
+        print(json.dumps({"ok": False, "error": {"kind": "input", "message": message}}, indent=2))
+    else:
+        print(message, file=sys.stderr)
+    return _EXIT_USAGE
+
+
 def run_cli(argv: Sequence[str]) -> int:
     """Parse args, verify the target, and return an exit code. Stdout/stderr are
     written directly so the function is also a clean unit-test seam."""
     parser = _build_parser()
-    # argparse exits 2 on bad args/--help on its own; that already matches our
-    # usage exit code.
+    for arg in argv:
+        refused = _REFUSED_FLAGS.get(arg.split("=", 1)[0])
+        if refused is not None:
+            print(f"{refused}\n\n{parser.format_help()}", file=sys.stderr)
+            return _EXIT_USAGE
+    # argparse exits 2 on bad args and 0 on --help on its own; that already
+    # matches our exit codes.
     args = parser.parse_args(argv)
 
     target: str = args.target
@@ -442,20 +505,27 @@ def run_cli(argv: Sequence[str]) -> int:
     )
     trust_anchors: list[str] = list(args.trust_anchor or [])
     distrusted_keys: list[str] = list(args.distrusted_key or [])
+    # Parsed before anything is read, so a mistyped pin is a usage error and
+    # never a verdict: a run that silently dropped it would read as unanchored.
+    try:
+        parse_trust_anchors(trust_anchors)
+        parse_distrusted_keys(distrusted_keys)
+    except TypeError as err:
+        return _cannot_verify(_flag_message(str(err)), report_format)
     if distrusted_keys and not trust_anchors:
-        print(
+        return _cannot_verify(
             "--distrusted-key acts only inside the key-statement walk, which runs from "
-            "--trust-anchor; pass --trust-anchor as well.",
-            file=sys.stderr,
+            "--trust-anchor; pass the pin as well.",
+            report_format,
         )
-        return _EXIT_USAGE
+    if not os.path.exists(target):
+        return _cannot_verify(f"Cannot read {target}: no such file or directory.", report_format)
 
     agent_keys: list[dict[str, Any]] | None = None
     if args.agent_keys is not None:
         loaded = load_agent_keys(args.agent_keys)
         if isinstance(loaded, str):
-            print(loaded, file=sys.stderr)
-            return _EXIT_USAGE
+            return _cannot_verify(loaded, report_format)
         agent_keys = loaded
 
     # Directory -> full-vault dump.
@@ -464,14 +534,13 @@ def run_cli(argv: Sequence[str]) -> int:
         # nothing to override and a silent no-op would read as an audit that
         # honoured the policy. Mirrors @agledger/verify.
         if has_key_policy_flags:
-            print(
+            return _cannot_verify(
                 "--keys / --require-key-id / --require-supplied-keys apply to "
                 "/audit-export files only; a dump directory carries its own key "
                 "registry and signed key statements (vault_signing_keys.ndjson, "
                 "vault_key_statements.ndjson). Anchor its keys with --trust-anchor.",
-                file=sys.stderr,
+                report_format,
             )
-            return _EXIT_USAGE
         try:
             report = verify_dump(
                 load_dump(target),
@@ -480,8 +549,7 @@ def run_cli(argv: Sequence[str]) -> int:
                 distrusted_keys=distrusted_keys,
             )
         except (DumpLoadError, TypeError) as err:
-            print(str(err), file=sys.stderr)
-            return _EXIT_USAGE
+            return _cannot_verify(str(err), report_format)
         if not quiet:
             if report_format == "json":
                 print(json.dumps(report.to_json(), indent=2))
@@ -494,33 +562,28 @@ def run_cli(argv: Sequence[str]) -> int:
         with open(target, encoding="utf-8") as fh:
             raw = fh.read()
     except OSError as err:
-        print(str(err), file=sys.stderr)
-        return _EXIT_USAGE
+        return _cannot_verify(str(err), report_format)
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as err:
-        print(f"Invalid JSON in {target}: {err}", file=sys.stderr)
-        return _EXIT_USAGE
+        return _cannot_verify(f"Invalid JSON in {target}: {err}", report_format)
     if not _looks_like_audit_export(parsed):
-        print(
+        return _cannot_verify(
             f"{target} is neither a dump directory nor an /audit-export JSON document "
             f"(expected exportMetadata + entries).",
-            file=sys.stderr,
+            report_format,
         )
-        return _EXIT_USAGE
 
     public_keys: Mapping[str, Any] | list[Any] | None = None
     if args.keys is not None:
         loaded_keys = load_supplied_keys(args.keys)
         if isinstance(loaded_keys, str):
-            print(loaded_keys, file=sys.stderr)
-            return _EXIT_USAGE
+            return _cannot_verify(loaded_keys, report_format)
         public_keys = loaded_keys
 
     # verify_export raises TypeError at the supplied-key boundary when the
-    # file's shape is wrong ({keyId: 42}, [null]), and on a malformed anchor or
-    # distrusted key. Surface it as a usage error rather than an uncaught
-    # traceback, so a bad input never reads as a verdict.
+    # file's shape is wrong ({keyId: 42}, [null]). Surface it as a usage error
+    # rather than an uncaught traceback, so a bad input never reads as a verdict.
     try:
         result = verify_export(
             parsed,
@@ -532,9 +595,7 @@ def run_cli(argv: Sequence[str]) -> int:
             distrusted_keys=distrusted_keys,
         )
     except TypeError as err:
-        hint = "" if "trust_anchors" in str(err) or "distrusted_keys" in str(err) else f"\n{_KEYS_SHAPE}"
-        print(f"{err}{hint}", file=sys.stderr)
-        return _EXIT_USAGE
+        return _cannot_verify(f"{err}\n{_KEYS_SHAPE}", report_format)
     if not quiet:
         if report_format == "json":
             print(json.dumps(_export_to_json(result), indent=2))
