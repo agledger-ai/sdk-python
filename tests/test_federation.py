@@ -8,6 +8,10 @@ import respx
 from agledger import AgledgerClient
 
 BASE = "https://agledger.example.com"
+SCHEMA_REF = {
+    "publisher": "local", "type": "terminal-outcome-v1", "version": "1",
+    "manifestDigest": "sha256:" + "0" * 64,
+}
 
 
 class TestFederationResource:
@@ -48,6 +52,7 @@ class TestFederationResource:
         assert result.peer_id == "11111111-1111-4111-8111-111111111111"
         assert result.status == "active"
         assert result.server_signing_public_key == "ed25519-pk"
+        assert result.server_hub_id is None
         assert result.next_steps is None
 
     @respx.mock
@@ -61,8 +66,12 @@ class TestFederationResource:
                 state="FULFILLED",
                 type="terminal-outcome-v1",
                 idempotency_key="idem-1",
+                principal_agent_id="agt-prin",
                 performer_agent_id="agt-perf",
+                operating_mode="cleartext",
                 co_sign_required=True,
+                platform_ref="PO-1",
+                risk_classification="minimal",
                 schema_ref={
                     "publisher": "local", "type": "terminal-outcome-v1", "version": "1",
                     "manifestDigest": "sha256:" + "0" * 64,
@@ -77,8 +86,9 @@ class TestFederationResource:
         # Only the API-accepted fields ride the wire (additionalProperties: false).
         assert sent == {
             "recordId": "rec-1", "state": "FULFILLED", "type": "terminal-outcome-v1",
-            "idempotencyKey": "idem-1", "performerAgentId": "agt-perf",
-            "coSignRequired": True,
+            "idempotencyKey": "idem-1", "principalAgentId": "agt-prin",
+            "performerAgentId": "agt-perf", "operatingMode": "cleartext",
+            "coSignRequired": True, "platformRef": "PO-1", "riskClassification": "minimal",
             "schemaRef": {
                 "publisher": "local", "type": "terminal-outcome-v1", "version": "1",
                 "manifestDigest": "sha256:" + "0" * 64,
@@ -100,9 +110,9 @@ class TestFederationResource:
                 valid_until="2026-05-22T00:00:00Z",
                 idempotency_key="idem-2",
                 outcome="reject",
+                schema_ref=SCHEMA_REF,
                 reason_code="PRINCIPAL_REJECT",
                 failing_rule_ids=["amount.max", "deadline"],
-                reason="over budget",
             )
         assert route.called
         import json
@@ -111,8 +121,28 @@ class TestFederationResource:
             "recordId": "rec-1", "recommendation": "HOLD", "outcomeHash": "sha256-o",
             "validUntil": "2026-05-22T00:00:00Z", "idempotencyKey": "idem-2",
             "outcome": "reject", "reasonCode": "PRINCIPAL_REJECT",
-            "failingRuleIds": ["amount.max", "deadline"], "reason": "over budget",
+            "failingRuleIds": ["amount.max", "deadline"], "schemaRef": SCHEMA_REF,
         }
+
+    @respx.mock
+    def test_relay_signal_sends_the_required_nullable_fields_as_null(self):
+        """API 2.0 requires ``outcome``, ``reasonCode`` and ``failingRuleIds``
+        and lets each be null, so a RELEASE with none of them sends all three as
+        null instead of leaving them off, and the body carries no ``reason``."""
+        route = respx.post(f"{BASE}/federation/v1/signals").mock(
+            return_value=httpx.Response(200, json={"relayed": True})
+        )
+        with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
+            client.federation.relay_signal(
+                record_id="rec-1", recommendation="RELEASE", outcome=None,
+                outcome_hash="h" * 64, valid_until="2026-05-22T00:00:00Z",
+                idempotency_key="idem-3", schema_ref=SCHEMA_REF,
+                reason_code=None, failing_rule_ids=None,
+            )
+        import json
+        sent = json.loads(route.calls[0].request.content)
+        assert (sent["outcome"], sent["reasonCode"], sent["failingRuleIds"]) == (None, None, None)
+        assert "reason" not in sent
 
     @respx.mock
     def test_submit_co_sign_request(self):
@@ -120,8 +150,19 @@ class TestFederationResource:
             return_value=httpx.Response(200, json={"queued": True})
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            client.federation.submit_co_sign_request(recordId="rec-1", payload="cbor:...")
-        assert route.called
+            client.federation.submit_co_sign_request(
+                record_id="rec-1", recommendation="SETTLE", outcome_hash="h" * 64,
+                state="FULFILLED", performer_hub_id="hub-1",
+                valid_until="2026-05-22T00:00:00Z", idempotency_key="idem-4",
+                schema_ref=SCHEMA_REF, outcome="accept",
+            )
+        import json
+        assert json.loads(route.calls[0].request.content) == {
+            "recordId": "rec-1", "recommendation": "SETTLE", "outcomeHash": "h" * 64,
+            "state": "FULFILLED", "performerHubId": "hub-1",
+            "validUntil": "2026-05-22T00:00:00Z", "idempotencyKey": "idem-4",
+            "schemaRef": SCHEMA_REF, "outcome": "accept",
+        }
 
     @respx.mock
     def test_submit_dispute_protocol(self):
@@ -129,8 +170,17 @@ class TestFederationResource:
             return_value=httpx.Response(200, json={"received": True})
         )
         with AgledgerClient(base_url="https://agledger.example.com", api_key="agl_adm_test") as client:
-            client.federation.submit_dispute_protocol(recordId="rec-1", reason="mismatch")
-        assert route.called
+            client.federation.submit_dispute_protocol(
+                record_id="rec-1", action="opened", dispute_id="dsp-1",
+                dispute_status="EVIDENCE_WINDOW", idempotency_key="idem-5",
+                schema_ref=SCHEMA_REF, grounds="quality_issue",
+            )
+        import json
+        assert json.loads(route.calls[0].request.content) == {
+            "recordId": "rec-1", "action": "opened", "disputeId": "dsp-1",
+            "disputeStatus": "EVIDENCE_WINDOW", "idempotencyKey": "idem-5",
+            "schemaRef": SCHEMA_REF, "grounds": "quality_issue",
+        }
 
 
 class TestFederationAdminResource:
