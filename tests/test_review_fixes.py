@@ -92,7 +92,7 @@ def _client(**kw: Any) -> AgledgerClient:
 # --- 1: only a 401 about the cert forces a re-exchange ---
 
 DELEGATION_401 = httpx.Response(401, json={
-    "message": "AGLedger-On-Behalf-Of: token expired", "code": "UNAUTHORIZED", "reason": "expired",
+    "detail": "AGLedger-On-Behalf-Of: token expired", "error": "UNAUTHORIZED", "reason": "expired",
 })
 
 
@@ -112,7 +112,7 @@ def test_a_delegation_401_surfaces_without_a_re_exchange():
 def test_a_signature_401_surfaces_without_a_re_exchange():
     exchange = respx.post(EXCHANGE).mock(side_effect=Exchanges(_cert(1), _cert(2)))
     create = respx.post(RECORDS).mock(return_value=httpx.Response(401, json={
-        "message": "X-Agent-Signature does not verify against the ephemeral cert public key",
+        "detail": "X-Agent-Signature does not verify against the ephemeral cert public key",
     }))
     respx.get(ME).mock(return_value=httpx.Response(200, json={}))
     with pytest.raises(AuthenticationError):
@@ -125,10 +125,10 @@ def test_a_signature_401_surfaces_without_a_re_exchange():
 def test_a_cert_401_still_re_exchanges_and_retries():
     exchange = respx.post(EXCHANGE).mock(side_effect=Exchanges(_cert(1), _cert(2)))
     create = respx.post(RECORDS).mock(side_effect=[
-        httpx.Response(401, json={"message": "Ephemeral cert expired; mint a fresh one"}),
+        httpx.Response(401, json={"detail": "Ephemeral cert expired; mint a fresh one"}),
         httpx.Response(201, json={"id": "r"}),
     ])
-    respx.get(ME).mock(return_value=httpx.Response(401, json={"message": "Ephemeral cert expired"}))
+    respx.get(ME).mock(return_value=httpx.Response(401, json={"detail": "Ephemeral cert expired"}))
     _client().request("POST", "/v1/records", json={"a": 1})
     assert exchange.call_count == 2
     assert create.calls.last.request.headers["authorization"] == "Bearer cert-jws-2"
@@ -140,9 +140,9 @@ def test_a_cert_401_still_re_exchanges_and_retries():
 @pytest.mark.parametrize(
     "failure",
     [
-        httpx.Response(503, json={"message": "down"}),
-        httpx.Response(429, json={"message": "slow down"}),
-        httpx.Response(409, json={"message": "already exchanged"}),
+        httpx.Response(503, json={"detail": "down"}),
+        httpx.Response(429, json={"detail": "slow down"}),
+        httpx.Response(409, json={"detail": "already exchanged"}),
         httpx.ConnectError("idp unreachable"),
     ],
     ids=["503", "429", "409", "connect"],
@@ -182,7 +182,7 @@ def test_a_token_source_that_raises_at_refresh_keeps_the_valid_cert(clock: list[
 
 @respx.mock
 def test_a_failed_exchange_after_expiry_raises(clock: list[float]):
-    respx.post(EXCHANGE).mock(side_effect=Exchanges(_cert(1), httpx.Response(503, json={"message": "down"})))
+    respx.post(EXCHANGE).mock(side_effect=Exchanges(_cert(1), httpx.Response(503, json={"detail": "down"})))
     respx.get(ME).mock(return_value=httpx.Response(200, json={}))
     client = _client()
     client.request("GET", "/v1/auth/me")
@@ -239,7 +239,7 @@ def test_waiting_threads_share_one_failed_exchange():
 
     def refuse(request: httpx.Request) -> httpx.Response:
         gate.wait(2)
-        return httpx.Response(503, json={"message": "down"})
+        return httpx.Response(503, json={"detail": "down"})
 
     exchange = respx.post(EXCHANGE).mock(side_effect=refuse)
     respx.get(ME).mock(return_value=httpx.Response(200, json={}))
@@ -267,7 +267,7 @@ def test_waiting_threads_share_one_failed_exchange():
 async def test_waiting_tasks_share_one_failed_exchange():
     async def refuse(request: httpx.Request) -> httpx.Response:
         await asyncio.sleep(0.05)
-        return httpx.Response(503, json={"message": "down"})
+        return httpx.Response(503, json={"detail": "down"})
 
     exchange = respx.post(EXCHANGE).mock(side_effect=refuse)
     async with AsyncAgledgerClient(bearer_token=async_oidc_cert_credential(get_oidc_token=Idp()), base_url=BASE) as client:

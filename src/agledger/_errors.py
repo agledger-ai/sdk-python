@@ -28,8 +28,11 @@ class APIError(AgledgerError):
     """API returned an error response.
 
     Fields mirror the API error body verbatim. The SDK does not invent content:
-    ``doc_url``, ``suggestion``, ``recovery_hint``, and ``refresh_url`` only
-    appear when the API returns them.
+    ``suggestion``, ``recovery_hint`` and ``refresh_url`` only appear when the
+    API returns them.
+
+    ``str(error)`` is the body's ``detail``, the one human-readable field an API
+    2.0 error carries, and ``detail`` holds the same string.
 
     Key properties for consumers:
 
@@ -37,13 +40,12 @@ class APIError(AgledgerError):
     - ``publishers``: candidate publisher labels on an ambiguous-publisher 422
     - ``registry_version``: the registry slot a schema version conflict is on
     - ``pinned_records`` / ``unattributable_records``: why a schema delete was refused
-    - ``docs``: discovery-document pointer. ``doc_url`` is dead and always None.
 
     - ``status``: HTTP status code
-    - ``code``: stable machine-readable error code (from API body)
+    - ``code``: stable machine-readable error code (the body's ``error``)
+    - ``detail``: human-readable explanation of this occurrence
     - ``retryable``: API's ``retryable`` flag, falling back to status-based classification (429/5xx)
     - ``request_id``: correlation ID (from API body or ``X-Request-Id`` header)
-    - ``doc_url``: documentation link, only if the API returned one
     - ``suggestion``: typo-correction hint, only if the API returned one
     - ``recovery_hint``: machine-readable recovery guidance (e.g. on 422 INVALID_ACTION)
     - ``reason`` / ``current_state`` / ``allowed_actions``: the refusal's reason code, the
@@ -54,13 +56,16 @@ class APIError(AgledgerError):
 
     status: int
     code: str
+    detail: str
+    """Human-readable explanation of this occurrence, from the body's ``detail``.
+    Also what ``str(error)`` returns."""
     request_id: str | None
     details: Any | None
     retryable: bool
     type: str | None
     """RFC 9457 problem URI, from the body's ``type``, when the failure carries a
     narrower one than its status class (e.g. ``/problems/ambiguous-publisher``).
-    Branch on this rather than on message prose. The bulk-create envelope calls
+    Branch on this rather than on detail prose. The bulk-create envelope calls
     the same value ``problemType``."""
     publishers: list[str] | None
     """Candidate publisher labels on a 422 ``/problems/ambiguous-publisher``: the
@@ -81,13 +86,6 @@ class APIError(AgledgerError):
     """Records of this type carrying no registration pin. They block a delete
     under any publisher label, so this can be non-zero while ``pinned_records``
     is 0 and the delete still fails."""
-    doc_url: str | None
-    """Deprecated. Always ``None``: no route emits ``docUrl``. The engine's error
-    schema has no such property, so it is stripped from every serialized body.
-    Read ``docs`` instead."""
-    docs: str | None
-    """Pointer to the discovery-document section describing the failed scheme.
-    Set on the federation 401 alongside the signing-input template."""
     suggestion: str | None
     recovery_hint: str | None
     reason: str | None
@@ -95,7 +93,7 @@ class APIError(AgledgerError):
     refusal it names the token check that failed (``expired``,
     ``wrong_audience``, ``wrong_azp``, ``jti_replayed``, ...); on a 409 it
     names the conflict (``TRUSTED_ISSUER_EXISTS``, ``AGENT_NAME_IN_USE``,
-    ...). Branch on this rather than on the message prose."""
+    ...). Branch on this rather than on the detail prose."""
     current_state: str | None
     """State the resource was in when the request was refused, forwarded from
     the body. Some refusals name their precondition here instead, such as the
@@ -120,14 +118,12 @@ class APIError(AgledgerError):
         self,
         status: int,
         *,
-        message: str = "",
+        detail: str = "",
         code: str = "unknown",
         request_id: str | None = None,
         details: Any | None = None,
         retryable: bool | None = None,
         suggestion: str | None = None,
-        doc_url: str | None = None,
-        docs: str | None = None,
         recovery_hint: str | None = None,
         refresh_url: str | None = None,
         deadline: str | None = None,
@@ -152,8 +148,6 @@ class APIError(AgledgerError):
         self.registry_version = registry_version
         self.pinned_records = pinned_records
         self.unattributable_records = unattributable_records
-        self.doc_url = doc_url
-        self.docs = docs
         self.suggestion = suggestion
         self.recovery_hint = recovery_hint
         self.reason = reason
@@ -163,10 +157,11 @@ class APIError(AgledgerError):
         self.refresh_url = refresh_url
         self.deadline = deadline
         self.raw_body = raw_body
-        super().__init__(message or f"API error {status}")
+        self.detail = detail or f"API error {status}"
+        super().__init__(self.detail)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(status={self.status}, code={self.code!r}, message={str(self)!r})"
+        return f"{self.__class__.__name__}(status={self.status}, code={self.code!r}, detail={self.detail!r})"
 
     def is_retryable(self) -> bool:
         """Whether this error can be retried (429, 5xx, network errors)."""
@@ -196,17 +191,16 @@ class PermissionDeniedError(APIError):
     """403: insufficient scopes or permissions."""
 
     missing_scopes: list[str]
-    key_scopes: list[str] | None
+    """Scopes the route requires that the credential does not hold, from the
+    body's ``missingScopes``. Empty when the refusal is not a scope check."""
 
     def __init__(
         self,
         *,
         missing_scopes: list[str] | None = None,
-        key_scopes: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
         self.missing_scopes = missing_scopes or []
-        self.key_scopes = key_scopes
         super().__init__(403, **kwargs)
 
 

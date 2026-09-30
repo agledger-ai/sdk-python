@@ -213,7 +213,7 @@ def test_a_401_forces_exactly_one_re_exchange_and_one_retry():
     recorder = ExchangeRecorder()
     respx.post(EXCHANGE).mock(side_effect=recorder)
     me = respx.get(f"{BASE}/v1/records/r").mock(
-        side_effect=[httpx.Response(401, json={"message": "cert revoked"}), httpx.Response(200, json={"ok": 1})]
+        side_effect=[httpx.Response(401, json={"detail": "cert revoked"}), httpx.Response(200, json={"ok": 1})]
     )
     # The probe that tells a cert refusal from any other 401: the Server
     # refuses the cert there too.
@@ -233,7 +233,7 @@ def test_a_second_401_surfaces_as_an_authentication_error():
     recorder = ExchangeRecorder()
     respx.post(EXCHANGE).mock(side_effect=recorder)
     me = respx.get(f"{BASE}/v1/records/r").mock(
-        return_value=httpx.Response(401, json={"message": "no", "code": "UNAUTHORIZED"})
+        return_value=httpx.Response(401, json={"detail": "no", "error": "UNAUTHORIZED"})
     )
     respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={}))
     client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FakeIdp()), base_url=BASE)
@@ -246,7 +246,7 @@ def test_a_second_401_surfaces_as_an_authentication_error():
 
 @respx.mock
 def test_a_401_on_an_api_key_is_not_retried():
-    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={"message": "no"}))
+    me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={"detail": "no"}))
     client = AgledgerClient(api_key="agl_agt_x", base_url=BASE)
     with pytest.raises(AuthenticationError):
         client.request("GET", "/v1/auth/me")
@@ -259,8 +259,8 @@ def test_a_refused_exchange_names_the_exchange_and_carries_the_recovery_hint():
         return_value=httpx.Response(
             409,
             json={
-                "message": "This OIDC token id has already been exchanged",
-                "code": "CONFLICT",
+                "detail": "This OIDC token id has already been exchanged",
+                "error": "CONFLICT",
                 "recoveryHint": "Fetch a new token from your IdP and exchange that.",
             },
         )
@@ -288,7 +288,7 @@ def test_an_agent_id_the_token_does_not_bind_is_a_403_carrying_the_binding_to_ma
             403,
             json={
                 "error": "CERT_AGENT_BINDING_MISMATCH",
-                "message": "The token binds a different agent than agentId names.",
+                "detail": "The token binds a different agent than agentId names.",
                 "recoveryHint": "Bind the agent: PATCH /v1/agents/{id} with oidcIss/oidcSub.",
             },
         )
@@ -314,7 +314,7 @@ def test_a_scopes_claim_of_only_admin_scopes_is_a_422_naming_it_in_current_state
             422,
             json={
                 "error": "UNPROCESSABLE",
-                "message": "The scopes claim names only admin-only scopes.",
+                "detail": "The scopes claim names only admin-only scopes.",
                 "currentState": "scope_claim_admin_only",
                 "recoveryHint": "Fix the IdP claim mapping.",
             },
@@ -338,8 +338,8 @@ def test_a_refused_exchange_never_carries_the_oidc_token():
         return httpx.Response(
             400,
             json={
-                "message": f"body/proofOfPossession must match pattern; got token {sent['oidcToken']}",
-                "code": "VALIDATION_ERROR",
+                "detail": f"body/proofOfPossession must match pattern; got token {sent['oidcToken']}",
+                "error": "VALIDATION_ERROR",
                 "details": [
                     {"path": "/proofOfPossession", "received": sent},
                     {"path": "/oidcToken", "received": sent["oidcToken"]},
@@ -406,8 +406,8 @@ class JtiServer:
         if "jti" in claims and claims["jti"] in self.seen:
             self.refused += 1
             return httpx.Response(409, json={
-                "message": "This OIDC token id has already been exchanged",
-                "code": "CONFLICT",
+                "detail": "This OIDC token id has already been exchanged",
+                "error": "CONFLICT",
                 "recoveryHint": "Fetch a fresh token from your IdP.",
             })
         if "jti" in claims:
@@ -444,7 +444,7 @@ def test_a_scheduled_refresh_refused_as_already_exchanged_keeps_the_valid_cert(c
     # credential never sent (another process exchanged it first).
     respx.post(EXCHANGE).mock(side_effect=[
         _cert_response(1, 120),
-        httpx.Response(409, json={"message": "This OIDC token id has already been exchanged"}),
+        httpx.Response(409, json={"detail": "This OIDC token id has already been exchanged"}),
         _cert_response(2, 120),
     ])
     me = respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(200, json={}))
@@ -480,7 +480,7 @@ def test_an_already_exchanged_token_after_expiry_raises_saying_so(clock: list[fl
 def test_an_already_exchanged_token_on_a_401_raises_saying_so():
     server = JtiServer()
     respx.post(EXCHANGE).mock(side_effect=server)
-    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={"message": "revoked"}))
+    respx.get(f"{BASE}/v1/auth/me").mock(return_value=httpx.Response(401, json={"detail": "revoked"}))
     client = AgledgerClient(bearer_token=oidc_cert_credential(get_oidc_token=FileLikeIdp()), base_url=BASE)
 
     with pytest.raises(OidcCertExchangeError, match="must return a new token"):
@@ -556,7 +556,7 @@ def test_concurrent_401s_share_one_re_exchange():
     def me(request: httpx.Request) -> httpx.Response:
         if request.headers["authorization"] == "Bearer cert-jws-1":
             barrier.wait(2)  # all four hold the stale cert at once
-            return httpx.Response(401, json={"message": "expired"})
+            return httpx.Response(401, json={"detail": "expired"})
         return httpx.Response(200, json={})
 
     respx.get(f"{BASE}/v1/auth/me").mock(side_effect=me)

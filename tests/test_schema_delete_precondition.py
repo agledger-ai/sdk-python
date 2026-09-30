@@ -30,7 +30,7 @@ REFUSED = {
     "type": "/problems/schema-in-use",
     "title": "Type still referenced",
     "error": "RECORDS_REFERENCE_TYPE",
-    "message": "Records still reference ruleskew-v1",
+    "detail": "Records still reference ruleskew-v1",
     "publisher": "peerco",
     "pinnedRecords": 3,
     "unattributableRecords": 0,
@@ -77,7 +77,7 @@ def test_unattributable_records_block_under_every_label() -> None:
 @respx.mock
 def test_counts_are_none_when_the_engine_does_not_send_them() -> None:
     respx.delete(f"{BASE}/v1/schemas/other-v1").mock(
-        return_value=httpx.Response(409, json={"error": "CONFLICT", "message": "nope"})
+        return_value=httpx.Response(409, json={"error": "CONFLICT", "detail": "nope"})
     )
 
     with pytest.raises(APIError) as excinfo:
