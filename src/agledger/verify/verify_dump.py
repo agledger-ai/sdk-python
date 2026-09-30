@@ -135,7 +135,7 @@ def _checkpoint_signature_outcome(
         return "unanchored"
     if entry.trust == "undecided":
         return "undecided"
-    outcome = verify_cose_sign1(base64.b64decode(str(cose_sign1_b64)), entry)
+    outcome = verify_cose_sign1(_envelope_bytes(cose_sign1_b64), entry)
     if outcome == "ok":
         return "ok"
     if outcome == "unsupported-key-algorithm":
@@ -261,15 +261,23 @@ def _shown(value: object) -> str:
     return json.dumps(None if value is _MISSING else value)
 
 
+def _envelope_bytes(cose_sign1: object) -> bytes:
+    """The bytes of a row's cose_sign1 column. The engine never writes it null,
+    so a row without one was edited: it reads as empty bytes, which no leaf hash
+    matches and no claim decodes from, rather than raising out of the walk."""
+    if not isinstance(cose_sign1, str):
+        return b""
+    try:
+        return base64.b64decode(cose_sign1)
+    except ValueError:
+        return b""
+
+
 def _claim_disagreement(
     cose_sign1: object, expect: Callable[[_SignedClaim], list[tuple[str, object, object]]]
 ) -> str | None:
     """Why an envelope's signed claim disagrees with its row, or None when it agrees."""
-    try:
-        envelope = base64.b64decode(str(cose_sign1))
-    except (ValueError, TypeError):
-        envelope = b""
-    claim = _decode_signed_claim(envelope)
+    claim = _decode_signed_claim(_envelope_bytes(cose_sign1))
     if claim is None:
         return "cose_sign1 does not decode as a signed AGLedger claim"
     for name, signed, row in expect(claim):
@@ -364,13 +372,8 @@ def _chain_label(chain_key: str) -> str:
     return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"Record {chain_key}"
 
 
-def _group_by_chain(entries: list[DumpRow]) -> dict[str, list[DumpRow]]:
-    by_chain: dict[str, list[DumpRow]] = {}
-    for e in entries:
-        by_chain.setdefault(_chain_key(e), []).append(e)
-    for rows in by_chain.values():
-        rows.sort(key=lambda r: r.get("chain_position", 0))
-    return by_chain
+_NO_ROW = object()
+"""No vault row read yet: ``None`` is a real record id (schema chains)."""
 
 
 def _normalize_entry(e: DumpRow) -> dict[str, Any]:
@@ -676,58 +679,98 @@ def verify_vault_chains(
         )
         return VaultChainsReport(0, 0, len(checkpoints), failures)
 
-    # Format gate: format 2.0 requires cose_sign1 on every vault row. A row
-    # lacking it is a pre-cutover shape: fail closed rather than parse it.
-    pre_cutover = [e for e in entries if not e.get("cose_sign1")]
-    if pre_cutover:
-        first = pre_cutover[0]
-        failures.append(
-            Failure(
-                code="UNSUPPORTED_FORMAT",
-                message=(
-                    f"audit_vault row {first.get('id')} lacks cose_sign1: pre-2.0 dump "
-                    f"shape. This verifier reads exportFormatVersion 2.0 / RFC8949-CDE; "
-                    f"re-export from a current AGLedger instance."
-                ),
-                scope_id=_as_str(first.get("record_id")),
-                position=_as_int(first.get("chain_position")),
-            )
-        )
-        return VaultChainsReport(0, len(entries), len(checkpoints), failures)
-
     if keys is None:
         keys = _build_vault_key_registry(signing_keys)
-    by_chain = _group_by_chain(entries)
-
     checkpoints_by_chain: dict[str, list[DumpRow]] = {}
     for cp in checkpoints:
         checkpoints_by_chain.setdefault(_checkpoint_chain_key(cp), []).append(cp)
 
-    for chain_key, rows in by_chain.items():
+    def report(record_count: int, entry_count: int) -> VaultChainsReport:
+        return VaultChainsReport(
+            record_count=record_count,
+            entry_count=entry_count,
+            checkpoint_count=len(checkpoints),
+            failures=failures,
+            agent_signatures_present=agent_counts.present,
+            agent_signatures_verified=agent_counts.verified,
+            cert_keys_from_chain=cert_keys_from_chain,
+            optional_checks=optional_checks_report(
+                applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
+            ),
+        )
+
+    # The walk reads the file in producer order, as @agledger/verify streams
+    # it: a record chain is verified when the next row names another record,
+    # and schema chains (no record id) stay open to the end. What was closed
+    # before a refused row keeps its findings.
+    open_chains: dict[str, list[DumpRow]] = {}
+    closed: set[str] = set()
+    chain_count = 0
+
+    def close_chain(chain_key: str) -> None:
+        nonlocal chain_count, cert_keys_from_chain
+        rows = open_chains.pop(chain_key, None)
+        if rows is None:
+            return
+        closed.add(chain_key)
+        chain_count += 1
+        rows.sort(key=lambda r: r.get("chain_position", 0))
         failures_before = len(failures)
         normalized = [_normalize_entry(e) for e in rows]
         results = _collect_chain_failures(
             chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied
         )
-        _verify_vault_checkpoints(by_chain, checkpoints_by_chain.pop(chain_key, []), keys, failures)
+        _verify_vault_checkpoints({chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures)
         if len(failures) == failures_before:
             cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
+
+    previous_record_id: object = _NO_ROW
+    for seen, e in enumerate(entries, start=1):
+        # Format gate: format 2.0 requires cose_sign1 on every vault row. A row
+        # lacking it is a pre-cutover shape, so fail closed rather than parse
+        # it; one such row means the dump came from a pre-cutover engine.
+        if not e.get("cose_sign1"):
+            failures.append(
+                Failure(
+                    code="UNSUPPORTED_FORMAT",
+                    message=(
+                        f"audit_vault row {e.get('id')} lacks cose_sign1: pre-2.0 dump "
+                        f"shape. This verifier reads exportFormatVersion 2.0 / RFC8949-CDE; "
+                        f"re-export from a current AGLedger instance."
+                    ),
+                    scope_id=_as_str(e.get("record_id")),
+                    position=_as_int(e.get("chain_position")),
+                )
+            )
+            return report(0, seen)
+        record_id = e.get("record_id")
+        if previous_record_id is not _NO_ROW and previous_record_id is not None and record_id != previous_record_id:
+            close_chain(str(previous_record_id))
+        previous_record_id = record_id
+        chain_key = _chain_key(e)
+        if chain_key in closed:
+            failures.append(
+                Failure(
+                    code="UNSUPPORTED_FORMAT",
+                    message=(
+                        f"audit_vault is not in producer order: rows for chain {chain_key} reappear "
+                        f"after the chain was closed (row {e.get('id')}, position {e.get('chain_position')}). "
+                        "Chains must be contiguous, as emitted by the shipped dump tool; re-export "
+                        "rather than reordering the file."
+                    ),
+                    scope_id=_as_str(record_id),
+                    position=_as_int(e.get("chain_position")),
+                )
+            )
+            return report(chain_count, seen)
+        open_chains.setdefault(chain_key, []).append(e)
+
+    for chain_key in list(open_chains):
+        close_chain(chain_key)
     # Checkpoints whose chain has no row left at all.
     for orphaned in checkpoints_by_chain.values():
-        _verify_vault_checkpoints(by_chain, orphaned, keys, failures)
-
-    return VaultChainsReport(
-        record_count=len(by_chain),
-        entry_count=len(entries),
-        checkpoint_count=len(checkpoints),
-        failures=failures,
-        agent_signatures_present=agent_counts.present,
-        agent_signatures_verified=agent_counts.verified,
-        cert_keys_from_chain=cert_keys_from_chain,
-        optional_checks=optional_checks_report(
-            applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
-        ),
-    )
+        _verify_vault_checkpoints({}, orphaned, keys, failures)
+    return report(chain_count, len(entries))
 
 
 def _group_by_org(rows: list[DumpRow]) -> dict[str, list[DumpRow]]:
@@ -893,7 +936,7 @@ def _verify_one_org_admin_reads_log(
             )
             return  # a gap stops the whole org: the log is incomplete
         # leaf_hash is the RFC 9162 leaf hash, sha256(0x00 || cose_sign1).
-        envelope = base64.b64decode(str(leaf.get("cose_sign1")))
+        envelope = _envelope_bytes(leaf.get("cose_sign1"))
         recomputed = org_read_leaf_hash(envelope)
         if recomputed != leaf.get("leaf_hash"):
             failures.append(
