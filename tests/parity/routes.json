@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-09-29T03:44:01.877Z",
+  "generatedAt": "2026-09-30T22:12:41.130Z",
   "sourceKind": "local",
-  "apiVersion": "1.8.0",
-  "count": 194,
+  "apiVersion": "2.0.0",
+  "count": 193,
   "routes": [
     {
       "method": "DELETE",
@@ -152,7 +152,8 @@
         200,
         414,
         429,
-        500
+        500,
+        503
       ]
     },
     {
@@ -184,7 +185,8 @@
         200,
         414,
         429,
-        500
+        500,
+        503
       ]
     },
     {
@@ -204,7 +206,8 @@
         404,
         414,
         429,
-        500
+        500,
+        503
       ]
     },
     {
@@ -229,8 +232,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -414,7 +416,8 @@
       "pathParams": [],
       "responseCodes": [
         200,
-        401
+        401,
+        429
       ]
     },
     {
@@ -540,7 +543,6 @@
         "limit",
         "neverExpires",
         "neverUsed",
-        "offset",
         "orgId",
         "ownerId",
         "ownerType",
@@ -731,7 +733,6 @@
         "cursor",
         "from",
         "limit",
-        "offset",
         "order",
         "orgId",
         "sort",
@@ -974,8 +975,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -1073,7 +1073,6 @@
         "cursor",
         "from",
         "limit",
-        "offset",
         "outcome",
         "to",
         "type"
@@ -1248,8 +1247,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -1305,6 +1303,7 @@
         401,
         403,
         404,
+        409,
         414,
         429,
         500,
@@ -1399,7 +1398,6 @@
       "queryFields": [
         "cursor",
         "limit",
-        "offset",
         "orgId",
         "recordId",
         "status"
@@ -1427,7 +1425,6 @@
         "cursor",
         "eventType",
         "limit",
-        "offset",
         "order",
         "recordId",
         "since",
@@ -1484,7 +1481,6 @@
         "hasDispute",
         "imported",
         "limit",
-        "offset",
         "orgId",
         "performerAgentId",
         "role",
@@ -1541,8 +1537,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [
         "id"
@@ -1763,7 +1758,6 @@
       "queryFields": [
         "cursor",
         "limit",
-        "offset",
         "structuralValidation"
       ],
       "pathParams": [
@@ -1814,8 +1808,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [
         "recordId"
@@ -1888,8 +1881,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [],
       "responseCodes": [
@@ -1942,7 +1934,6 @@
         "imported",
         "limit",
         "metadata",
-        "offset",
         "operatingMode",
         "order",
         "orgId",
@@ -1978,19 +1969,6 @@
     },
     {
       "method": "GET",
-      "path": "/v1/records/summary",
-      "operationId": "recordsSummaryRetired",
-      "tag": "Records",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        410
-      ]
-    },
-    {
-      "method": "GET",
       "path": "/v1/references",
       "operationId": "lookupReferences",
       "tag": "References",
@@ -1999,7 +1977,6 @@
       "queryFields": [
         "cursor",
         "limit",
-        "offset",
         "refId",
         "refType",
         "system"
@@ -2158,7 +2135,6 @@
       "requiredFields": [],
       "bodyFields": [],
       "queryFields": [
-        "format",
         "orgId",
         "publisher"
       ],
@@ -2375,7 +2351,8 @@
         200,
         414,
         429,
-        500
+        500,
+        503
       ]
     },
     {
@@ -2388,7 +2365,6 @@
       "queryFields": [
         "cursor",
         "limit",
-        "offset",
         "url"
       ],
       "pathParams": [],
@@ -2436,7 +2412,6 @@
       "queryFields": [
         "cursor",
         "limit",
-        "offset",
         "status"
       ],
       "pathParams": [
@@ -2463,8 +2438,7 @@
       "bodyFields": [],
       "queryFields": [
         "cursor",
-        "limit",
-        "offset"
+        "limit"
       ],
       "pathParams": [
         "webhookId"
@@ -2531,6 +2505,7 @@
         401,
         403,
         404,
+        409,
         414,
         429,
         500,
@@ -2748,6 +2723,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -2899,6 +2875,7 @@
         "performerHubId",
         "recommendation",
         "recordId",
+        "schemaRef",
         "state",
         "validUntil"
       ],
@@ -2938,7 +2915,8 @@
         "disputeId",
         "disputeStatus",
         "idempotencyKey",
-        "recordId"
+        "recordId",
+        "schemaRef"
       ],
       "bodyFields": [
         "action",
@@ -2949,8 +2927,7 @@
         "initiatedByRole",
         "outcome",
         "recordId",
-        "schemaRef",
-        "tier"
+        "schemaRef"
       ],
       "queryFields": [],
       "pathParams": [],
@@ -3005,10 +2982,14 @@
       "operationId": "federationSettlementSignal",
       "tag": "Federation",
       "requiredFields": [
+        "failingRuleIds",
         "idempotencyKey",
+        "outcome",
         "outcomeHash",
+        "reasonCode",
         "recommendation",
         "recordId",
+        "schemaRef",
         "validUntil"
       ],
       "bodyFields": [
@@ -3017,7 +2998,6 @@
         "idempotencyKey",
         "outcome",
         "outcomeHash",
-        "reason",
         "reasonCode",
         "recommendation",
         "recordId",
@@ -3046,7 +3026,11 @@
       "tag": "Federation",
       "requiredFields": [
         "idempotencyKey",
+        "operatingMode",
+        "performerAgentId",
+        "principalAgentId",
         "recordId",
+        "schemaRef",
         "state",
         "type"
       ],
@@ -3379,6 +3363,7 @@
         200,
         401,
         403,
+        404,
         414,
         429,
         500,
@@ -3451,6 +3436,7 @@
         414,
         429,
         500,
+        502,
         503
       ]
     },
@@ -3561,7 +3547,6 @@
         400,
         401,
         403,
-        404,
         414,
         429,
         500,
@@ -3634,6 +3619,7 @@
         401,
         403,
         404,
+        409,
         414,
         429,
         500,
@@ -3653,6 +3639,7 @@
         200,
         401,
         403,
+        409,
         414,
         429,
         500,
@@ -4487,7 +4474,6 @@
         "evidence"
       ],
       "queryFields": [
-        "format",
         "orgId",
         "publisher"
       ],
@@ -4499,7 +4485,9 @@
         400,
         401,
         403,
+        404,
         414,
+        422,
         429,
         500,
         503
@@ -4533,7 +4521,6 @@
         403,
         409,
         414,
-        422,
         429,
         500,
         503
