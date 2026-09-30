@@ -270,6 +270,7 @@ def test_rule2_reads_the_window_off_a_verification_key_model() -> None:
             "status": "active",
             "activatedAt": window["activatedAt"],
             "retiredAt": None,
+            "statements": [],
         }
     )
     result = verify_export(exp, public_keys=[model])

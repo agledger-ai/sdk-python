@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
-from agledger.types import Event, EventType, Page
+from agledger.types import Event, EventPage, EventType
 
 
 class EventsResource:
@@ -23,7 +23,7 @@ class EventsResource:
         order: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
-    ) -> Page[Event]:
+    ) -> EventPage:
         """List events globally. Requires ``since`` (ISO timestamp, inclusive:
         events at or after it).
 
@@ -31,7 +31,11 @@ class EventsResource:
         Consecutive windows compose without overlap when the next ``since``
         equals the previous ``until``. ``order`` is left unset by default so
         the Server applies its own default (``asc``); pass it explicitly to
-        override."""
+        override.
+
+        The page's ``visible_before`` is the exclusive bound the walk actually
+        serves, which can be earlier than ``until``: pass it as the next
+        window's ``since``."""
         params: dict[str, Any] = {"since": since}
         if until is not None: params["until"] = until
         if record_id is not None: params["recordId"] = record_id
@@ -41,7 +45,7 @@ class EventsResource:
         if cursor is not None: params["cursor"] = cursor
         raw = self._http.get_page("/v1/events", params=params)
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
-        return Page[Event].model_validate(raw)
+        return EventPage.model_validate(raw)
 
     def list_all(
         self,
@@ -90,7 +94,7 @@ class AsyncEventsResource:
         order: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
-    ) -> Page[Event]:
+    ) -> EventPage:
         """See the sync counterpart: ``since`` is inclusive, ``until`` exclusive,
         and ``order`` is left unset so the Server applies its own default."""
         params: dict[str, Any] = {"since": since}
@@ -102,7 +106,7 @@ class AsyncEventsResource:
         if cursor is not None: params["cursor"] = cursor
         raw = await self._http.get_page("/v1/events", params=params)
         raw["data"] = [Event.model_validate(e) for e in raw.get("data", [])]
-        return Page[Event].model_validate(raw)
+        return EventPage.model_validate(raw)
 
     async def list_all(
         self,

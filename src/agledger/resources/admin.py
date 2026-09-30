@@ -43,7 +43,8 @@ class AdminRecordsResource:
 
         Returns ``{"source", "count", "imported": [...], "nextSteps"}``, where
         each ``imported`` entry is ``{"index", "recordId", "chainPosition"}``
-        aligned 1:1 with ``records``. Set ``"publisher"`` on an item when two
+        aligned 1:1 with ``records``, plus ``advisoryWarnings`` when the org let
+        that entry past a check it configured as advisory. Set ``"publisher"`` on an item when two
         publishers offer the same type in the org, otherwise the batch is
         refused with 422 naming the offending index.
         """
@@ -57,12 +58,14 @@ class AdminVaultAnchorsResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def list(self, *, record_id: str | None = None) -> dict[str, Any]:
-        """List vault anchors."""
-        params: dict[str, Any] = {}
-        if record_id is not None:
-            params["recordId"] = record_id
-        return self._http.get("/v1/admin/vault/anchors", params=params)
+    def list(self, *, record_id: str) -> dict[str, Any]:
+        """List one Record's vault anchors. ``record_id`` is required: the route
+        refuses a call without it.
+
+        Each anchor carries its ``chainPosition``, how many stored ``versions``
+        the bucket holds for its key, and ``hidden`` when the bucket holds an
+        anchor this database has no entry for."""
+        return self._http.get("/v1/admin/vault/anchors", params={"recordId": record_id})
 
     def verify(
         self, *, record_id: str, chain_position: int | None = None
@@ -120,7 +123,10 @@ class AdminVaultScanResource:
         have written one and ``checkpoint_unsigned`` an unsigned checkpoint
         written once it signs; ``result.orgAdminReads.brokenOrgs[]`` reports the
         read-log equivalents as ``leaf_signature_missing`` and
-        ``checkpoint_unsigned``."""
+        ``checkpoint_unsigned``. An entry, checkpoint or leaf signed under a key
+        no signed key statement anchors breaks as ``signing_key_unanchored``,
+        ``checkpoint_key_unanchored`` or ``leaf_key_unanchored``; the key-trust
+        walk itself is ``result.keyRegistry``."""
         return self._http.get(f"/v1/admin/vault/scan/{job_id}")
 
     def list(self) -> dict[str, Any]:
@@ -142,11 +148,21 @@ class AdminVaultSigningKeysResource:
 
     def retire(self, key_id: str, *, force: bool | None = None) -> dict[str, Any]:
         """Retire one signing key by its ``keyId`` (a 16-hex fingerprint, not a
-        UUID). Retiring the only key able to sign is refused, so rotate first.
-        ``force`` skips the quiet period, for a key known to be compromised,
-        and also revokes every unexpired ephemeral cert that key minted:
-        ``revokedCertCount`` in the result says how many (always 0 on an
-        unforced retirement, whose certs lapse on their own TTL).
+        UUID). Retiring the only key able to sign is refused, so rotate first,
+        and call this on a process holding a different, active key.
+
+        ``force`` skips the quiet period, for a key known to be compromised. It
+        also retires every key the Server's key-trust walk no longer reaches
+        once the forced closure is in place (``unanchoredKeyIds``), and revokes
+        every unexpired ephemeral cert the retired key or any of those keys
+        minted: ``revokedCertCount`` says how many (always 0 on an unforced
+        retirement, whose certs lapse on their own TTL).
+
+        ``alreadyRetired`` is true when the key was retired before this call,
+        and ``retiredAt`` is then the original retirement. ``closureDigest`` is
+        the SHA-256 of the closure statement the call wrote, or None when it
+        wrote none. ``retiredSpkiSha256`` is the value to name the key by in
+        ``VAULT_DISTRUSTED_KEYS`` or ``VAULT_TRUST_ANCHORS``.
         """
         body: dict[str, Any] = {}
         if force is not None:
@@ -917,11 +933,9 @@ class AsyncAdminVaultAnchorsResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def list(self, *, record_id: str | None = None) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        if record_id is not None:
-            params["recordId"] = record_id
-        return await self._http.get("/v1/admin/vault/anchors", params=params)
+    async def list(self, *, record_id: str) -> dict[str, Any]:
+        """List one Record's vault anchors. See the sync twin."""
+        return await self._http.get("/v1/admin/vault/anchors", params={"recordId": record_id})
 
     async def verify(
         self, *, record_id: str, chain_position: int | None = None

@@ -639,6 +639,14 @@ class BulkCreateResultItem(BaseModel):
     For ``/problems/idempotency-key-reuse`` the fix is a fresh
     ``idempotencyKey``: resending the same item unchanged fails identically
     until the key expires."""
+    constraint_violations: list[dict[str, Any]] | None = Field(
+        None, alias="constraintViolations"
+    )
+    """The bounds the item broke, as a singleton caller gets them in the error
+    body: ``field``, ``parentValue`` (the cap, or the parent Record's value for
+    an inherited constraint), ``childValue``, ``reason``, and ``tolerance``
+    where one applies. Carried for the criteria byte cap, the reference
+    attributes byte cap, and constraints inherited from the parent Record."""
 
 
 class BulkCreateSummary(BaseModel):
@@ -709,7 +717,12 @@ class Completion(BaseModel):
     record_status: RecordStatus | str | None = Field(None, alias="recordStatus")
     """Record status after completion submission."""
     verdict: Verdict | None = None
-    """Denormalized gate verdict on the parent Record: ``accept``, ``reject``, or None until the gate evaluates."""
+    """The auto gate's verdict on this completion, ``accept`` or ``reject``, in
+    the same vocabulary as the Record's ``verdict``. Set on the submit response
+    when the gate ran inline (auto mode, cleartext), and on an idempotent replay
+    of the same ``idempotency_key``. None in principal mode (read the verdict on
+    the Record), on encrypted Records, when the gate was deferred to the
+    worker, and on reads of a completion."""
     last_verdict_reason: str | None = Field(None, alias="lastVerdictReason")
     """Reason attached to the most recent verdict, or None."""
     settlement_signal: CompletionSettlementSignal | None = Field(
@@ -1084,6 +1097,14 @@ class VerdictResult(BaseModel):
     same vocabulary as the Record GET. Surfaced inline so the caller learns
     where the Record landed without a follow-up fetch."""
     reporter_type: str = Field(alias="reporterType")
+    """The verdict channel: ``principal``, a principal-side verdict rather than
+    the engine's. ``reporter_role`` says who on that side rendered it."""
+    reporter_role: Literal["principal", "org-admin"] | str | None = Field(
+        None, alias="reporterRole"
+    )
+    """``principal`` when the principal agent rendered the verdict, ``org-admin``
+    when an admin key in the Record's org rendered it on the principal's
+    behalf."""
     reported_at: str = Field(alias="reportedAt")
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after submitting the verdict."""
@@ -1351,6 +1372,15 @@ class AuditExportMetadata(BaseModel):
     )
     """keyId to ``{activatedAt, retiredAt}``: the input for the offline
     verifier's temporal key-validity check."""
+    signing_key_statements: dict[str, list[KeyStatement]] | None = Field(
+        None, alias="signingKeyStatements"
+    )
+    """keyId to the signed statements that admit that key. Walk them from a key
+    you pinned out of band to decide which keys to trust; the windows above are
+    the values they sign. Only anchored keys appear in these maps."""
+    anchored_from: str | None = Field(None, alias="anchoredFrom")
+    """``sha256:<hex>`` of the SPKI of the key the exporting Server signs with,
+    to compare against a pin taken out of band. Never a substitute for one."""
 
 
 class VaultCheckpoint(BaseModel):
@@ -1718,6 +1748,39 @@ class VaultScanCheckpointing(TypedDict, total=False):
     anchoringEnabled: bool
 
 
+VaultScanKeyRegistryFinding = TypedDict(
+    "VaultScanKeyRegistryFinding",
+    {
+        "class": Literal["key_statement_invalid", "key_closure_invalid", "key_window_drift"] | str,
+        "keyId": str | None,
+        "statementId": str | None,
+        "detail": str,
+    },
+    total=False,
+)
+"""One finding of the key-trust walk. ``class`` is ``key_statement_invalid`` (a
+statement that does not verify or touches no anchored key),
+``key_closure_invalid`` (a retired key with no signed retirement, or a closure
+by an unanchored key) or ``key_window_drift`` (a registry column that differs
+from the value signed for it). Declared functionally because ``class`` is a
+Python keyword."""
+
+
+class VaultScanKeyRegistry(TypedDict, total=False):
+    """The key-trust walk over the vault key registry and its signed statements,
+    run fresh from the scanning process's own key. Any finding fails
+    ``healthy``."""
+
+    keys: int
+    """Rows in the registry."""
+    anchored: int
+    """Rows the walk anchors."""
+    unanchoredKeyIds: list[str]
+    """Rows nothing anchors. Not a finding by itself; every entry signed under
+    one is a ``signing_key_unanchored`` break."""
+    findings: list[VaultScanKeyRegistryFinding]
+
+
 class VaultScanResult(TypedDict):
     """Scan findings, present once ``state == "completed"``."""
 
@@ -1744,6 +1807,8 @@ class VaultScanResult(TypedDict):
     orgAdminReads: NotRequired[VaultScanOrgAdminReads | None]
     """Present on a full scan; None or absent on a ``record_ids``-scoped scan."""
     checkpointing: NotRequired[VaultScanCheckpointing]
+    keyRegistry: NotRequired[VaultScanKeyRegistry | None]
+    """The key-trust walk. None on a ``record_ids``-scoped scan."""
     scannedAt: str
 
 
@@ -2046,6 +2111,17 @@ class Page(BaseModel, Generic[T]):
     record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
 
 
+class EventPage(Page[Event]):
+    """``GET /v1/events``: a page of events plus the upper bound the walk
+    serves."""
+
+    visible_before: str | None = Field(None, alias="visibleBefore")
+    """The exclusive upper bound this walk serves: the earlier of ``until`` and
+    the instant below which every event has committed, fixed on the first page.
+    Send it as the next window's ``since`` so consecutive windows neither
+    overlap nor skip."""
+
+
 class OrgReadsCheckpointPage(Page[OrgReadsCheckpoint]):
     """``GET /v1/audit/org-reads/checkpoints``: a page of checkpoints plus the
     sweep posture that explains an empty one."""
@@ -2081,6 +2157,26 @@ class StatusComponent(BaseModel):
     name: str
     status: str
     latency_ms: float | None = Field(None, alias="latencyMs")
+    reason: (
+        Literal[
+            "unreachable",
+            "saturated",
+            "no_connection",
+            "pool_exhausted",
+            "shutting_down",
+            "error",
+            "chain_rewind_detected",
+        ]
+        | str
+        | None
+    ) = None
+    """Why a component is not operational. On the database component at
+    ``outage`` it names why the probe did not answer (``pool_exhausted`` is this
+    Server's own pool fully taken, ``unreachable`` the database not answering,
+    ``saturated`` the database at its connection limit). On the chain-writes
+    component at ``degraded`` it is ``chain_rewind_detected``: every chain write
+    answers 409 until an operator acknowledges it with
+    ``admin.vault.rewind.acknowledge()``. None when the component is healthy."""
 
 
 class StatusResponse(BaseModel):
@@ -2382,6 +2478,22 @@ class AiImpactAssessment(BaseModel):
     an org admin read a Record it is not a party to."""
 
 
+class KeyStatement(BaseModel):
+    """One signed statement admitting a vault signing key: one or two base64
+    COSE_Sign1 (RFC 9052) over the same deterministic-CBOR payload, protected
+    header ``cty`` ``application/vnd.agledger.key-statement+cbor``."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    kind: Literal["succession", "closure", "genesis"] | str
+    """``genesis`` is self-signed, ``succession`` carries the predecessor's
+    signature then the key's own, and ``closure`` is signed by another key."""
+    cose: list[str]
+    """Base64 COSE_Sign1, in signing order."""
+
+
 class VerificationKey(BaseModel):
     """A vault signing public key for independent audit chain verification."""
 
@@ -2405,6 +2517,10 @@ class VerificationKey(BaseModel):
     min_verifier_version: str | None = Field(None, alias="minVerifierVersion")
     """The lowest verifier release that can check signatures under this key.
     An older verifier reports them as unsupported, not as tampered."""
+    statements: list[KeyStatement]
+    """The signed statements that admit this key. ``activated_at`` and
+    ``retired_at`` are the values they sign. Walk them from a key you pinned out
+    of band, never from this document alone, to decide which keys to trust."""
 
 
 class VerificationKeysResponse(BaseModel):
@@ -2425,6 +2541,14 @@ class VerificationKeysResponse(BaseModel):
     signature_algorithm: str | None = Field(None, alias="signatureAlgorithm")
     signature_input_template: str | None = Field(None, alias="signatureInputTemplate")
     """Template for the canonical signature-input string (v0.25.x)."""
+    anchored_from: str | None = Field(alias="anchoredFrom")
+    """``sha256:<hex>`` of the SPKI DER of the key the serving process signs
+    with, the key this document is anchored from. A convenience to compare
+    against a pin you took out of band; it never substitutes for one. None on a
+    process that holds no key."""
+    key_statement_format: str = Field(alias="keyStatementFormat")
+    """Content type of every key statement COSE_Sign1 in ``data[].statements``:
+    ``application/vnd.agledger.key-statement+cbor``."""
 
 
 SchemaVersionStatus = Literal["ACTIVE", "DISABLED"] | str
