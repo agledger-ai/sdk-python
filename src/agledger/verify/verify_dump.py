@@ -1142,6 +1142,16 @@ def walk_dump_keys(
             distrusted_keys=distrusted_keys,
         )
         keys = apply_key_trust(keys, trust)
+        # The registry's activated_at columns are unsigned: a writer who strips
+        # or moves them later would switch the unsigned-row rule off. With a
+        # walk, the activations the anchored keys' statements sign count too,
+        # and the earliest of all of them stands, so neither source can loosen
+        # the rule.
+        signed = [{"activatedAt": e.activated_at} for e in trust.by_digest.values() if e.trusted]
+        keys = KeyCache(
+            dict(keys.items()),
+            signing_since=earliest_key_activation([{"activatedAt": keys.signing_since}, *signed]),
+        )
     elif distrusted_keys is not None and len(distrusted_keys) > 0:
         raise TypeError(
             "distrusted_keys act only inside the key-statement walk, which runs from "

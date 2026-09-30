@@ -414,6 +414,40 @@ def test_an_unsigned_tree_head_over_the_wrong_root_reports_the_root() -> None:
     assert _codes(verify_dump(d)) == ["TENANT_CHECKPOINT_ROOT_MISMATCH"]
 
 
+# --- When the install began signing --------------------------------------------
+
+_VALID_PIN = "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+
+
+def _stripped_dump(move: str) -> Dump:
+    """A single-entry chain unsigned: its entry has no signed entry before it,
+    so only the install's signing-start time can make it a break."""
+    d = _dump()
+    counts: dict[str, int] = {}
+    for e in d.vault_entries:
+        counts[str(e["chain_key"])] = counts.get(str(e["chain_key"]), 0) + 1
+    lone = next(e for e in d.vault_entries if counts[str(e["chain_key"])] == 1)
+    lone["signing_key_id"] = None
+    d.vault_checkpoints = [c for c in d.vault_checkpoints if c["chain_key"] != lone["chain_key"]]
+    for k in d.signing_keys:
+        if move == "strip":
+            k.pop("activated_at", None)
+        else:
+            k["activated_at"] = "2099-01-01T00:00:00.000Z"
+    return d
+
+
+@pytest.mark.parametrize("move", ["strip", "later"])
+def test_pinned_an_unsigned_entry_still_fails_when_the_registry_activated_at_column_is_moved(move: str) -> None:
+    report = verify_dump(_stripped_dump(move), trust_anchors=[_VALID_PIN])
+    assert "CHAIN_ENTRY_UNSIGNED" in _codes(report)
+
+
+def test_unpinned_the_same_edit_hides_the_unsigned_entry_which_is_what_the_pin_is_for() -> None:
+    report = verify_dump(_stripped_dump("strip"))
+    assert "CHAIN_ENTRY_UNSIGNED" not in _codes(report)
+
+
 # --- CLI -----------------------------------------------------------------------
 
 
