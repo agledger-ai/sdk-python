@@ -51,6 +51,7 @@ from agledger.verify.key_statements import (
     compute_key_trust,
     key_statement_from_dump_row,
     report_key_trust,
+    settle_key_trust,
     trust_key_from_dump_row,
 )
 from agledger.verify.types import (
@@ -68,6 +69,7 @@ from agledger.verify.types import (
 # org-read tree / verify_cose_sign1 primitives. Reused here verbatim: the dump
 # verifier adds only the dump-structural passes the per-entry walk does not model.
 from agledger.verify.verify_export import (
+    DUMP_ROW,
     AgentSignatureCounts,
     CheckApplicability,
     EntryVerificationResult,
@@ -77,6 +79,7 @@ from agledger.verify.verify_export import (
     as_mapping,
     build_agent_key_registry,
     cbor_whole,
+    chain_row,
     check_agent_signature,
     decode_cose_kid,
     decode_cose_parts,
@@ -84,9 +87,13 @@ from agledger.verify.verify_export import (
     describe_unsupported_algorithm,
     earliest_key_activation,
     ed25519_jwk_thumbprint,
+    js_text,
     optional_checks_report,
     org_read_leaf_hash,
     org_read_merkle_root,
+    position_key,
+    safe_int,
+    strict_eq,
     verify_cose_sign1,
     verify_entry,
     written_while_signing,
@@ -315,8 +322,13 @@ def _build_vault_key_registry(signing_keys: list[DumpRow]) -> KeyCache:
     registry: dict[str, RegisteredKey] = {}
     for k in signing_keys:
         algorithm = k.get("algorithm")
+        public_key = k.get("public_key")
+        # A row with no key material is no key: what names it fails
+        # CHAIN_SIGNATURE_MISSING_KEY, as verify-core's buildKeyRegistry leaves it out.
+        if not isinstance(public_key, str) or not public_key:
+            continue
         registry[str(k.get("key_id"))] = RegisteredKey(
-            spki_base64=str(k.get("public_key")),
+            spki_base64=public_key,
             source="embedded",
             activated_at=k.get("activated_at"),
             retired_at=k.get("retired_at"),
@@ -335,13 +347,13 @@ def _chain_key(e: DumpRow) -> str:
     """
     ck = e.get("chain_key")
     if ck is not None:
-        return str(ck)
+        return js_text(ck)
     rid = e.get("record_id")
     if rid is not None:
-        return str(rid)
+        return js_text(rid)
     org_id = as_mapping(e.get("payload")).get("orgId")
     # ?? '__platform__': only None/undefined becomes platform; "" is kept.
-    return f"schema:{org_id if org_id is not None else '__platform__'}"
+    return f"schema:{js_text(org_id) if org_id is not None else '__platform__'}"
 
 
 def _checkpoint_chain_key(cp: DumpRow) -> str:
@@ -356,11 +368,11 @@ def _checkpoint_chain_key(cp: DumpRow) -> str:
     """
     ck = cp.get("chain_key")
     if ck is not None:
-        return str(ck)
+        return js_text(ck)
     rid = cp.get("record_id")
     # A checkpoint with neither key is malformed; group it under "" so it still
     # surfaces as an orphan rather than silently joining a real chain.
-    return str(rid) if rid is not None else ""
+    return js_text(rid) if rid is not None else ""
 
 
 def _chain_label(chain_key: str) -> str:
@@ -380,6 +392,9 @@ def _normalize_entry(e: DumpRow) -> dict[str, Any]:
     """Adapt a raw vault row into the shape ``verify_entry`` reads, carrying the
     dump-only inputs (binding payload, OIDC-actor columns, write time)."""
     return {
+        # The raw row: verify_entry reads its columns as @agledger/verify hands
+        # them to verify-core, a missing one apart from a null one.
+        DUMP_ROW: e,
         "chainPosition": e.get("chain_position"),
         "integrity": {
             "payloadHash": e.get("payload_hash"),
@@ -426,14 +441,15 @@ def _collect_chain_failures(
     previousHash advances even on a failed entry, matching the export walk and
     verify-core. An entry with no signing key id after one that names a key, or
     written at or after ``keys.signing_since``, fails CHAIN_ENTRY_UNSIGNED."""
-    prev_payload_hash: str | None = None
+    prev_payload_hash: object = None
     signed_before = False
     results: list[EntryVerificationResult] = []
     for i, entry in enumerate(normalized):
         result = verify_entry(
             entry, i + 1, prev_payload_hash, keys, None, False, applied, signed_before=signed_before
         )
-        if as_mapping(entry.get("integrity")).get("signingKeyId") is not None:
+        row = chain_row(entry)
+        if row.signing_key_id is not None:
             signed_before = True
         if result.valid and agent_counts is not None and agent_check is not None:
             result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
@@ -447,7 +463,7 @@ def _collect_chain_failures(
                 )
             )
         results.append(result)
-        prev_payload_hash = as_mapping(entry.get("integrity")).get("payloadHash")
+        prev_payload_hash = row.payload_hash
     return results
 
 
@@ -677,7 +693,13 @@ def verify_vault_chains(
                 ),
             )
         )
-        return VaultChainsReport(0, 0, len(checkpoints), failures)
+        return VaultChainsReport(
+            0,
+            0,
+            len(checkpoints),
+            failures,
+            optional_checks=optional_checks_report(set(), walked=keys is not None and keys.walked),
+        )
 
     if keys is None:
         keys = _build_vault_key_registry(signing_keys)
@@ -694,8 +716,10 @@ def verify_vault_chains(
             agent_signatures_present=agent_counts.present,
             agent_signatures_verified=agent_counts.verified,
             cert_keys_from_chain=cert_keys_from_chain,
+            signed_entries=signed_entries,
             optional_checks=optional_checks_report(
-                applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
+                applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
+                walked=keys.walked,
             ),
         )
 
@@ -706,20 +730,22 @@ def verify_vault_chains(
     open_chains: dict[str, list[DumpRow]] = {}
     closed: set[str] = set()
     chain_count = 0
+    signed_entries = 0
 
     def close_chain(chain_key: str) -> None:
-        nonlocal chain_count, cert_keys_from_chain
+        nonlocal chain_count, cert_keys_from_chain, signed_entries
         rows = open_chains.pop(chain_key, None)
         if rows is None:
             return
         closed.add(chain_key)
         chain_count += 1
-        rows.sort(key=lambda r: r.get("chain_position", 0))
+        rows.sort(key=lambda r: position_key(r.get("chain_position")))
         failures_before = len(failures)
         normalized = [_normalize_entry(e) for e in rows]
         results = _collect_chain_failures(
             chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied
         )
+        signed_entries += sum(1 for r in results if r.signature == "ok")
         _verify_vault_checkpoints({chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures)
         if len(failures) == failures_before:
             cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
@@ -918,11 +944,11 @@ def _verify_one_org_admin_reads_log(
     keys: KeyCache,
     failures: list[Failure],
 ) -> None:
-    leaves.sort(key=lambda r: r.get("leaf_index", 0))
+    leaves.sort(key=lambda r: position_key(r.get("leaf_index")))
     must_sign = _MustSign()
 
     for i, leaf in enumerate(leaves):
-        if leaf.get("leaf_index") != i:
+        if not strict_eq(leaf["leaf_index"] if "leaf_index" in leaf else None, i):
             failures.append(
                 Failure(
                     code="TENANT_READ_LEAF_INDEX_GAP",
@@ -981,17 +1007,18 @@ def _verify_one_org_admin_reads_log(
     leaf_hashes = [str(leaf.get("leaf_hash")) for leaf in leaves]
 
     for cp in checkpoints:
-        tree_size = cp.get("tree_size")
-        if not isinstance(tree_size, int) or tree_size > len(leaf_hashes):
+        raw_tree_size = cp.get("tree_size")
+        tree_size = safe_int(raw_tree_size)
+        if tree_size is None or tree_size > len(leaf_hashes):
             failures.append(
                 Failure(
                     code="TENANT_CHECKPOINT_LEAF_COUNT_MISMATCH",
                     message=(
                         f"Org {org_id}: checkpoint {cp.get('id')} signs tree_size "
-                        f"{tree_size} but dump contains only {len(leaf_hashes)} leaves"
+                        f"{js_text(raw_tree_size)} but dump contains only {len(leaf_hashes)} leaves"
                     ),
                     scope_id=org_id,
-                    tree_size=_as_int(tree_size),
+                    tree_size=tree_size,
                 )
             )
             continue
@@ -1194,6 +1221,7 @@ def walk_dump_keys(
         keys = KeyCache(
             dict(keys.items()),
             signing_since=earliest_key_activation([{"activatedAt": keys.signing_since}, *signed]),
+            walked=True,
         )
     elif distrusted_keys is not None and len(distrusted_keys) > 0:
         raise TypeError(
@@ -1244,8 +1272,12 @@ def verify_dump(
     org_admin_reads = verify_org_admin_reads_chains(
         dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys, keys
     )
+    # Under a walk every key a vault signature verifies against is anchored, so
+    # the signed entries are the anchored signatures; with none, the pin proves
+    # nothing and a pass is not trusted.
+    key_trust = settle_key_trust(key_trust, vault.signed_entries)
     failed = bool(vault.failures or org_admin_reads.failures or key_trust.findings)
-    verdict = "failed" if failed else "unanchored" if key_trust.status == "no_anchor" else "trusted"
+    verdict = "failed" if failed else "trusted" if key_trust.status == "walked" else "unanchored"
     return VerifyReport(
         ok=not failed,
         vault=vault,

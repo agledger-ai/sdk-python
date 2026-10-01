@@ -158,15 +158,17 @@ def _envelope(vault: Ed25519PrivateKey, position: int, previous_hash: str | None
     return cbor2.dumps(cbor2.CBORTag(18, [protected, {}, payload, signature]), canonical=True)
 
 
-def _row(chain_key: str, entry_type: str, envelope: bytes, previous_hash: str | None) -> dict[str, Any]:
-    # No row ``payload``: the binding projection is not what these cases are
-    # about, and without the row copy that check does not run.
+def _row(
+    chain_key: str, entry_type: str, envelope: bytes, previous_hash: str | None, payload: dict[str, Any]
+) -> dict[str, Any]:
+    # The row copy of the signed payload, as the engine writes it: a dump row
+    # carries every column, and the binding check holds it to the envelope.
     return {
         "id": f"entry-{chain_key}",
         "record_id": chain_key,
         "chain_key": chain_key,
         "entry_type": entry_type,
-        "payload": None,
+        "payload": payload,
         "payload_hash": hashlib.sha256(envelope).hexdigest(),
         "previous_hash": previous_hash,
         "chain_position": 1,
@@ -197,12 +199,13 @@ def _synthetic(
     agent_signature = base64.b64encode(agent.sign(f"{AGENT_SIGNATURE_CONTEXT}{signed}".encode())).decode()
 
     issued_prev = "b" * 64 if break_cert_chain else None
+    issued_payload: dict[str, Any] = {"certId": "cert-1", "publicKeyJwk": jwk, "publicKeyThumbprint": thumbprint}
     issued_env = _envelope(vault, 1, issued_prev, {
         "record_id": "platform-ops",
         "entry_type": issued_type,
-        "payload": {"certId": "cert-1", "publicKeyJwk": jwk, "publicKeyThumbprint": thumbprint},
+        "payload": issued_payload,
     })
-    issued = _row("platform-ops", issued_type, issued_env, issued_prev)
+    issued = _row("platform-ops", issued_type, issued_env, issued_prev, issued_payload)
     record_env = _envelope(vault, 1, None, {
         "record_id": "record-agent-signed",
         "entry_type": "RECORD_CREATED",
@@ -213,7 +216,7 @@ def _synthetic(
             "agent_signature": {"alg": "EdDSA", "signature": agent_signature, "content_hash": f"sha256:{content}"},
         },
     })
-    record = _row("record-agent-signed", "RECORD_CREATED", record_env, None)
+    record = _row("record-agent-signed", "RECORD_CREATED", record_env, None, {"kind": "create"})
     spki = vault.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     return Dump(
         vault_entries=[issued, record] if cert_chain_first else [record, issued],

@@ -409,6 +409,14 @@ def test_the_dump_path_runs_the_same_envelope_binding():
                 "entry_type": e["entryType"],
                 "record_id": e.get("recordId"),
                 "created_at": e.get("createdAt"),
+                # A dump row carries every column; one left out is a column
+                # the walk reads as missing, not as null.
+                "actor_key_id": e.get("actorId"),
+                "actor_role": e.get("actorRole"),
+                "actor_owner_id": e.get("actorOwnerId"),
+                "actor_oidc_iss": e.get("actorOidcIss"),
+                "actor_oidc_sub": e.get("actorOidcSub"),
+                "actor_oidc_synthesized": e.get("actorOidcSynthesized"),
             })
             for e in doc["entries"]
         ]

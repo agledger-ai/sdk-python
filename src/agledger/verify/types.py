@@ -82,7 +82,11 @@ class VaultChainsReport:
     beside any ``agent_keys`` the caller passed. Zero on an org-scoped dump,
     which leaves that chain out, and for certs an engine older than 1.8.0
     issued."""
-    optional_checks: dict[str, Literal["applied", "skipped_no_input"]] = field(
+    signed_entries: int = 0
+    """Vault entries whose signature verified. Under a key walk each verified
+    under an anchored key; with none, the report's key trust is
+    ``no_anchored_signature`` and a pass is ``unanchored``."""
+    optional_checks: dict[str, Literal["applied", "skipped_no_input", "not_checked"]] = field(
         default_factory=lambda: dict.fromkeys(
             (
                 "payload_binding",
@@ -113,6 +117,7 @@ class VaultChainsReport:
                 "verified": self.agent_signatures_verified,
             },
             "certKeysFromChain": self.cert_keys_from_chain,
+            "signedEntries": self.signed_entries,
         }
 
 
