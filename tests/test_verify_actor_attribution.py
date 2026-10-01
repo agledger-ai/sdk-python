@@ -26,7 +26,7 @@ from agledger.verify.verify_export import (  # pyright: ignore[reportPrivateUsag
 )
 
 LIVE = Path(__file__).parent / "fixtures" / "live-2.0.0"
-EXPORT = LIVE / "export-cert-lifecycle.json"
+EXPORT = LIVE / "export-lifecycle.json"
 DUMP = str(LIVE / "dump")
 
 

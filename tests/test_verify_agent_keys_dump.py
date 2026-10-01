@@ -2,10 +2,12 @@
 input-gated checks ran.
 
 The Python mirror of ``@agledger/verify``'s ``agent-keys.test.ts``, on the same
-unmodified 27-entry dump slice from a scratch API 2.0.0 instance (three
-chains: a cert-signed lifecycle whose key was kept, a second cert whose key was
-not, and an API-key lifecycle), dumped with the engine's own tool and read in
-place, and the same cert-signed export.
+unmodified 31-entry dump slice from a scratch API 2.0.0 instance, dumped with
+the engine's own tool and read in place: a cert-signed lifecycle whose key was
+kept, a second cert's lifecycle whose key was not, an API-key lifecycle, a
+bound delegated create on the kept cert, an unbound one on an API key, and a
+delegation root on the kept cert with the child the second cert delegated
+under it. The cert-signed export is the first of those records.
 """
 
 from __future__ import annotations
@@ -58,9 +60,9 @@ def _run(args: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str,
 def test_the_dump_re_verifies_the_supplied_cert_and_leaves_the_others_unchecked():
     report = verify_dump(load_dump(DUMP), agent_keys=[JWK])
     assert report.ok
-    assert report.vault.entry_count == 27
+    assert report.vault.entry_count == 31
     assert report.vault.optional_checks == ALL_APPLIED
-    assert (report.vault.agent_signatures_present, report.vault.agent_signatures_verified) == (12, 6)
+    assert (report.vault.agent_signatures_present, report.vault.agent_signatures_verified) == (15, 8)
 
 
 def test_pinned_on_the_instance_key_the_dump_is_trusted_and_anchoring_ran():
@@ -74,7 +76,7 @@ def test_without_keys_the_dump_reports_the_check_not_run_and_no_verdict_changes(
     report = verify_dump(load_dump(DUMP))
     assert report.ok
     assert report.vault.optional_checks["agent_signature"] == "skipped_no_input"
-    assert (report.vault.agent_signatures_present, report.vault.agent_signatures_verified) == (12, 0)
+    assert (report.vault.agent_signatures_present, report.vault.agent_signatures_verified) == (15, 0)
 
 
 def test_a_bad_key_is_refused_at_the_boundary_on_the_dump_path():
@@ -119,14 +121,14 @@ def test_cli_dump_with_agent_keys(capsys: pytest.CaptureFixture[str]):
     assert code == 0
     vault = json.loads(out)["vault"]
     assert vault["optionalChecks"] == ALL_APPLIED
-    assert vault["agentSignatures"] == {"present": 12, "verified": 6}
+    assert vault["agentSignatures"] == {"present": 15, "verified": 8}
 
 
 def test_cli_dump_text_says_which_signatures_were_checked(capsys: pytest.CaptureFixture[str]):
     _, out, _ = _run([DUMP, "--agent-keys", KEY_FILE], capsys)
-    assert "agent sigs  : present=12 verified=6 (checked; 6 not verified: no key for their cert" in out
+    assert "agent sigs  : present=15 verified=8 (checked; 7 not verified: no key for their cert" in out
     _, out, _ = _run([DUMP], capsys)
-    assert "agent sigs  : present=12 verified=0 (NOT checked" in out
+    assert "agent sigs  : present=15 verified=0 (NOT checked" in out
 
 
 def test_cli_export_with_agent_keys(capsys: pytest.CaptureFixture[str]):
