@@ -1,13 +1,17 @@
 """Offline agent-signature re-check, and the chain content it runs on.
 
-The Python mirror of verify-core's ``agent-signature.test.ts``. The fixtures
-under ``fixtures/live-2.0.0/`` are ``@agledger/verify``'s, unmodified output of
-a scratch API 2.0.0 instance: ``export-cert-lifecycle.json`` is one record
-walked through its whole lifecycle by an agent on an ephemeral cert that signed
-every request body (entries carry the internal ``state`` / ``previousState`` /
-``newState`` beside the display status), and ``agent-cert-key.json`` is the
-Ed25519 JWK the agent sent at cert exchange. The synthetic cases cover what a
-live engine will not produce: a sealed agent signature that does not verify.
+The Python mirror of verify-core's ``agent-signature.test.ts``, on the same
+fixtures: unmodified ``/audit-export`` responses from a scratch API 2.0.0
+instance, shared with that suite and with ``@agledger/verify``. A record walked
+through its whole lifecycle on an API key (entries carry the internal
+``state`` / ``previousState`` / ``newState`` beside the display status), the
+same walk by an agent on an ephemeral cert that signed every request body, a
+bound and an unbound delegated create, and a delegation chain: a root the cert
+agent opened naming a second cert agent as performer, and the child that agent
+delegated under it. ``agent-cert-key.json`` is the Ed25519 JWK the first agent
+sent at cert exchange; the second agent's key was not kept. The synthetic cases
+cover what a live engine will not produce: a sealed agent signature that does
+not verify.
 """
 
 from __future__ import annotations
@@ -49,7 +53,7 @@ def _jwk_of(key: Ed25519PrivateKey) -> dict[str, str]:
 
 
 def test_a_lifecycle_signed_in_both_state_vocabularies_verifies():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-lifecycle.json")
     # The fixture must actually carry the new keys, or this proves nothing.
     register_hop = doc["entries"][1]["payload"]
     assert register_hop["previousState"] == "DRAFT"
@@ -60,12 +64,12 @@ def test_a_lifecycle_signed_in_both_state_vocabularies_verifies():
     result = verify_export(doc)
     assert result.valid
     assert result.verified_entries == 9
-    assert (result.agent_signatures.present, result.agent_signatures.verified) == (6, 0)
+    assert (result.agent_signatures.present, result.agent_signatures.verified) == (0, 0)
     assert result.agent_signature_check == "skipped_no_input"
 
 
 def test_a_rewritten_internal_state_is_a_binding_mismatch():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-lifecycle.json")
     doc["entries"][1]["payload"]["previousState"] = "REGISTERED"
     result = verify_export(doc)
     assert not result.valid
@@ -97,6 +101,40 @@ def test_with_the_cert_key_every_sealed_signature_on_a_cert_signed_lifecycle_ver
     # settlement. The three gate entries are written by the worker.
     assert result.agent_signatures.present == 6
     assert result.agent_signatures.verified == 6
+
+
+def test_a_bound_delegated_create_carries_the_caller_cert_signature_and_it_verifies():
+    result = verify_export(_load("export-delegated-bound.json"), agent_keys=[AGENT_JWK])
+    assert result.valid
+    assert (result.agent_signatures.present, result.agent_signatures.verified) == (1, 1)
+
+
+def test_an_unbound_delegated_create_on_an_api_key_carries_no_agent_signature():
+    result = verify_export(_load("export-delegated-unbound.json"), agent_keys=[AGENT_JWK])
+    assert result.valid
+    assert (result.agent_signatures.present, result.agent_signatures.verified) == (0, 0)
+    assert result.agent_signature_check == "skipped_no_input"
+
+
+def test_a_delegation_root_opened_on_the_cert_carries_its_signature_and_it_verifies():
+    doc = _load("export-delegation-parent.json")
+    assert doc["entries"][0]["entryType"] == "RECORD_CREATED"
+    result = verify_export(doc, agent_keys=[AGENT_JWK])
+    assert result.valid
+    assert (result.agent_signatures.present, result.agent_signatures.verified) == (1, 1)
+
+
+def test_a_child_delegated_by_a_second_cert_agent_verifies_and_the_first_key_does_not_vouch_for_it():
+    parent = _load("export-delegation-parent.json")
+    doc = _load("export-delegation-child.json")
+    created = doc["entries"][0]
+    assert created["entryType"] == "RECORD_DELEGATED"
+    assert created["payload"]["parentRecordId"] == parent["recordId"]
+    assert created["actorOwnerId"] != parent["entries"][0]["actorOwnerId"]
+    result = verify_export(doc, agent_keys=[AGENT_JWK])
+    assert result.valid
+    assert (result.agent_signatures.present, result.agent_signatures.verified) == (1, 0)
+    assert result.agent_signature_check == "skipped_no_input"
 
 
 def test_a_key_for_a_different_cert_matches_nothing():
@@ -275,8 +313,18 @@ def _first_with_obo(doc: dict[str, Any]) -> dict[str, Any]:
     return entry["payload"]
 
 
-def test_envelope_fixture_verifies_untouched():
-    assert verify_export(_load("export-cert-lifecycle.json")).valid
+@pytest.mark.parametrize(
+    "name",
+    [
+        "export-cert-lifecycle.json",
+        "export-delegated-bound.json",
+        "export-delegated-unbound.json",
+        "export-delegation-parent.json",
+        "export-delegation-child.json",
+    ],
+)
+def test_envelope_fixture_verifies_untouched(name: str):
+    assert verify_export(_load(name)).valid
 
 
 def _binding_broken(doc: dict[str, Any]) -> None:
@@ -292,7 +340,7 @@ def test_a_rewritten_on_behalf_of_subject_fails_the_binding():
 
 
 def test_a_rewritten_validated_flag_fails_the_binding():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-delegated-bound.json")
     obo = _first_with_obo(doc)["on_behalf_of"]
     obo["validated"] = not obo["validated"]
     _binding_broken(doc)
@@ -315,21 +363,21 @@ def test_a_row_without_the_block_still_verifies():
 
 
 def test_an_on_behalf_of_block_added_to_an_entry_that_signed_none_fails_the_binding():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-lifecycle.json")
     entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("on_behalf_of"))
     entry["payload"]["on_behalf_of"] = {"oidc": {"iss": "https://idp.example", "sub": "forged"}, "validated": True}
     _binding_broken(doc)
 
 
 def test_an_added_traceparent_fails_the_binding():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-lifecycle.json")
     entry = next(e for e in doc["entries"] if e.get("payload"))
     entry["payload"]["traceparent"] = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
     _binding_broken(doc)
 
 
 def test_a_malformed_traceparent_the_engine_would_have_dropped_does_not_break_the_entry():
-    doc = _load("export-cert-lifecycle.json")
+    doc = _load("export-lifecycle.json")
     entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("traceparent"))
     entry["payload"]["traceparent"] = "not-a-traceparent"
     assert verify_export(doc).valid
