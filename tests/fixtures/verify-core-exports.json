@@ -1,0 +1,4903 @@
+{
+ "verifyCore": "2.0.0 @ 6e7ab1f0",
+ "runs": {
+  "export/valid.json|keysFile": {
+   "file": "export/valid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid.json|pinned|keysFile": {
+   "file": "export/valid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/position-gap.json": {
+   "file": "export/position-gap.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 3,
+     "code": "CHAIN_POSITION_GAP",
+     "detail": "Expected chainPosition 2, got 3."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_POSITION_GAP",
+      "detail": "Expected chainPosition 2, got 3.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 5,
+      "valid": false,
+      "code": "CHAIN_POSITION_GAP",
+      "detail": "Expected chainPosition 3, got 5.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/position-gap.json|pinned": {
+   "file": "export/position-gap.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 3,
+     "code": "CHAIN_POSITION_GAP",
+     "detail": "Expected chainPosition 2, got 3."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_POSITION_GAP",
+      "detail": "Expected chainPosition 2, got 3.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 5,
+      "valid": false,
+      "code": "CHAIN_POSITION_GAP",
+      "detail": "Expected chainPosition 3, got 5.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/genesis-invalid.json": {
+   "file": "export/genesis-invalid.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_GENESIS_INVALID",
+     "detail": "Expected previousHash=null, got ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_GENESIS_INVALID",
+      "detail": "Expected previousHash=null, got ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/genesis-invalid.json|pinned": {
+   "file": "export/genesis-invalid.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_GENESIS_INVALID",
+     "detail": "Expected previousHash=null, got ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_GENESIS_INVALID",
+      "detail": "Expected previousHash=null, got ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/link-broken.json": {
+   "file": "export/link-broken.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_LINK_BROKEN",
+     "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_LINK_BROKEN",
+      "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/link-broken.json|pinned": {
+   "file": "export/link-broken.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_LINK_BROKEN",
+     "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_LINK_BROKEN",
+      "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/hash-mismatch.json": {
+   "file": "export/hash-mismatch.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_HASH_MISMATCH",
+     "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_HASH_MISMATCH",
+      "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/hash-mismatch.json|pinned": {
+   "file": "export/hash-mismatch.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_HASH_MISMATCH",
+     "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_HASH_MISMATCH",
+      "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/malformed-entry.json": {
+   "file": "export/malformed-entry.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_MALFORMED_ENTRY",
+     "detail": "Entry is missing coseSign1 or payloadHash, or carries one that is not a string."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_MALFORMED_ENTRY",
+      "detail": "Entry is missing coseSign1 or payloadHash, or carries one that is not a string.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/malformed-entry.json|pinned": {
+   "file": "export/malformed-entry.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_MALFORMED_ENTRY",
+     "detail": "Entry is missing coseSign1 or payloadHash, or carries one that is not a string."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_MALFORMED_ENTRY",
+      "detail": "Entry is missing coseSign1 or payloadHash, or carries one that is not a string.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/cose-decode-failed.json": {
+   "file": "export/cose-decode-failed.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_COSE_DECODE_FAILED",
+     "detail": "COSE_Sign1 envelope failed to decode."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_COSE_DECODE_FAILED",
+      "detail": "COSE_Sign1 envelope failed to decode.",
+      "signature": "decode-fail"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/cose-decode-failed.json|pinned": {
+   "file": "export/cose-decode-failed.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_COSE_DECODE_FAILED",
+     "detail": "COSE_Sign1 envelope failed to decode."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_COSE_DECODE_FAILED",
+      "detail": "COSE_Sign1 envelope failed to decode.",
+      "signature": "decode-fail"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/cose-header-mismatch.json": {
+   "file": "export/cose-header-mismatch.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_COSE_HEADER_MISMATCH",
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a)."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a).",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/cose-header-mismatch.json|pinned": {
+   "file": "export/cose-header-mismatch.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_COSE_HEADER_MISMATCH",
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a)."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a).",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/signature-invalid.json|keysFile": {
+   "file": "export/signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_INVALID",
+     "detail": "COSE_Sign1 signature did not verify against key 15d63684b387235c."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_INVALID",
+      "detail": "COSE_Sign1 signature did not verify against key 15d63684b387235c.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=c8922c283f916c4de2281da60d6b8d6dd585a0dcca0044c468673f776e7f6d85).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/signature-invalid.json|pinned|keysFile": {
+   "file": "export/signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_INVALID",
+     "detail": "COSE_Sign1 signature did not verify against key 15d63684b387235c."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_INVALID",
+      "detail": "COSE_Sign1 signature did not verify against key 15d63684b387235c.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=c8922c283f916c4de2281da60d6b8d6dd585a0dcca0044c468673f776e7f6d85).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/signature-missing-key.json": {
+   "file": "export/signature-missing-key.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_MISSING_KEY",
+     "detail": "No public key available for signingKeyId=ghost-key."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_MISSING_KEY",
+      "detail": "No public key available for signingKeyId=ghost-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/signature-missing-key.json|pinned": {
+   "file": "export/signature-missing-key.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_MISSING_KEY",
+     "detail": "No public key available for signingKeyId=ghost-key."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_MISSING_KEY",
+      "detail": "No public key available for signingKeyId=ghost-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsupported-version.json": {
+   "file": "export/unsupported-version.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "UNSUPPORTED_FORMAT",
+     "detail": "Unsupported exportFormatVersion 3.0 (this verifier reads 2.0)."
+    },
+    "entries": [
+     {
+      "position": 0,
+      "valid": false,
+      "code": "UNSUPPORTED_FORMAT",
+      "detail": "Unsupported exportFormatVersion 3.0 (this verifier reads 2.0).",
+      "signature": null
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": null,
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsupported-version.json|pinned": {
+   "file": "export/unsupported-version.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "UNSUPPORTED_FORMAT",
+     "detail": "Unsupported exportFormatVersion 3.0 (this verifier reads 2.0)."
+    },
+    "entries": [
+     {
+      "position": 0,
+      "valid": false,
+      "code": "UNSUPPORTED_FORMAT",
+      "detail": "Unsupported exportFormatVersion 3.0 (this verifier reads 2.0).",
+      "signature": null
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": null,
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsupported-canonicalization.json": {
+   "file": "export/unsupported-canonicalization.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "UNSUPPORTED_FORMAT",
+     "detail": "Unsupported canonicalization JCS (only RFC8949-CDE supported)."
+    },
+    "entries": [
+     {
+      "position": 0,
+      "valid": false,
+      "code": "UNSUPPORTED_FORMAT",
+      "detail": "Unsupported canonicalization JCS (only RFC8949-CDE supported).",
+      "signature": null
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": null,
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsupported-canonicalization.json|pinned": {
+   "file": "export/unsupported-canonicalization.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "UNSUPPORTED_FORMAT",
+     "detail": "Unsupported canonicalization JCS (only RFC8949-CDE supported)."
+    },
+    "entries": [
+     {
+      "position": 0,
+      "valid": false,
+      "code": "UNSUPPORTED_FORMAT",
+      "detail": "Unsupported canonicalization JCS (only RFC8949-CDE supported).",
+      "signature": null
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": null,
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/empty.json": {
+   "file": "export/empty.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 0,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "CHAIN_EMPTY",
+     "detail": "No entries to verify."
+    },
+    "entries": [],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 0
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/empty.json|pinned": {
+   "file": "export/empty.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 0,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 0,
+     "code": "CHAIN_EMPTY",
+     "detail": "No entries to verify."
+    },
+    "entries": [],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 0
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "skipped_no_input",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "skipped_no_input",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "not_checked"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchored_signature",
+     "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid.json|keysFile,requireKeyId": {
+   "file": "export/valid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "requireKeyId": "some-other-key"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_KEY_POLICY_VIOLATION",
+     "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid.json|pinned|keysFile,requireKeyId": {
+   "file": "export/valid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "requireKeyId": "some-other-key"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_KEY_POLICY_VIOLATION",
+     "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Entry signingKeyId=15d63684b387235c does not match required key id some-other-key.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "not_checked"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchored_signature",
+     "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution.json": {
+   "file": "export/key-substitution.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 3
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution.json|pinned": {
+   "file": "export/key-substitution.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNING_KEY_UNANCHORED",
+     "detail": "Key a77acce4feedface is not linked by any signed key statement to a pinned trust anchor."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNING_KEY_UNANCHORED",
+      "detail": "Key a77acce4feedface is not linked by any signed key statement to a pinned trust anchor.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [
+      "a77acce4feedface"
+     ],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution.json|keysFile,requireOutOfBandKeys": {
+   "file": "export/key-substitution.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "requireOutOfBandKeys": true
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_KEY_POLICY_VIOLATION",
+     "detail": "Key a77acce4feedface is embedded in the artifact; this run requires supplied keys."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Key a77acce4feedface is embedded in the artifact; this run requires supplied keys.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution.json|pinned|keysFile,requireOutOfBandKeys": {
+   "file": "export/key-substitution.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "requireOutOfBandKeys": true
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_KEY_POLICY_VIOLATION",
+     "detail": "Key a77acce4feedface is embedded in the artifact; this run requires supplied keys."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_KEY_POLICY_VIOLATION",
+      "detail": "Key a77acce4feedface is embedded in the artifact; this run requires supplied keys.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [
+      "a77acce4feedface"
+     ],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution-kid-drift.json": {
+   "file": "export/key-substitution-kid-drift.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNING_KEY_DRIFT",
+     "detail": "Row signingKeyId=a77acce4feedface does not match the signature-covered kid 15d63684b387235c in the protected header."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNING_KEY_DRIFT",
+      "detail": "Row signingKeyId=a77acce4feedface does not match the signature-covered kid 15d63684b387235c in the protected header.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/key-substitution-kid-drift.json|pinned": {
+   "file": "export/key-substitution-kid-drift.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNING_KEY_DRIFT",
+     "detail": "Row signingKeyId=a77acce4feedface does not match the signature-covered kid 15d63684b387235c in the protected header."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNING_KEY_DRIFT",
+      "detail": "Row signingKeyId=a77acce4feedface does not match the signature-covered kid 15d63684b387235c in the protected header.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 2
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [
+      "a77acce4feedface"
+     ],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/payload-binding-mismatch.json|keysFile": {
+   "file": "export/payload-binding-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/payload-binding-mismatch.json|pinned|keysFile": {
+   "file": "export/payload-binding-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/actor-attribution-mismatch.json|keysFile": {
+   "file": "export/actor-attribution-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51)."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51).",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/actor-attribution-mismatch.json|pinned|keysFile": {
+   "file": "export/actor-attribution-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51)."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51).",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-record-updated.json|keysFile": {
+   "file": "export/valid-record-updated.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 2,
+    "verifiedEntries": 2,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 2
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-record-updated.json|pinned|keysFile": {
+   "file": "export/valid-record-updated.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 2,
+    "verifiedEntries": 2,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 2
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-lifecycle-states.json|keysFile": {
+   "file": "export/valid-lifecycle-states.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-lifecycle-states.json|pinned|keysFile": {
+   "file": "export/valid-lifecycle-states.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/lifecycle-state-tampered.json|keysFile": {
+   "file": "export/lifecycle-state-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/lifecycle-state-tampered.json|pinned|keysFile": {
+   "file": "export/lifecycle-state-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-cert-agent-signature.json|agentKeysFile,keysFile": {
+   "file": "export/valid-cert-agent-signature.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "agentKeysFile": "export/keys-agent.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "applied",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 1
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-cert-agent-signature.json|pinned|agentKeysFile,keysFile": {
+   "file": "export/valid-cert-agent-signature.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "agentKeysFile": "export/keys-agent.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "applied",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 1
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-invalid.json|agentKeysFile,keysFile": {
+   "file": "export/agent-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "agentKeysFile": "export/keys-agent.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_AGENT_SIGNATURE_INVALID",
+     "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
+      "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "applied",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-invalid.json|pinned|agentKeysFile,keysFile": {
+   "file": "export/agent-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json",
+    "agentKeysFile": "export/keys-agent.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_AGENT_SIGNATURE_INVALID",
+     "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
+      "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "applied",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-cert-copy-tampered.json|keysFile": {
+   "file": "export/agent-signature-cert-copy-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-cert-copy-tampered.json|pinned|keysFile": {
+   "file": "export/agent-signature-cert-copy-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "not_checked"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchored_signature",
+     "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-invalid.json|keysFile": {
+   "file": "export/agent-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/agent-signature-invalid.json|pinned|keysFile": {
+   "file": "export/agent-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 1,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-delegation-bound.json|keysFile": {
+   "file": "export/valid-delegation-bound.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-delegation-bound.json|pinned|keysFile": {
+   "file": "export/valid-delegation-bound.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/delegation-binding-tampered.json|keysFile": {
+   "file": "export/delegation-binding-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/delegation-binding-tampered.json|pinned|keysFile": {
+   "file": "export/delegation-binding-tampered.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+     "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_PAYLOAD_BINDING_MISMATCH",
+      "detail": "Denormalised row payload no longer matches the canonical projection of the signed predicate.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "skipped_no_input",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "not_checked"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchored_signature",
+     "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsigned.json|keysFile": {
+   "file": "export/unsigned.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 3,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": null,
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsigned-history-then-signed.json|keysFile": {
+   "file": "export/unsigned-history-then-signed.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 2,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/unsigned-history-then-signed.json|pinned|keysFile": {
+   "file": "export/unsigned-history-then-signed.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "skipped"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 2,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/entry-unsigned-after-signed.json|keysFile": {
+   "file": "export/entry-unsigned-after-signed.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ENTRY_UNSIGNED",
+     "detail": "Entry has no signingKeyId but follows a signed entry in the same chain."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but follows a signed entry in the same chain.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/entry-unsigned-after-signed.json|pinned|keysFile": {
+   "file": "export/entry-unsigned-after-signed.json",
+   "options": {
+    "keysFile": "export/keys-oob.json"
+   },
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ENTRY_UNSIGNED",
+     "detail": "Entry has no signingKeyId but follows a signed entry in the same chain."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but follows a signed entry in the same chain.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/entry-unsigned-after-activation.json": {
+   "file": "export/entry-unsigned-after-activation.json",
+   "options": {},
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 2,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_ENTRY_UNSIGNED",
+     "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.274Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 2
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/entry-unsigned-after-activation.json|pinned": {
+   "file": "export/entry-unsigned-after-activation.json",
+   "options": {},
+   "trustAnchors": [
+    "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 2,
+    "verifiedEntries": 0,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_ENTRY_UNSIGNED",
+     "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "signature": "not-checked"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ENTRY_UNSIGNED",
+      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.274Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 0,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 2
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "skipped_no_input",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "not_checked"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchored_signature",
+     "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
+     "anchors": [
+      "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
+     ],
+     "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-es256.json|keysFile": {
+   "file": "export/valid-es256.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/valid-es256.json|pinned|keysFile": {
+   "file": "export/valid-es256.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": [
+    "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 3,
+    "verifiedEntries": 3,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 3,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 3,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
+     "anchors": [
+      "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+     ],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c",
+      "3f8077ed9d166e62",
+      "9158bd72882ef02d"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/es256-signature-invalid.json|keysFile": {
+   "file": "export/es256-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_INVALID",
+     "detail": "COSE_Sign1 signature did not verify against key 9158bd72882ef02d."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_INVALID",
+      "detail": "COSE_Sign1 signature did not verify against key 9158bd72882ef02d.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=5d933f1e3fc6d1d33b9e3f10a74a2dfa2865727b569ab40cbb917435044f893d) diverges from row columns (position=3, prev=170d1abb34bd39abfddf62a4c91b85525fcb9936832fd281ba52275d74fa8762).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/es256-signature-invalid.json|pinned|keysFile": {
+   "file": "export/es256-signature-invalid.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": [
+    "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_SIGNATURE_INVALID",
+     "detail": "COSE_Sign1 signature did not verify against key 9158bd72882ef02d."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_SIGNATURE_INVALID",
+      "detail": "COSE_Sign1 signature did not verify against key 9158bd72882ef02d.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": false,
+      "code": "CHAIN_COSE_HEADER_MISMATCH",
+      "detail": "Signed protected-header chain claim (position=3, prev=5d933f1e3fc6d1d33b9e3f10a74a2dfa2865727b569ab40cbb917435044f893d) diverges from row columns (position=3, prev=170d1abb34bd39abfddf62a4c91b85525fcb9936832fd281ba52275d74fa8762).",
+      "signature": "not-checked"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 1,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
+     "anchors": [
+      "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+     ],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c",
+      "3f8077ed9d166e62",
+      "9158bd72882ef02d"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/es256-header-alg-mismatch.json|keysFile": {
+   "file": "export/es256-header-alg-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ALG_MISMATCH",
+     "detail": "Protected-header alg (label 1) is absent or is not an algorithm key 9158bd72882ef02d can produce. Tamper class: a rewritten alg must read as forgery, never as an upgrade notice."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ALG_MISMATCH",
+      "detail": "Protected-header alg (label 1) is absent or is not an algorithm key 9158bd72882ef02d can produce. Tamper class: a rewritten alg must read as forgery, never as an upgrade notice.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "skipped_no_input"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "no_anchor",
+     "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
+     "anchors": [],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": null,
+     "order": null,
+     "anchoredKeyIds": [],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  },
+  "export/es256-header-alg-mismatch.json|pinned|keysFile": {
+   "file": "export/es256-header-alg-mismatch.json",
+   "options": {
+    "keysFile": "export/keys-oob-es256.json"
+   },
+   "trustAnchors": [
+    "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 3,
+    "verifiedEntries": 2,
+    "brokenAt": {
+     "position": 2,
+     "code": "CHAIN_ALG_MISMATCH",
+     "detail": "Protected-header alg (label 1) is absent or is not an algorithm key 9158bd72882ef02d can produce. Tamper class: a rewritten alg must read as forgery, never as an upgrade notice."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": false,
+      "code": "CHAIN_ALG_MISMATCH",
+      "detail": "Protected-header alg (label 1) is absent or is not an algorithm key 9158bd72882ef02d can produce. Tamper class: a rewritten alg must read as forgery, never as an upgrade notice.",
+      "signature": "invalid"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 2,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 3
+    },
+    "keyProvenance": {
+     "supplied": 2,
+     "embedded": 0
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
+     "anchors": [
+      "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a"
+     ],
+     "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
+     "anchoredFromPinned": true,
+     "order": "signed",
+     "anchoredKeyIds": [
+      "15d63684b387235c",
+      "3f8077ed9d166e62",
+      "9158bd72882ef02d"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": []
+    }
+   }
+  }
+ }
+}
