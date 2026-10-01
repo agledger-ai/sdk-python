@@ -260,12 +260,18 @@ def test_an_unsigned_checkpoint_before_the_earliest_activation_passes_and_at_it_
     assert _only(verify_dump(d)).code == "CHECKPOINT_UNSIGNED"
 
 
-def test_an_unsigned_checkpoint_with_no_write_time_cannot_be_placed() -> None:
+@pytest.mark.parametrize("blank", ["drop", None, "garbage"])
+def test_an_unsigned_checkpoint_with_no_write_time_fails_closed(blank: str | None) -> None:
+    # The engine times every row: one with no readable time cannot be placed
+    # before signing began, so it is not early history.
     d = _dump()
     cp = d.vault_checkpoints[0]
     _unsign(cp)
-    del cp["created_at"]
-    assert verify_dump(d).ok
+    if blank == "drop":
+        del cp["created_at"]
+    else:
+        cp["created_at"] = blank
+    assert [f.code for f in verify_dump(d).vault.failures] == ["CHECKPOINT_UNSIGNED"]
 
 
 def test_a_diverged_or_orphaned_unsigned_checkpoint_keeps_its_own_code() -> None:

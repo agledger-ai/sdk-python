@@ -50,7 +50,7 @@ import hashlib
 import io
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -151,7 +151,10 @@ class KeyStatementInput:
     created_at: str | None = None
     """The database write time (the dump's ``created_at``). Give it for every
     statement or for none: with it the walk applies the write order, without it
-    the signed order (see the module docstring)."""
+    the signed order (see the module docstring). Under the write order a
+    statement whose ``created_at`` is not an RFC 3339 instant cannot be placed,
+    and is KEY_STATEMENT_INVALID (:func:`key_statement_from_dump_row` gives
+    ``""`` for a row without one)."""
 
 
 @dataclass(frozen=True)
@@ -245,22 +248,37 @@ class KeyTrust:
 
 
 _NO_ANCHOR_DETAIL = (
-    "No trustAnchors were given, so no key was anchored: every key was taken on the word of "
-    "whoever embedded or supplied it, and a key written into the Server's database alone would "
-    "verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as "
-    "trustAnchors."
+    "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: "
+    "every key was taken on the word of whoever embedded or supplied it, and a key written "
+    "into the Server's database alone would verify. Pin the SPKI digest of a vault key you "
+    "hold or took out of band (sha256:<hex>) as trustAnchors."
 )
+
+KeyTrustStatus = Literal["walked", "no_anchor", "no_anchored_signature"]
+"""Whether a verification can be read as trusted. Mirrors verify-core's
+``KeyTrustStatus``.
+
+- ``walked``: the key statements were walked from the caller's anchors and at
+  least one signature verified under a key they anchor. The one status a
+  passing result is trusted on.
+- ``no_anchor``: no trust anchors were given, so no key was anchored and every
+  key was taken on the word of whoever embedded or supplied it. A pass is not a
+  trusted verdict.
+- ``no_anchored_signature``: the walk ran, but no signature in the artifact
+  verified under a key it anchors (every entry is unsigned history, or the
+  chain broke first). An unsigned entry proves nothing about who wrote it, so a
+  pass is not a trusted verdict either.
+
+Every surface reads ``no_anchor`` and ``no_anchored_signature`` alike: a pass
+on either is ``unanchored``, never ``trusted``."""
 
 
 @dataclass
 class KeyTrustReport:
     """What a verification result says about key anchoring."""
 
-    status: Literal["walked", "no_anchor"]
-    """``walked``: the key statements were walked from the caller's anchors.
-    ``no_anchor``: no trust anchors were given, so no key was anchored and every
-    key was taken on the word of whoever embedded or supplied it. Not a clean
-    verdict, whatever the chain checks say."""
+    status: KeyTrustStatus
+    """See :data:`KeyTrustStatus`."""
     detail: str
     anchors: list[str] = field(default_factory=list[str])
     """The anchors walked from, as ``sha256:<hex>``."""
@@ -305,7 +323,11 @@ def report_key_trust(
 ) -> KeyTrustReport:
     """Summarize a registry marked with the walk's verdicts (``states`` maps
     each key id to its :data:`KeyTrustState`), or with ``trust`` ``None`` when
-    no walk ran."""
+    no walk ran. A walked report says ``walked`` until the caller settles it
+    with :func:`settle_key_trust`. An ``anchored_from`` that is not a string is
+    read as absent."""
+    if not isinstance(anchored_from, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+        anchored_from = None
     if trust is None:
         return no_anchor_report(anchored_from)
 
@@ -332,6 +354,28 @@ def report_key_trust(
         unanchored_key_ids=unanchored,
         undecided_key_ids=ids("undecided"),
         findings=list(trust.findings),
+    )
+
+
+def settle_key_trust(report: KeyTrustReport, anchored_signatures: int) -> KeyTrustReport:
+    """Settle a walked report once the caller has counted the signatures that
+    verified under an anchored key (an export's or a dump's entries whose
+    signature checked out, since under a walk every such key is anchored).
+    With none, the report becomes ``no_anchored_signature``: the pin was
+    walked, but nothing in the artifact is signed by a key it anchors, so a
+    pass is not a trusted verdict. Any other report is returned as it is.
+    Mirrors verify-core ``settleKeyTrust``."""
+    if report.status != "walked" or anchored_signatures > 0:
+        return report
+    return replace(
+        report,
+        status="no_anchored_signature",
+        detail=(
+            f"The key statements were walked from {', '.join(report.anchors)}, but no signature "
+            "here verified under a key they anchor, so this is not a trusted verdict: an entry "
+            "written before the install began signing carries no signature, and proves nothing "
+            "about who wrote it."
+        ),
     )
 
 
@@ -994,6 +1038,9 @@ def compute_key_trust(
         raise TypeError(
             "Key statements must all carry created_at (a dump) or none (a key document); this input mixes them."
         )
+    # A listed key with no key material (a dump row whose public_key was
+    # nulled) vouches for nothing and is no endorser's fallback.
+    listed_keys = [k for k in keys if isinstance(k.public_key, str) and k.public_key]  # pyright: ignore[reportUnnecessaryIsInstance]
     order: Literal["written", "signed"] = "written" if statements and with_time == len(statements) else "signed"
     inputs = list(statements)
     if order == "signed":
@@ -1007,10 +1054,6 @@ def compute_key_trust(
             seen.add(k)
             deduped.append(s)
         inputs = deduped
-    else:
-        for s in inputs:
-            if instant_ms(s.created_at) is None:
-                raise TypeError(f"Key statement created_at {s.created_at!r} is not an RFC 3339 instant.")
 
     findings: list[KeyRegistryFinding] = []
     # An endorser's key material, by digest. A statement's subject SPKI is bound
@@ -1025,16 +1068,25 @@ def compute_key_trust(
         payload = _decode_payload(sign1.payload_bstr) if sign1 is not None else None
         if payload is not None and payload.subject.spki_sha256 not in key_by_digest:
             key_by_digest[payload.subject.spki_sha256] = (payload.subject.spki, payload.subject.alg)
-    for key in keys:
+    for key in listed_keys:
         digest = spki_sha256(key.public_key)
         if digest not in key_by_digest:
-            key_by_digest[digest] = (key.public_key, key.algorithm)
+            key_by_digest[digest] = (key.public_key, key.algorithm if isinstance(key.algorithm, str) else None)  # pyright: ignore[reportUnnecessaryIsInstance]
 
-    checked = [_check_statement(st, key_by_digest) for st in inputs]
+    # Under the write order a statement with no write time cannot be placed:
+    # the Server writes one on every row, so it was edited, and it admits nothing.
+    def checked_of(st: KeyStatementInput) -> _Checked:
+        c = _check_statement(st, key_by_digest)
+        if order != "written" or instant_ms(st.created_at) is not None:
+            return c
+        return replace(c, verdict="invalid", detail="the row has no parseable created_at to order it by")
 
-    def sort_key(c: _Checked) -> int | str:
+    checked = [checked_of(st) for st in inputs]
+
+    def sort_key(c: _Checked) -> float | str:
         if order == "written":
-            return cast("int", instant_ms(c.input.created_at))
+            at = instant_ms(c.input.created_at)
+            return float("inf") if at is None else at
         return _signed_instant_of(c) or "￿"
 
     def closure_last(c: _Checked) -> int:
@@ -1199,7 +1251,7 @@ def compute_key_trust(
         by_digest[digest] = created
         return created
 
-    for key in keys:
+    for key in listed_keys:
         entry_for(spki_sha256(key.public_key))
     for d in undecided:
         entry_for(d)
@@ -1303,7 +1355,7 @@ def compute_key_trust(
 
     # Findings on listed keys: their columns against the signed values, compared
     # at millisecond precision, the precision a dump or key document carries.
-    for key in keys:
+    for key in listed_keys:
         entry = entry_for(spki_sha256(key.public_key))
         if not entry.trusted or key.key_id != entry.key_id:
             continue
@@ -1373,17 +1425,21 @@ def compute_key_trust(
 
 def key_statement_from_dump_row(row: Mapping[str, Any]) -> KeyStatementInput:
     """Map a dump ``vault_key_statements.ndjson`` row onto the walk's input,
-    binding every column."""
+    binding every column. The Server writes ``subject_key_id`` and
+    ``created_at`` on every row, so one that is missing or not a string maps to
+    ``""``, which matches no signed key id and places the statement nowhere: it
+    is KEY_STATEMENT_INVALID. Mirrors verify-core ``keyStatementFromDumpRow``."""
     statement = row.get("statement")
     created = row.get("created_at")
+    subject = row.get("subject_key_id")
     return KeyStatementInput(
         id=cast("str | None", row.get("id")),
         kind=cast("str", row.get("kind")),
-        subject_key_id=cast("str | None", row.get("subject_key_id")),
+        subject_key_id=subject if isinstance(subject, str) else "",
         endorser_key_id=cast("str | None", row.get("endorser_key_id")),
         endorser_column="endorser_key_id" in row,
         cose=cast("list[str]", statement) if isinstance(statement, list) else [],
-        created_at=created if isinstance(created, str) else None,
+        created_at=created if isinstance(created, str) else "",
     )
 
 
@@ -1398,9 +1454,11 @@ def _status_of(value: object) -> Literal["active", "retired"] | None:
 def trust_key_from_dump_row(row: Mapping[str, Any]) -> TrustKeyInput:
     """Map a dump ``vault_signing_keys.ndjson`` row onto the walk's input."""
     algorithm = row.get("algorithm")
+    public_key = row.get("public_key")
     return TrustKeyInput(
         key_id=str(row.get("key_id")),
-        public_key=str(row.get("public_key")),
+        # A row with no key material maps to "", which the walk leaves out.
+        public_key=public_key if isinstance(public_key, str) else "",
         algorithm=algorithm if isinstance(algorithm, str) else None,
         status=_status_of(row.get("status")),
         activated_at=row.get("activated_at"),

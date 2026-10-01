@@ -64,10 +64,13 @@ from agledger.verify.key_statements import (
     KeyTrustReport,
     KeyTrustState,
     TrustKeyInput,
+    _b64decode,  # pyright: ignore[reportPrivateUsage]
     compute_key_trust,
+    instant_ms,
     key_statements_from_export,
     no_anchor_report,
     report_key_trust,
+    settle_key_trust,
     spki_sha256,
 )
 
@@ -163,6 +166,146 @@ def as_mapping(value: Any) -> Mapping[str, Any]:
     return cast("Mapping[str, Any]", value) if isinstance(value, Mapping) else {}
 
 
+_UNDEFINED: Any = object()
+"""JavaScript's ``undefined``: a field the source does not carry at all, as
+apart from one it carries as null. verify-core tells the two apart where the
+dump adapter hands a row's columns through as they are, so this port does too."""
+
+DUMP_ROW = "__dumpRow__"
+"""The key under which a dump-normalized entry carries its raw vault row, so the
+walk reads the row's columns as ``@agledger/verify`` hands them to verify-core
+rather than through the export's defaults."""
+
+
+def js_text(value: object) -> str:
+    """A value as a JavaScript template literal prints it, so a detail reads
+    the same as verify-core's."""
+    if value is _UNDEFINED:
+        return "undefined"
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def js_or_null(value: object) -> str:
+    """``${value ?? 'null'}``."""
+    return "null" if value is None or value is _UNDEFINED else js_text(value)
+
+
+_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def safe_int(value: object) -> int | None:
+    """``value`` where JavaScript's ``Number.isSafeInteger`` holds for it, else ``None``."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if abs(value) <= _MAX_SAFE_INTEGER else None
+    if isinstance(value, float) and value.is_integer() and abs(value) <= _MAX_SAFE_INTEGER:
+        return int(value)
+    return None
+
+
+def position_key(value: object) -> float:
+    """The order a walk sorts rows in: by an integer column, a row whose value
+    is not a safe integer after every one whose is (ties keep input order, as
+    a stable sort does). Mirrors verify-core ``positionKey``."""
+    n = safe_int(value)
+    return float("inf") if n is None else n
+
+
+def strict_eq(a: object, b: object) -> bool:
+    """JavaScript's ``===`` over JSON values: no coercion between types, and two
+    objects or arrays equal only when they are the same one."""
+    if a is _UNDEFINED or b is _UNDEFINED or a is None or b is None:
+        return a is b
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    return a is b
+
+
+def _field(m: Mapping[str, Any], key: str) -> Any:
+    return m[key] if key in m else _UNDEFINED
+
+
+def _coalesce(*values: object) -> object:
+    """JavaScript's ``a ?? b ?? ...``."""
+    for v in values[:-1]:
+        if v is not None and v is not _UNDEFINED:
+            return v
+    return values[-1]
+
+
+@dataclass(frozen=True)
+class _ChainRow:
+    """One chain entry as verify-core's ``NormalizedEntry`` carries it, with
+    :data:`_UNDEFINED` for a field the source does not carry."""
+
+    chain_position: object
+    payload_hash: object
+    previous_hash: object
+    cose_sign1: object
+    signing_key_id: object
+    created_at: object
+    binding: tuple[object, object, object] | None
+    """(record id, entry type, payload) when the binding check has its inputs."""
+    oidc: tuple[object, object, object] | None
+    """(iss, sub, synthesized) when the OIDC-actor check has its inputs."""
+    attribution: tuple[object, object, object] | None
+    """(actorId, actorRole, actorOwnerId) when the attribution check has its inputs."""
+
+
+def chain_row(entry: Mapping[str, Any]) -> _ChainRow:
+    """Read an entry the way verify-core's adapters hand it to the walk: an
+    /audit-export entry as ``verifyAuditExport`` maps it, a dump row (one
+    carrying :data:`DUMP_ROW`) as ``@agledger/verify`` does."""
+    row = entry.get(DUMP_ROW)
+    if isinstance(row, Mapping):
+        r = cast("Mapping[str, Any]", row)
+        return _ChainRow(
+            chain_position=_field(r, "chain_position"),
+            payload_hash=_field(r, "payload_hash"),
+            previous_hash=_field(r, "previous_hash"),
+            cose_sign1=_field(r, "cose_sign1"),
+            signing_key_id=_field(r, "signing_key_id"),
+            created_at=_field(r, "created_at"),
+            binding=(_field(r, "record_id"), _field(r, "entry_type"), _field(r, "payload")),
+            oidc=(r.get("actor_oidc_iss"), r.get("actor_oidc_sub"), _field(r, "actor_oidc_synthesized")),
+            attribution=(_field(r, "actor_key_id"), _field(r, "actor_role"), _field(r, "actor_owner_id")),
+        )
+    integrity = as_mapping(entry.get("integrity"))
+    synthesized = _field(entry, "actorOidcSynthesized")
+    return _ChainRow(
+        chain_position=_coalesce(_field(entry, "chainPosition"), _field(entry, "position"), -1),
+        payload_hash=_field(integrity, "payloadHash"),
+        previous_hash=_field(integrity, "previousHash"),
+        cose_sign1=_field(integrity, "coseSign1"),
+        signing_key_id=_field(integrity, "signingKeyId"),
+        created_at=_field(entry, "createdAt"),
+        binding=(
+            (entry.get("recordId"), entry["entryType"], entry["payload"])
+            if "payload" in entry and "entryType" in entry
+            else None
+        ),
+        oidc=(
+            (entry.get("actorOidcIss"), entry.get("actorOidcSub"), _UNDEFINED if synthesized is None else synthesized)
+            if synthesized is not _UNDEFINED
+            else None
+        ),
+        attribution=(
+            (entry.get("actorId"), entry.get("actorRole"), entry.get("actorOwnerId"))
+            if "actorId" in entry or "actorRole" in entry or "actorOwnerId" in entry
+            else None
+        ),
+    )
+
+
 @dataclass
 class EntryVerificationResult:
     position: int
@@ -205,8 +348,10 @@ class KeyProvenance:
 
 
 #: Whether an input-gated check ran. Mirrors ``@agledger/verify-core``'s
-#: ``CheckApplicability``: ``skipped_no_input`` is never a pass.
-CheckApplicability = Literal["applied", "skipped_no_input"]
+#: ``CheckApplicability``: ``skipped_no_input`` is never a pass, and
+#: ``not_checked`` says the input was given but no entry reached the check
+#: (only ``key_anchoring``, whose input is the caller's trust anchors).
+CheckApplicability = Literal["applied", "skipped_no_input", "not_checked"]
 
 OPTIONAL_CHECKS = (
     "payload_binding",
@@ -219,9 +364,16 @@ OPTIONAL_CHECKS = (
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
 
-def optional_checks_report(applied: set[str]) -> dict[str, CheckApplicability]:
-    """The ``optionalChecks`` map for a set of checks that ran."""
-    return {name: ("applied" if name in applied else "skipped_no_input") for name in OPTIONAL_CHECKS}
+def optional_checks_report(applied: set[str], walked: bool = False) -> dict[str, CheckApplicability]:
+    """The ``optionalChecks`` map for a set of checks that ran. With ``walked``
+    (trust anchors were given), ``key_anchoring`` is ``not_checked`` rather
+    than ``skipped_no_input`` when no entry reached it."""
+    out: dict[str, CheckApplicability] = {
+        name: ("applied" if name in applied else "skipped_no_input") for name in OPTIONAL_CHECKS
+    }
+    if walked and out["key_anchoring"] == "skipped_no_input":
+        out["key_anchoring"] = "not_checked"
+    return out
 
 
 @dataclass
@@ -261,8 +413,10 @@ class VerifyExportResult:
     #: for "checked and passed".
     optional_checks: dict[str, CheckApplicability] = field(default_factory=lambda: dict(_NO_OPTIONAL_CHECKS))
     #: Whether the keys were anchored, and to what. ``status == "no_anchor"``
-    #: means no ``trust_anchors`` were given: the verdict then rests on keys
-    #: nobody pinned, which is not a clean verdict whatever ``valid`` says.
+    #: means no ``trust_anchors`` were given, and ``"no_anchored_signature"``
+    #: that they were but no entry verified under a key they anchor: either way
+    #: the verdict rests on nothing pinned, which is not a trusted verdict
+    #: whatever ``valid`` says (see :data:`KeyTrustStatus`).
     #: Findings on the key statements themselves (KEY_STATEMENT_INVALID,
     #: KEY_CLOSURE_INVALID, CHAIN_KEY_WINDOW_DRIFT) are listed here and make
     #: ``valid`` false. Mirrors ``keyTrust`` in ``@agledger/verify-core``.
@@ -331,7 +485,8 @@ def verify_export(
         :class:`~agledger.verify.key_statements.DistrustedKey` values): what
         such a key stored at or after the instant (with none, from the
         retirement a trusted key signed for it, and with neither, ever) counts
-        for nothing in the walk. Used only with ``trust_anchors``.
+        for nothing in the walk. Used only with ``trust_anchors``: given
+        without them it raises ``TypeError``, since nothing would apply it.
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
         signature-coverage discriminator, a key-provenance tally, the agent
         signatures present and verified, and the key-trust report.
@@ -339,8 +494,24 @@ def verify_export(
     if isinstance(export_data, BaseModel):
         export_data = export_data.model_dump(by_alias=True)
 
+    # Not an export at all is refused; a malformed entry inside one is a
+    # failure code on that entry, never a raise. Mirrors verify-core.
+    raw_entries: object = export_data.get("entries") if isinstance(export_data, Mapping) else None  # pyright: ignore[reportUnnecessaryIsInstance]
+    if (
+        not isinstance(export_data, Mapping)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or not isinstance(export_data.get("exportMetadata"), Mapping)
+        or (raw_entries is not None and not isinstance(raw_entries, list))
+    ):
+        raise TypeError(
+            "Expected an /audit-export document: { exportMetadata: { recordId, ... }, entries: [...] }."
+        )
+    if (trust_anchors is None or len(trust_anchors) == 0) and distrusted_keys is not None and len(distrusted_keys) > 0:
+        raise TypeError(
+            "distrusted_keys act only inside the key-statement walk, which runs from "
+            "trust_anchors; pass trust_anchors as well."
+        )
     meta = as_mapping(export_data.get("exportMetadata"))
-    entries: list[Mapping[str, Any]] = export_data.get("entries", []) or []
+    entries: list[Mapping[str, Any]] = [as_mapping(e) for e in cast("list[Any]", raw_entries or [])]
     record_id = str(meta.get("recordId", ""))
     coverage = SignatureCoverage(total=len(entries))
 
@@ -382,9 +553,10 @@ def verify_export(
         registry = KeyCache(
             dict(registry.items()),
             signing_since=earliest_key_activation([{"activatedAt": registry.signing_since}, *signed]),
+            walked=True,
         )
     anchored_from = meta.get("anchoredFrom")
-    key_trust = report_key_trust(
+    walk_report = report_key_trust(
         registry.trust_states(), trust, anchored_from if isinstance(anchored_from, str) else None
     )
 
@@ -397,13 +569,15 @@ def verify_export(
             entries=[],
             broken_at=BrokenAt(position=0, code="CHAIN_EMPTY", detail="No entries to verify."),
             signature_coverage=coverage,
-            key_trust=key_trust,
+            optional_checks=optional_checks_report(set(), walked=trust is not None),
+            key_trust=settle_key_trust(walk_report, 0),
         )
 
     # Sort by chain position before the walk so a reordered export array still
-    # validates the true chain (tampering surfaces through the hash links).
-    # Mirrors verify-core's `verifyChain`.
-    sorted_entries = [_with_export_oidc_actor(e) for e in sorted(entries, key=_entry_position)]
+    # validates the true chain (tampering surfaces through the hash links); a
+    # position that is not a safe integer sorts last. Mirrors verify-core's
+    # `verifyChain`.
+    sorted_entries = sorted(entries, key=lambda e: position_key(chain_row(e).chain_position))
 
     entry_results: list[EntryVerificationResult] = []
     provenance = KeyProvenance()
@@ -412,7 +586,7 @@ def verify_export(
     applied: set[str] = set()
     verified = 0
     broken_at: BrokenAt | None = None
-    prev_payload_hash: str | None = None
+    prev_payload_hash: object = None
     signed_before = False
 
     for i, entry in enumerate(sorted_entries):
@@ -428,7 +602,8 @@ def verify_export(
         )
         # As the engine's walk does: any earlier row naming a key, whatever its
         # own verdict, means this chain was already being signed.
-        if as_mapping(entry.get("integrity")).get("signingKeyId") is not None:
+        row = chain_row(entry)
+        if row.signing_key_id is not None:
             signed_before = True
         if result.valid:
             result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
@@ -447,8 +622,11 @@ def verify_export(
             coverage.unsigned += 1
         elif result.signature == "skipped":
             coverage.skipped += 1
-        prev_payload_hash = as_mapping(entry.get("integrity")).get("payloadHash")
+        prev_payload_hash = row.payload_hash
 
+    # Under a walk every key a signature verifies against is anchored, so the
+    # signed entries are the anchored signatures.
+    key_trust = settle_key_trust(walk_report, coverage.signed)
     # A finding on the key statements has no chain position; it is reported at
     # position 0, the place for findings that precede the walk.
     if broken_at is None and key_trust.findings:
@@ -467,16 +645,11 @@ def verify_export(
         agent_signatures=agent_counts,
         agent_signature_check=agent_check[0],
         optional_checks=optional_checks_report(
-            applied | ({"agent_signature"} if agent_check[0] == "applied" else set())
+            applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
+            walked=trust is not None,
         ),
         key_trust=key_trust,
     )
-
-
-def _entry_position(entry: Mapping[str, Any]) -> int:
-    # Current exports emit `chainPosition`; pre-v0.25 exports used `position`.
-    raw = entry.get("chainPosition", entry.get("position", -1))
-    return int(raw) if raw is not None else -1
 
 
 def _early_failure(
@@ -813,7 +986,11 @@ def _build_key_registry(
     embedded = meta.get("signingPublicKeys")
     if isinstance(embedded, Mapping):
         for k, v in cast("Mapping[Any, Any]", embedded).items():
-            keys[str(k)] = RegisteredKey(spki_base64=str(v), source="embedded")
+            # A key with no key material (a nulled value) is no key: its
+            # entries fail CHAIN_SIGNATURE_MISSING_KEY, as verify-core's
+            # buildKeyRegistry leaves it out.
+            if isinstance(v, str) and v:
+                keys[str(k)] = RegisteredKey(spki_base64=v, source="embedded")
     caller_windowed: set[str] = set()
     if overrides:
         for k, key in overrides.items():
@@ -875,14 +1052,14 @@ def _trust_keys_of(meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey]
             out.append(
                 TrustKeyInput(
                     key_id=str(key_id),
-                    public_key=str(public_key),
+                    public_key=public_key if isinstance(public_key, str) else "",
                     activated_at=w.get("activatedAt"),
                     retired_at=w.get("retiredAt"),
                     status="active" if active else "retired",
                 )
             )
         else:
-            out.append(TrustKeyInput(key_id=str(key_id), public_key=str(public_key)))
+            out.append(TrustKeyInput(key_id=str(key_id), public_key=public_key if isinstance(public_key, str) else ""))
     for key_id, key in (supplied or {}).items():
         out.append(TrustKeyInput(key_id=key_id, public_key=key.spki_base64))
     return out
@@ -910,7 +1087,7 @@ def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
     ``applyKeyTrust``."""
     out: dict[str, RegisteredKey] = {}
     for key_id, key in keys.items():
-        digest = spki_sha256(key.spki_base64)
+        digest = spki_sha256(key.spki_base64) if isinstance(key.spki_base64, str) else ""  # pyright: ignore[reportUnnecessaryIsInstance]
         bound = key_id == digest[:16]
         anchored = bound and digest in trust.trusted
         state: KeyTrustState = (
@@ -921,24 +1098,7 @@ def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
             out[key_id] = replace(key, trust=state, activated_at=signed.activated_at, retired_at=signed.retired_at)
         else:
             out[key_id] = replace(key, trust=state)
-    return KeyCache(out, signing_since=keys.signing_since)
-
-
-def _with_export_oidc_actor(entry: Mapping[str, Any]) -> Mapping[str, Any]:
-    """Map an export entry's actor OIDC columns onto the shape the OIDC-actor
-    check reads. ``actorOidcSynthesized`` is the marker that the export
-    carries that wire shape at all; older exports omit it and the check stays
-    skipped_no_input. Mirrors verify-core's audit-export normalization."""
-    if "actorOidcSynthesized" not in entry or "actorOidc" in entry:
-        return entry
-    return {
-        **entry,
-        "actorOidc": {
-            "iss": entry.get("actorOidcIss"),
-            "sub": entry.get("actorOidcSub"),
-            "synthesized": entry.get("actorOidcSynthesized"),
-        },
-    }
+    return KeyCache(out, signing_since=keys.signing_since, walked=True)
 
 
 class KeyCache:
@@ -955,8 +1115,13 @@ class KeyCache:
         registry: Mapping[str, RegisteredKey],
         *,
         signing_since: str | None = None,
+        walked: bool = False,
     ) -> None:
         self._registry = dict(registry)
+        #: Whether the key statements were walked from trust anchors (every key
+        #: then carries a verdict), so an anchoring check no entry reached is
+        #: ``not_checked`` rather than ``skipped_no_input``.
+        self.walked = walked
         self._cache: dict[str, _Ed25519PublicKey | _EllipticCurvePublicKey] = {}
         #: When the install began signing: the earliest ``activated_at`` across
         #: its whole signing key set, retired keys included, as the ISO string
@@ -991,11 +1156,16 @@ class KeyCache:
 
     def window(self, key_id: str) -> tuple[str | None, str | None]:
         """The key's ``(activated_at, retired_at)`` temporal window, or
-        ``(None, None)`` if unknown: the temporal check then no-ops."""
+        ``(None, None)`` if unknown. An edge that is not a string is no edge."""
         entry = self._registry.get(key_id)
         if entry is None:
             return (None, None)
-        return (entry.activated_at, entry.retired_at)
+        activated: object = entry.activated_at
+        retired: object = entry.retired_at
+        return (
+            activated if isinstance(activated, str) else None,
+            retired if isinstance(retired, str) else None,
+        )
 
     def public_key(self, key_id: str) -> _Ed25519PublicKey | _EllipticCurvePublicKey | None:
         """The loaded key object (Ed25519 or EC), or ``None`` when the
@@ -1020,7 +1190,7 @@ class KeyCache:
 def verify_entry(
     entry: Mapping[str, Any],
     expected_position: int,
-    expected_prev_hash: str | None,
+    expected_prev_hash: object,
     keys: KeyCache,
     require_key_id: str | None,
     require_supplied_keys: bool,
@@ -1033,34 +1203,40 @@ def verify_entry(
     ``actor_attribution``, ``key_temporal``, ``key_anchoring``), so a caller
     can report "not checked" apart from "passed".
 
-    ``signed_before`` says an earlier entry in the same chain names a signing
-    key; with ``keys.signing_since`` it decides whether an entry with no
-    signing key id is reduced coverage or CHAIN_ENTRY_UNSIGNED."""
-    position = _entry_position(entry)
-    integrity = as_mapping(entry.get("integrity"))
+    ``entry`` is an /audit-export entry, or a dump row normalized by the dump
+    verifier; both are read through :func:`chain_row` exactly as verify-core's
+    adapters read them. ``signed_before`` says an earlier entry in the same
+    chain names a signing key; with ``keys.signing_since`` it decides whether
+    an entry with no signing key id is reduced coverage or CHAIN_ENTRY_UNSIGNED.
+    Malformed row data is a failure code on the entry, never a raise."""
+    row = chain_row(entry)
+    raw_position = row.chain_position
+    int_position = safe_int(raw_position)
+    reported_position = int_position if int_position is not None else -1
 
-    if position != expected_position:
+    if int_position is None or int_position != expected_position:
         return EntryVerificationResult(
-            position=position,
+            position=reported_position,
             valid=False,
             code="CHAIN_POSITION_GAP",
-            detail=f"Expected chainPosition {expected_position}, got {position}.",
+            detail=f"Expected chainPosition {expected_position}, got {js_text(raw_position)}.",
         )
+    position = expected_position
 
-    payload_hash: str | None = integrity.get("payloadHash")
-    previous_hash: str | None = integrity.get("previousHash")
-    cose_sign1_b64: str | None = integrity.get("coseSign1")
-    signing_key_id: str | None = integrity.get("signingKeyId")
+    payload_hash = row.payload_hash
+    previous_hash = row.previous_hash
+    cose_sign1_b64 = row.cose_sign1
+    signing_key_id = row.signing_key_id
 
-    if not cose_sign1_b64 or not payload_hash:
+    if not isinstance(cose_sign1_b64, str) or not isinstance(payload_hash, str) or not cose_sign1_b64 or not payload_hash:
         return EntryVerificationResult(
             position=position,
             valid=False,
             code="CHAIN_MALFORMED_ENTRY",
-            detail="Entry is missing coseSign1 or payloadHash.",
+            detail="Entry is missing coseSign1 or payloadHash, or carries one that is not a string.",
         )
 
-    envelope = base64.b64decode(cose_sign1_b64)
+    envelope = _b64decode(cose_sign1_b64)
     recomputed = hashlib.sha256(envelope).hexdigest()
     if recomputed != payload_hash:
         return EntryVerificationResult(
@@ -1075,15 +1251,12 @@ def verify_entry(
 
     # Genesis (position 1) must link to null; any later mismatch is a broken link.
     expected_prev = None if expected_position == 1 else expected_prev_hash
-    if previous_hash != expected_prev:
+    if not strict_eq(previous_hash, expected_prev):
         return EntryVerificationResult(
             position=position,
             valid=False,
             code="CHAIN_GENESIS_INVALID" if expected_position == 1 else "CHAIN_LINK_BROKEN",
-            detail=(
-                f"Expected previousHash={expected_prev or 'null'}, "
-                f"got {previous_hash or 'null'}."
-            ),
+            detail=f"Expected previousHash={js_or_null(expected_prev)}, got {js_or_null(previous_hash)}.",
         )
 
     parts = _decode_cose_sign1(envelope)
@@ -1096,14 +1269,16 @@ def verify_entry(
             signature="decode-fail",
         )
 
+    # The signed chain claim against the verifier's own expected position and
+    # previous hash, not the row columns.
     chain_claim = _extract_chain_claim(parts[0])
     if (
         chain_claim is None
-        or chain_claim[0] != position
-        or chain_claim[1] != previous_hash
+        or chain_claim[0] != expected_position
+        or not strict_eq(chain_claim[1], expected_prev)
     ):
         envelope_pos = chain_claim[0] if chain_claim else "null"
-        envelope_prev = chain_claim[1] if chain_claim else "null"
+        envelope_prev = js_or_null(chain_claim[1]) if chain_claim else "null"
         return EntryVerificationResult(
             position=position,
             valid=False,
@@ -1111,7 +1286,7 @@ def verify_entry(
             detail=(
                 f"Signed protected-header chain claim (position={envelope_pos}, "
                 f"prev={envelope_prev}) diverges from row columns "
-                f"(position={position}, prev={previous_hash or 'null'})."
+                f"(position={js_text(raw_position)}, prev={js_or_null(previous_hash)})."
             ),
         )
 
@@ -1121,31 +1296,22 @@ def verify_entry(
     # actorDisplayName / actorOwnerType / humanReadableLabel as unsigned. They
     # are signature-covered at CWT_Claims label 15 -> private label -65539, so
     # a rewritten column re-attributes the action to another actor and must not
-    # verify. Same shape as the signed-kid check below: compare, and skip only
-    # when one side is absent (an older engine, or an artifact without the
-    # columns).
-    row_actor_id = entry.get("actorId")
-    row_actor_role = entry.get("actorRole")
-    row_actor_owner_id = entry.get("actorOwnerId")
-    if (
-        isinstance(row_actor_id, str)
-        or isinstance(row_actor_role, str)
-        or isinstance(row_actor_owner_id, str)
-    ):
+    # verify. Compare each column that is not null against the signed claim,
+    # and skip only when the envelope carries no claim (an older engine).
+    if row.attribution is not None:
         actor_claim = _extract_actor_claim(parts[0])
         if actor_claim is not None:
             if applied_checks is not None:
                 applied_checks.add("actor_attribution")
             signed_key_id, signed_role, signed_owner_id = actor_claim
+            row_actor_id, row_actor_role, row_actor_owner_id = row.attribution
             mismatches: list[str] = []
-            if isinstance(row_actor_id, str) and row_actor_id != signed_key_id:
-                mismatches.append(f"actorId={row_actor_id} vs signed {signed_key_id}")
-            if isinstance(row_actor_owner_id, str) and row_actor_owner_id != signed_owner_id:
-                mismatches.append(
-                    f"actorOwnerId={row_actor_owner_id} vs signed {signed_owner_id}"
-                )
-            if isinstance(row_actor_role, str) and row_actor_role != signed_role:
-                mismatches.append(f"actorRole={row_actor_role} vs signed {signed_role}")
+            if row_actor_id is not None and not strict_eq(row_actor_id, signed_key_id):
+                mismatches.append(f"actorId={js_text(row_actor_id)} vs signed {signed_key_id}")
+            if row_actor_owner_id is not None and not strict_eq(row_actor_owner_id, signed_owner_id):
+                mismatches.append(f"actorOwnerId={js_text(row_actor_owner_id)} vs signed {signed_owner_id}")
+            if row_actor_role is not None and not strict_eq(row_actor_role, signed_role):
+                mismatches.append(f"actorRole={js_text(row_actor_role)} vs signed {signed_role}")
             if mismatches:
                 return EntryVerificationResult(
                     position=position,
@@ -1157,29 +1323,20 @@ def verify_entry(
                     ),
                 )
 
-    # Binding-integrity (verificationGuide step 4): when the export carries the
-    # denormalized row ``payload`` (engine ≥ v0.26.x), re-decode the predicate
+    # Binding-integrity (verificationGuide step 4): re-decode the predicate
     # signed inside coseSign1 and deep-equal it against the predicate rebuilt
-    # from the row columns. Catches post-export tampering of the human-readable
-    # ``payload``/``criteria`` view while ``coseSign1`` is left intact.
-    # Absent ``payload`` (older exports) → skipped, never a silent pass.
-    # Binding-integrity and the OIDC-actor cross-check both read the signed
-    # predicate, so decode it ONCE here and share it (a dump entry that carries
-    # both inputs would otherwise CBOR-decode the same payload bytes twice).
-    row_payload = entry.get("payload")
-    entry_type = entry.get("entryType")
-    actor_oidc = entry.get("actorOidc")
-    run_binding = isinstance(row_payload, Mapping) and isinstance(entry_type, str)
-    run_oidc = isinstance(actor_oidc, Mapping)
+    # from the row columns. A row payload that is not an object rebuilds to
+    # nothing and fails. Binding-integrity and the OIDC-actor cross-check both
+    # read the signed predicate, so it is decoded once here.
+    run_binding = row.binding is not None
+    run_oidc = row.oidc is not None
     predicate = _decode_predicate(parts[1]) if (run_binding or run_oidc) else None
 
-    if run_binding:
-        if applied_checks is not None: applied_checks.add("payload_binding")
-        rebuilt = _build_predicate_for_row(
-            entry.get("recordId"),
-            cast(str, entry_type),
-            dict(cast("Mapping[str, Any]", row_payload)),
-        )
+    if row.binding is not None:
+        if applied_checks is not None:
+            applied_checks.add("payload_binding")
+        binding_record_id, binding_entry_type, row_payload = row.binding
+        rebuilt = _build_predicate_for_row(binding_record_id, binding_entry_type, row_payload)
         decoded = _strip_envelope_extensions(predicate) if predicate is not None else None
         if (
             predicate is None
@@ -1198,17 +1355,17 @@ def verify_entry(
                 ),
             )
 
-    # OIDC-actor cross-check (verificationGuide step 5): when the entry carries
-    # the denormalised actor OIDC columns (dump path only: the export wire does
-    # not), confirm they agree with the identity signed in
-    # predicate.on_behalf_of.oidc. Catches DBA tamper of the actor columns on a
-    # synthesized row while coseSign1 stays intact. Export entries never carry
-    # ``actorOidc`` → skipped. Mirrors verify-core chain.ts checkOidcActor.
-    if run_oidc:
-        if applied_checks is not None: applied_checks.add("oidc_actor")
-        oidc_failure = _check_oidc_actor(cast("Mapping[str, Any]", actor_oidc), predicate, position)
+    # OIDC-actor cross-check (verificationGuide step 5): the denormalised actor
+    # OIDC columns against the identity signed in predicate.on_behalf_of.oidc.
+    # Mirrors verify-core chain.ts checkOidcActor.
+    if row.oidc is not None:
+        if applied_checks is not None:
+            applied_checks.add("oidc_actor")
+        oidc_failure = _check_oidc_actor(row.oidc, predicate, position)
         if oidc_failure is not None:
             return oidc_failure
+
+    created_at = row.created_at
 
     # Signature (last, so a null-key row still ran every structural check above).
     # Only a true None is the engine's unsigned-mode marker. Any other value,
@@ -1231,14 +1388,26 @@ def verify_entry(
                 code="CHAIN_ENTRY_UNSIGNED",
                 detail="Entry has no signingKeyId but follows a signed entry in the same chain.",
             )
-        created = entry.get("createdAt")
-        if isinstance(created, str) and written_while_signing(created, keys.signing_since):
+        # The engine times every entry. Without a time the walk can read, an
+        # unsigned entry cannot be placed before signing began, so it is not
+        # early history: it fails closed.
+        if keys.signing_since is not None and instant_ms(created_at) is None:
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_MALFORMED_ENTRY",
+                detail=(
+                    "Entry has no signingKeyId and no parseable createdAt, so it cannot be "
+                    f"placed before the earliest signing key activation {keys.signing_since}."
+                ),
+            )
+        if written_while_signing(created_at, keys.signing_since):
             return EntryVerificationResult(
                 position=position,
                 valid=False,
                 code="CHAIN_ENTRY_UNSIGNED",
                 detail=(
-                    f"Entry has no signingKeyId but was written {created}, at or after "
+                    f"Entry has no signingKeyId but was written {js_text(created_at)}, at or after "
                     f"the earliest signing key activation {keys.signing_since}."
                 ),
             )
@@ -1258,24 +1427,24 @@ def verify_entry(
             )
         return EntryVerificationResult(position=position, valid=True, signature="skipped")
 
-    if require_key_id and signing_key_id != require_key_id:
+    if require_key_id and not strict_eq(signing_key_id, require_key_id):
         return EntryVerificationResult(
             position=position,
             valid=False,
             code="CHAIN_KEY_POLICY_VIOLATION",
             detail=(
-                f"Entry signingKeyId={signing_key_id} does not match required "
+                f"Entry signingKeyId={js_text(signing_key_id)} does not match required "
                 f"key id {require_key_id}."
             ),
         )
 
-    registered = keys.entry(signing_key_id)
-    if registered is None:
+    registered = keys.entry(signing_key_id) if isinstance(signing_key_id, str) else None
+    if registered is None or not isinstance(signing_key_id, str):
         return EntryVerificationResult(
             position=position,
             valid=False,
             code="CHAIN_SIGNATURE_MISSING_KEY",
-            detail=f"No public key available for signingKeyId={signing_key_id}.",
+            detail=f"No public key available for signingKeyId={js_text(signing_key_id)}.",
         )
 
     key_source = registered.source
@@ -1358,16 +1527,25 @@ def verify_entry(
                 ),
             )
 
-    # Temporal key-validity (CHAIN_KEY_EXPIRED): runs only when BOTH the entry
-    # write time and a key window are present (dump path): and only here, AFTER
-    # the key has resolved, because it reads the key's window. Placing it earlier
-    # would mask a CHAIN_SIGNATURE_MISSING_KEY. Export entries carry no
-    # ``createdAt`` and the export registry has no windows → skipped. Mirrors
-    # verify-core chain.ts temporalKeyFailure.
-    created_at = entry.get("createdAt")
+    # Temporal key-validity, whenever the key carries a window, and only here,
+    # AFTER the key has resolved, because it reads the key's window. The engine
+    # times every entry, so an entry with no time the walk can read cannot be
+    # placed inside the window, and fails closed rather than skipping it.
+    # Mirrors verify-core chain.ts temporalKeyFailure.
     activated_at, retired_at = keys.window(signing_key_id)
-    if isinstance(created_at, str) and (activated_at or retired_at):
-        if applied_checks is not None: applied_checks.add("key_temporal")
+    if activated_at is not None or retired_at is not None:
+        if applied_checks is not None:
+            applied_checks.add("key_temporal")
+        if not isinstance(created_at, str) or instant_ms(created_at) is None:
+            return EntryVerificationResult(
+                position=position,
+                valid=False,
+                code="CHAIN_MALFORMED_ENTRY",
+                detail=(
+                    f"Entry has no parseable createdAt, so it cannot be placed inside key "
+                    f"{signing_key_id}'s window."
+                ),
+            )
         temporal = _temporal_key_failure(
             created_at, signing_key_id, activated_at, retired_at
         )
@@ -1708,29 +1886,23 @@ def check_agent_signature(
 
 
 def _check_oidc_actor(
-    actor_oidc: Mapping[str, Any],
+    actor_oidc: tuple[object, object, object],
     predicate: Mapping[str, Any] | None,
     position: int,
 ) -> EntryVerificationResult | None:
-    """Cross-check the denormalised actor OIDC columns against the identity
-    signed in ``predicate.on_behalf_of.oidc`` (the predicate is the already-
-    decoded, UNSTRIPPED in-toto Statement predicate). Returns a failure result
-    or ``None`` (pass). Mirrors verify-core chain.ts checkOidcActor: three
-    branches, with ``synthesized`` treated as a tri-state (True/False/None).
-    """
-    row_iss = actor_oidc.get("iss")
-    row_iss = row_iss if isinstance(row_iss, str) else None
-    row_sub = actor_oidc.get("sub")
-    row_sub = row_sub if isinstance(row_sub, str) else None
-    # Preserve the tri-state: True / False / None(undefined). The dump field is
-    # optional, so a missing key is None: matching the TS ``undefined`` branch.
-    # Never coerce to bool.
-    synthesized = actor_oidc.get("synthesized")
+    """Cross-check the denormalised actor OIDC columns ``(iss, sub,
+    synthesized)`` against the identity signed in ``predicate.on_behalf_of.oidc``
+    (the predicate is the already-decoded, UNSTRIPPED in-toto Statement
+    predicate). Returns a failure result or ``None`` (pass). Mirrors
+    verify-core chain.ts checkOidcActor: ``synthesized`` is true, false, null
+    or :data:`_UNDEFINED`, and a column holding anything but null counts as
+    populated, whatever its type."""
+    row_iss, row_sub, synthesized = actor_oidc
 
-    # synthesized=true (or legacy undefined with populated columns): the row
-    # columns MUST equal the identity signed in predicate.on_behalf_of.oidc.
+    # synthesized=true (or undefined with populated columns): the row columns
+    # MUST equal the identity signed in predicate.on_behalf_of.oidc.
     if synthesized is True or (
-        synthesized is None and (row_iss is not None or row_sub is not None)
+        synthesized is _UNDEFINED and (row_iss is not None or row_sub is not None)
     ):
         obo = predicate.get("on_behalf_of") if isinstance(predicate, Mapping) else None
         signed_oidc = cast("Mapping[str, Any]", obo).get("oidc") if isinstance(obo, Mapping) else None
@@ -1746,15 +1918,15 @@ def _check_oidc_actor(
             else None
         )
         signed_sub = signed_sub_raw if isinstance(signed_sub_raw, str) else None
-        if row_iss != signed_iss or row_sub != signed_sub:
+        if not strict_eq(row_iss, signed_iss) or not strict_eq(row_sub, signed_sub):
             return EntryVerificationResult(
                 position=position,
                 valid=False,
                 code="CHAIN_OIDC_ACTOR_MISMATCH",
                 detail=(
-                    f"Row actor OIDC iss/sub ({row_iss or 'null'}/{row_sub or 'null'}) "
+                    f"Row actor OIDC iss/sub ({js_or_null(row_iss)}/{js_or_null(row_sub)}) "
                     f"diverges from signed predicate.on_behalf_of.oidc "
-                    f"({signed_iss or 'null'}/{signed_sub or 'null'})."
+                    f"({js_or_null(signed_iss)}/{js_or_null(signed_sub)})."
                 ),
             )
         return None
@@ -1768,28 +1940,32 @@ def _check_oidc_actor(
             code="CHAIN_OIDC_ACTOR_MISMATCH",
             detail=(
                 f"actor_oidc_synthesized=false but iss/sub populated "
-                f"({row_iss or 'null'}/{row_sub or 'null'})."
+                f"({js_or_null(row_iss)}/{js_or_null(row_sub)})."
             ),
         )
     return None
 
 
 def _build_predicate_for_row(
-    record_id: Any, entry_type: str, payload: dict[str, Any]
+    record_id: object, entry_type: object, payload: object
 ) -> dict[str, Any] | None:
     """Re-project ``(record_id, entry_type, payload)`` into the predicate body
     using the same logic the engine applies at write time. Returns ``None`` when
-    the payload is structurally insufficient: the caller reads that as a binding
-    mismatch rather than crashing on attacker-zeroed payloads."""
-    if entry_type in _SCHEMA_EVENT_OUTCOMES:
-        return _build_schema_event_predicate(entry_type, payload)
+    the payload is structurally insufficient or is not an object at all (a
+    nulled or retyped column): the caller reads that as a binding mismatch
+    rather than crashing on attacker-zeroed payloads."""
+    if not isinstance(payload, Mapping):
+        return None
+    row_payload = dict(cast("Mapping[str, Any]", payload))
+    if isinstance(entry_type, str) and entry_type in _SCHEMA_EVENT_OUTCOMES:
+        return _build_schema_event_predicate(entry_type, row_payload)
     if not isinstance(record_id, str):
         return None
-    return _build_record_state_predicate(record_id, entry_type, payload)
+    return _build_record_state_predicate(record_id, entry_type, row_payload)
 
 
 def _build_record_state_predicate(
-    record_id: str, entry_type: str, payload: dict[str, Any]
+    record_id: str, entry_type: object, payload: dict[str, Any]
 ) -> dict[str, Any]:
     transition = _extract_state_transition(payload)
     passthrough = {k: v for k, v in payload.items() if k not in _RECORD_STATE_RESERVED_KEYS}
@@ -2218,13 +2394,20 @@ def written_while_signing(written_at: object, signing_since: object) -> bool:
     inside the era in which the install signs everything: at or after
     ``signing_since`` (see :func:`earliest_key_activation`). The rule for an
     unsigned checkpoint or read-log row, and the time half of the rule for an
-    unsigned chain entry. ``False`` when either time is absent or unparseable:
-    without both the verifier cannot place the row, and it stays what it was
-    before the rule existed. Mirrors verify-core ``writtenWhileSigning``."""
-    written = _instant_ms(written_at)
+    unsigned chain entry.
+
+    ``False`` when ``signing_since`` is absent or unparseable: with no instant
+    from which the install signs, nothing has to be signed. ``True`` when
+    ``signing_since`` is known and ``written_at`` is missing or unparseable:
+    the engine times every row, so a row with no readable time was edited, and
+    it cannot be placed before signing began. It fails closed rather than
+    reading as early history. Mirrors verify-core ``writtenWhileSigning``."""
     since = _instant_ms(signing_since)
-    if written is None or since is None:
+    if since is None:
         return False
+    written = _instant_ms(written_at)
+    if written is None:
+        return True
     return written >= since
 
 

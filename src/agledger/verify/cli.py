@@ -289,11 +289,11 @@ def _agent_signature_summary(
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
-def headline(verdict: str, kind: str) -> list[str]:
+def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None) -> list[str]:
     """The headline and the lines saying what it means, as ``@agledger/verify``
     prints them. ``unanchored`` gets its own words so that a run which found
     nothing wrong but anchored nothing can never be read, or grepped, as a
-    trusted PASS."""
+    trusted PASS; a pin that anchored no signature says so in its own."""
     if verdict == "trusted":
         return [
             f"[PASS] AGLedger offline verification ({kind})",
@@ -305,6 +305,13 @@ def headline(verdict: str, kind: str) -> list[str]:
             f"[FAIL] AGLedger offline verification ({kind})",
             "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
             "  Each finding is listed below.",
+        ]
+    if key_trust is not None and key_trust.status == "no_anchored_signature":
+        return [
+            f"[VERIFIED, NOT ANCHORED] AGLedger offline verification ({kind})",
+            "  Nothing failed, but this is NOT a trusted verdict: the --trust-anchor was walked, but no",
+            "  signature here verified under a key it anchors. An entry written before the install",
+            "  began signing carries no signature, and proves nothing about who wrote it.",
         ]
     return [
         f"[VERIFIED, NOT ANCHORED] AGLedger offline verification ({kind})",
@@ -320,7 +327,7 @@ def export_verdict(result: VerifyExportResult) -> str:
     """The verdict of an /audit-export result, by the same rule as a dump's."""
     if not result.valid:
         return "failed"
-    return "unanchored" if result.key_trust.status == "no_anchor" else "trusted"
+    return "trusted" if result.key_trust.status == "walked" else "unanchored"
 
 
 def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
@@ -333,6 +340,7 @@ def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
             f"  key anchoring     : walked from {', '.join(key_trust.anchors)} ({key_trust.order} order); "
             f"anchored {len(key_trust.anchored_key_ids)}, unanchored {len(key_trust.unanchored_key_ids)}, "
             f"undecided {len(key_trust.undecided_key_ids)}"
+            + ("; NO signature verified under an anchored key" if key_trust.status == "no_anchored_signature" else "")
         )
     ]
     if key_trust.anchored_from is not None:
@@ -349,7 +357,7 @@ def _looks_like_audit_export(value: Any) -> bool:
 
 
 def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
-    lines: list[str] = [*headline(report.verdict, "dump"), ""]
+    lines: list[str] = [*headline(report.verdict, "dump", report.key_trust), ""]
     lines.extend(_key_trust_lines(report.key_trust))
     lines.append("")
     lines.append("audit_vault chain")
@@ -420,7 +428,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
 
 
 def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
-    lines: list[str] = [*headline(export_verdict(result), "audit-export"), ""]
+    lines: list[str] = [*headline(export_verdict(result), "audit-export", result.key_trust), ""]
     lines.append(f"  record            : {result.record_id}")
     lines.append(
         f"  entries           : {result.verified_entries}/{result.total_entries} verified"

@@ -123,8 +123,11 @@ _SUGGESTIONS: dict[str, str] = {
         "tampered with."
     ),
     "CHAIN_MALFORMED_ENTRY": (
-        "An entry is missing a required field (coseSign1 or payloadHash). The export/dump"
-        " is incomplete or corrupt. Regenerate it."
+        "An entry is missing a field the engine writes on every entry (coseSign1, payloadHash, "
+        "or a parseable createdAt where a key window or the start of signing needs one), or "
+        "carries it as another type. The export/dump is incomplete or was edited, and an entry "
+        "the verifier cannot place is never read as early unsigned history. Regenerate the "
+        "export/dump from the operator and re-run."
     ),
     "CHAIN_COSE_DECODE_FAILED": (
         "The COSE_Sign1 envelope did not decode as a tagged 4-element structure. The "

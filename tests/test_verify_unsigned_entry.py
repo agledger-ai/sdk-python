@@ -292,8 +292,27 @@ def test_rule2_prefers_the_callers_window_for_a_key_over_the_exports() -> None:
     assert result.valid is True
 
 
-def test_rule2_does_not_apply_to_an_entry_that_carries_no_created_at() -> None:
+@pytest.mark.parametrize("blank", ["drop", None, "garbage"])
+def test_an_unsigned_entry_with_no_created_at_fails_closed(blank: str | None) -> None:
     exp = _valid_all_nulled()
+    for e in exp["entries"]:
+        if blank == "drop":
+            del e["createdAt"]
+        else:
+            e["createdAt"] = blank
+    result = verify_export(exp)
+    assert result.valid is False
+    assert result.broken_at is not None
+    assert (result.broken_at.position, result.broken_at.code) == (1, "CHAIN_MALFORMED_ENTRY")
+    assert result.broken_at.detail == (
+        "Entry has no signingKeyId and no parseable createdAt, so it cannot be placed before "
+        f"the earliest signing key activation {_real_window()[1]['activatedAt']}."
+    )
+
+
+def test_with_no_instant_from_which_the_install_signs_an_unsigned_entry_needs_no_created_at() -> None:
+    exp = _valid_all_nulled()
+    del exp["exportMetadata"]["signingKeyWindows"]
     for e in exp["entries"]:
         del e["createdAt"]
     assert verify_export(exp).valid is True
@@ -452,12 +471,14 @@ def test_earliest_key_activation_takes_the_minimum_and_ignores_unusable_keys() -
     assert earliest_key_activation([{"activated_at": retired}]) == retired
 
 
-def test_written_while_signing_is_inclusive_and_needs_both_times() -> None:
+def test_written_while_signing_is_inclusive_and_fails_closed_on_a_row_with_no_time() -> None:
     _, window = _real_window()
     since = window["activatedAt"]
     assert written_while_signing(since, since) is True
     assert written_while_signing(_shift_ms(since, 1), since) is True
     assert written_while_signing(_shift_ms(since, -1), since) is False
     assert written_while_signing(since, None) is False
-    assert written_while_signing(None, since) is False
-    assert written_while_signing("garbage", since) is False
+    assert written_while_signing(since, "garbage") is False
+    # Once signing began, a row with no readable time fails closed.
+    for blank in (None, "", "garbage", 7):
+        assert written_while_signing(blank, since) is True
