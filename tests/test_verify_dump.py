@@ -363,10 +363,11 @@ def test_a_null_envelope_on_a_checkpoint_leaf_or_tree_head_is_a_finding_not_a_cr
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
-def test_signing_key_statements_given_as_a_list_are_read_by_index_as_verify_core_reads_them() -> None:
+@pytest.mark.parametrize("value", [[], [{"kind": "genesis", "cose": []}], "statements"])
+def test_signing_key_statements_not_keyed_by_key_id_are_refused_as_verify_core_refuses_them(value: object) -> None:
     from agledger.verify import verify_export
 
     doc = json.loads((_CONFORMANCE_DIR / "export" / "valid-es256.json").read_text())
-    doc["exportMetadata"]["signingKeyStatements"] = []
-    result = verify_export(doc, trust_anchors=[doc["exportMetadata"]["anchoredFrom"]])
-    assert result.key_trust.status == "walked"
+    doc["exportMetadata"]["signingKeyStatements"] = value
+    with pytest.raises(TypeError, match=r"^signingKeyStatements must be an object keyed by key id\.$"):
+        verify_export(doc, trust_anchors=[doc["exportMetadata"]["anchoredFrom"]])

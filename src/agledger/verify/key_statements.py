@@ -1442,14 +1442,9 @@ def key_statements_from_export(signing_key_statements: Mapping[str, Any] | None)
     if signing_key_statements is None:
         return []
     value = cast(object, signing_key_statements)
-    # verify-core reads any object here the way Object.entries does, so a list
-    # is keyed by index rather than refused.
-    if isinstance(value, (list, tuple)):
-        pairs = [(str(i), v) for i, v in enumerate(cast("Sequence[object]", value))]
-    elif isinstance(value, Mapping):
-        pairs = [(str(k), v) for k, v in cast("Mapping[object, object]", value).items()]
-    else:
-        raise TypeError("signingKeyStatements must be a mapping keyed by key id.")
+    if not isinstance(value, Mapping):
+        raise TypeError("signingKeyStatements must be an object keyed by key id.")
+    pairs = [(str(k), v) for k, v in cast("Mapping[object, object]", value).items()]
     return _statements_from_map(pairs, "signingKeyStatements")
 
 
