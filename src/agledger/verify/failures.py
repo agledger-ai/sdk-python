@@ -164,9 +164,10 @@ _SUGGESTIONS: dict[str, str] = {
         "make it trusted: pin a trust anchor (trustAnchors) for that."
     ),
     "CHAIN_KEY_EXPIRED": (
-        "The entry was written AFTER its signing key was retired. Possible use of a "
-        "compromised retired key: check the key rotation and retention record for that "
-        "key id."
+        "The entry was written AFTER its signing key was retired, or after the instant "
+        "distrustedKeys (VAULT_DISTRUSTED_KEYS on the Server) gives for that key; the "
+        "detail says which. Possible use of a compromised key: check the key rotation "
+        "and retention record for that key id."
     ),
     "CHAIN_KEY_NOT_YET_ACTIVE": (
         "The entry was written BEFORE its signing key was activated. Not a rotation "

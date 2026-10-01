@@ -23,6 +23,7 @@ from agledger.verify.key_statements import (
     parse_distrusted_keys,
     parse_trust_anchors,
 )
+from agledger.verify.verify_export import KeyCache, RegisteredKey, apply_key_trust
 
 from .key_statement_helpers import (
     CTY,
@@ -456,7 +457,11 @@ def test_distrusted_with_an_instant_ends_its_window_there_and_with_none_trusts_i
     cut = walk([row(n, T0)], statements, [c.digest], [DistrustedKey(n.digest, T1)])
     assert anchored_kids(cut) == sorted([c.kid, n.kid])
     entry = cut.by_digest[n.digest]
-    assert (entry.activated_at, entry.retired_at) == (T0, T1)
+    # The cutoff ends the window without retiring the key.
+    assert (entry.activated_at, entry.retired_at, entry.distrust_cutoff) == (T0, None, T1)
+    applied = apply_key_trust(KeyCache({n.kid: RegisteredKey(n.public_key, "embedded")}), cut).entry(n.kid)
+    assert applied is not None
+    assert (applied.trust, applied.activated_at, applied.retired_at, applied.distrust_cutoff) == ("anchored", T0, None, T1)
     assert codes(cut) == [("KEY_STATEMENT_INVALID", succ_m.id)]
     assert anchored_kids(walk([], statements, [c.digest], [DistrustedKey(n.digest, None)])) == [c.kid]
 
@@ -485,7 +490,7 @@ def test_distrusted_names_the_key_a_dropped_closure_reopens() -> None:
     )
     both = walk([], statements, [b.digest], [DistrustedKey(a.digest, leak_at), DistrustedKey(p.digest, leak_at)])
     assert q.digest not in both.trusted
-    assert both.by_digest[p.digest].retired_at == leak_at
+    assert (both.by_digest[p.digest].retired_at, both.by_digest[p.digest].distrust_cutoff) == (None, leak_at)
 
 
 def test_distrusted_does_not_blame_an_honest_closure_when_its_subjects_leaked_half_redates_it_later() -> None:
@@ -1019,8 +1024,10 @@ def _widenings(tag: str, attacked: KeyTrust, base: KeyTrust) -> list[str]:
         b = base.by_digest[d]
         if b.activated_at is not None and (a.activated_at is None or a.activated_at < b.activated_at):
             out.append(f"{tag}: {d[:8]} activates at {a.activated_at}, before {b.activated_at}")
-        if b.retired_at is not None and (a.retired_at is None or a.retired_at > b.retired_at):
-            out.append(f"{tag}: {d[:8]} retires at {a.retired_at}, past {b.retired_at}")
+        a_ends = a.distrust_cutoff or a.retired_at
+        b_ends = b.distrust_cutoff or b.retired_at
+        if b_ends is not None and (a_ends is None or a_ends > b_ends):
+            out.append(f"{tag}: {d[:8]} retires at {a_ends}, past {b_ends}")
     return out
 
 

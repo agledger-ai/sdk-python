@@ -219,6 +219,11 @@ class KeyTrustEntry:
     """The signed lower edge, or ``None`` when no counting statement signs one."""
     retired_at: str | None
     """The signed upper edge, or ``None`` when no counting closure signs one."""
+    distrust_cutoff: str | None = None
+    """The instant from which ``distrusted_keys`` voids what this key signs,
+    when it ends the key's window before its signed retirement, else ``None``.
+    The key is not retired there: entries written after it fail
+    CHAIN_KEY_EXPIRED as past the distrust cutoff, not as past a retirement."""
 
 
 @dataclass(frozen=True)
@@ -1255,15 +1260,13 @@ def compute_key_trust(
         entry_for(spki_sha256(key.public_key))
     for d in undecided:
         entry_for(d)
-    cut_by_distrust: set[str] = set()
     for d in trusted:
         entry = entry_for(d)
         entry.activated_at = activated_at.get(d)
         entry.retired_at = closed_window.get(d)
         cutoff = cutoffs.get(d)
         if cutoff is not None and (entry.retired_at is None or cutoff[1] < entry.retired_at):
-            entry.retired_at = cutoff[1]
-            cut_by_distrust.add(d)
+            entry.distrust_cutoff = cutoff[1]
 
     # Findings on statements.
     def finding(code: KeyRegistryFindingCode, s: _Statement, detail: str) -> None:
@@ -1296,6 +1299,7 @@ def compute_key_trust(
             cutoff = cutoffs.get(e)
             closed = s.payload.subject.retired_at
             now = by_digest.get(s.subject)
+            ends = (now.distrust_cutoff or now.retired_at) if now is not None else None
             # Dropping a closure the distrusted key signed reopens its subject.
             reopened = (
                 f" It retired {s.payload.subject.kid} at {closed}, and no closure that counts retires it that "
@@ -1305,7 +1309,7 @@ def compute_key_trust(
                 and closed is not None
                 and now is not None
                 and now.trusted
-                and (now.retired_at is None or now.retired_at > closed)
+                and (ends is None or ends > closed)
                 else ""
             )
             finding(
@@ -1372,7 +1376,7 @@ def compute_key_trust(
                     f"activatedAt {key.activated_at} differs from the signed {entry.activated_at}",
                 )
             )
-        if entry.spki_sha256 in cut_by_distrust:
+        if entry.distrust_cutoff is not None:
             continue
         if key.status == "retired":
             if entry.retired_at is None:
