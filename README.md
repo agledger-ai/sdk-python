@@ -459,6 +459,7 @@ from agledger.verify import org_read_leaf_hash, org_read_merkle_root, verify_org
 # leaf_hash = hex(sha256(0x00 || cose_sign1)); a checkpoint's root is the RFC 9162 root over them.
 leaf = org_read_leaf_hash(b"cose-sign1-bytes")
 root = org_read_merkle_root([leaf])
+assert root is not None  # None only for a leaf hash that is not 64 lowercase hex characters
 # A one-leaf tree has an empty path.
 print(root == leaf, verify_org_read_inclusion(leaf, 0, 1, [], root))  # True True
 ```
@@ -594,7 +595,7 @@ checkpoints = admin.audit.vault_checkpoints.list(record_id=record.id)
 
 ## Licensing
 
-Running AGLedger in production requires a license. Get a Developer Edition License Key, or read the terms at https://agledger.ai/license and the editions at https://agledger.ai/pricing.
+Running AGLedger in production requires a license. Get a [Developer Edition License Key](https://agledger.ai/register/), or read the terms at https://agledger.ai/license and the editions at https://agledger.ai/pricing.
 
 ## SDK License
 
