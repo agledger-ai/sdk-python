@@ -477,7 +477,6 @@ PIN=sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e
 agledger-verify ./vault-dump-dir --trust-anchor "$PIN"      # full-vault dump
 agledger-verify audit-export.json --trust-anchor "$PIN"     # single record export
 agledger-verify ./vault-dump-dir -f json      # machine-readable report (unanchored)
-agledger-verify ./vault-dump-dir --quiet      # exit code only
 agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check agent signatures
 agledger-verify audit-export.json --keys verification-keys.json --require-supplied-keys
 ```
@@ -509,15 +508,21 @@ instant>`) passes the operator's `VAULT_DISTRUSTED_KEYS` entries. A pass
 anchored to a pin is `[PASS]`. Without a pin the headline reads `[VERIFIED,
 NOT ANCHORED]` and says plainly that the pass is not a trusted verdict: anyone
 who re-signs the chain with a key of their own, and writes that key into the
-registry, also passes. A failure is `[FAIL]`.
+registry, also passes. A pin that anchors no signature in the target (every
+entry is unsigned history from before the install began signing) reads
+`[VERIFIED, NOT ANCHORED]` too, saying so. A failure is `[FAIL]`.
 
 The exit code is `0` for a pass, anchored or not, `1` for a failed
-verification and `2` when no verdict was reached: a malformed pin or
-distrusted key, a key named twice, `--distrusted-key` without
-`--trust-anchor`, a target that does not exist, or a file that does not parse.
-The flags, these refusals and their messages, the headlines and the exit codes
-are the same as `@agledger/verify`'s `agledger-verify` and `agledger
-verify`'s.
+verification and `2` when no verdict was reached: an unknown flag, a flag
+missing its value, a malformed pin or distrusted key, a key named twice,
+`--distrusted-key` without `--trust-anchor`, a key-policy flag on a dump
+directory, a target that does not exist, or a file that cannot be read or does
+not parse. The flags, these refusals and their messages, `--help`, the
+headlines and the exit codes are the same as `@agledger/verify`'s
+`agledger-verify`. Where a message quotes
+the JSON parser or the library's own `TypeError` about a key file, that part
+is in Python's words, and the help leaves out `@agledger/verify`'s note on
+streaming `audit_vault.ndjson`, which this verifier reads whole.
 
 `--keys` supplies keys for an `/audit-export` file: save `GET
 /v1/verification-keys` and pass it (the `{keyId: ...}` map, a `[{keyId,

@@ -142,13 +142,6 @@ def test_cli_dump_json_format(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
-def test_cli_quiet_suppresses_stdout(capsys: pytest.CaptureFixture[str]) -> None:
-    code = run_cli([str(_VALID_DUMP), "--quiet"])
-    out = capsys.readouterr().out
-    assert code == 0
-    assert out == ""
-
-
 def test_cli_export_file_detected(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # A minimal export with an unsupported version forces a deterministic FAIL
     # through the export path: the point is that the file branch fired.

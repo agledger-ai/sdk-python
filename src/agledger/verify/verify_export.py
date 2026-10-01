@@ -1757,7 +1757,7 @@ def build_agent_key_registry(jwks: object) -> dict[str, bytes]:
         if thumbprint is None:
             raise TypeError(
                 f"agent_keys[{i}] is not an Ed25519 public-key JWK. Expected "
-                '{"kty": "OKP", "crv": "Ed25519", "x": <base64url of 32 bytes>}, the '
+                '{ kty: "OKP", crv: "Ed25519", x: <base64url of 32 bytes> }, the '
                 "publicKeyJwk sent at cert exchange (also the cnf.jwk claim inside the certJws)."
             )
         x = cast("Mapping[str, str]", jwk)["x"]
