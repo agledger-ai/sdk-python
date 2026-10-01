@@ -143,7 +143,12 @@ def test_the_key_policy_flags_are_refused_on_a_dump(
     nothing to override. Accepting the flag silently would report an audit that
     honoured a policy it never applied."""
     assert run_cli([str(_DUMP), "--require-supplied-keys"]) == _EXIT_USAGE
-    assert "audit-export files only" in capsys.readouterr().err
+    # @agledger/verify's refusal, word for word.
+    assert capsys.readouterr().err == (
+        "--keys / --require-key-id / --require-supplied-keys apply to /audit-export files only; a dump "
+        "directory carries its own signed key history (vault_signing_keys.ndjson and "
+        "vault_key_statements.ndjson). Pin it with --trust-anchor.\n"
+    )
 
 
 def test_a_malformed_keys_file_is_a_usage_error_not_a_verdict(
@@ -160,10 +165,10 @@ def test_a_malformed_keys_file_is_a_usage_error_not_a_verdict(
 def test_a_missing_keys_file_is_a_usage_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert (
-        run_cli([str(_EXPORT), "--keys", str(tmp_path / "absent.json")]) == _EXIT_USAGE
-    )
-    assert "Cannot read --keys file" in capsys.readouterr().err
+    absent = tmp_path / "absent.json"
+    assert run_cli([str(_EXPORT), "--keys", str(absent)]) == _EXIT_USAGE
+    # Node's words, as @agledger/verify prints them.
+    assert capsys.readouterr().err == f"ENOENT: no such file or directory, open '{absent}'\n"
 
 
 # --- the flag contract shared with @agledger/verify and `agledger verify` ---
@@ -207,10 +212,15 @@ def test_a_refused_input_exits_2_with_the_shared_message(
         assert json.loads(out)["error"]["message"].startswith(message)
 
 
-def test_a_prefix_of_a_flag_is_not_that_flag() -> None:
-    with pytest.raises(SystemExit) as exc:
-        run_cli([str(_EXPORT), "--trust", _PIN])
-    assert exc.value.code == _EXIT_USAGE
+def test_a_prefix_of_a_flag_is_not_that_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_cli([str(_EXPORT), "--trust", _PIN]) == _EXIT_USAGE
+    assert capsys.readouterr().err.startswith("Unknown flag: --trust\n\nagledger-verify: offline verifier")
+
+
+@pytest.mark.parametrize("flag", ["-q", "--quiet"])
+def test_quiet_is_refused_as_agledger_verify_refuses_it(flag: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_cli([str(_EXPORT), flag]) == _EXIT_USAGE
+    assert capsys.readouterr().err.startswith(f"Unknown flag: {flag}\n\n")
 
 
 @pytest.mark.parametrize(

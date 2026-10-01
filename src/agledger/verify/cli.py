@@ -17,23 +17,22 @@ trusted verdict, because a key written into the Server's database alone would
 pass too.
 
 Exit codes: 0 pass (trusted, or unanchored when no ``--trust-anchor`` was
-given), 1 verification failure, 2 usage / IO error, so a missing file or bad
-argument is never mistaken for a tamper finding. The flags, their refusals and
-messages, the headlines and the exit codes are ``@agledger/verify``'s. No
-network calls are made.
-
-Honors ``NO_COLOR`` per no-color.org (the output is already uncolored, so this
-is a no-op today: declared for forward compatibility) and ``--quiet`` (exit
-code only, no stdout).
+given or it anchored no signature), 1 verification failure, 2 usage / IO
+error, so a missing file or bad argument is never mistaken for a tamper
+finding. The flags, the refusals and their messages, the headlines and the
+exit codes are ``@agledger/verify``'s; where a message quotes the JSON parser
+or the library's own ``TypeError``, that part is Python's. No network calls
+are made.
 """
 
 from __future__ import annotations
 
-import argparse
+import errno
 import json
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from agledger.verify.failures import suggestion
@@ -59,116 +58,233 @@ _EXIT_VERIFICATION_FAILED = 1
 _EXIT_USAGE = 2
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="agledger-verify",
-        # A prefix of a flag is not that flag: @agledger/verify takes whole
-        # names only, and so does this CLI.
-        allow_abbrev=False,
-        description=(
-            "Offline verifier for AGLedger audit chains (hash chain + Ed25519 over "
-            "COSE_Sign1). No network calls."
-        ),
-        epilog=(
-            "TARGET is auto-detected: a directory is a full-vault NDJSON dump "
-            "(audit_vault.ndjson + the five companion files); a file is a single "
-            "/audit-export JSON document. Exit codes: 0 pass (trusted, or unanchored "
-            "without --trust-anchor), 1 verification failure, 2 usage/IO error."
-        ),
-    )
-    parser.add_argument("target", help="dump directory or /audit-export JSON file")
-    parser.add_argument(
-        "-f",
-        "--report-format",
-        choices=("text", "json"),
-        default="text",
-        help="output format (default: text)",
-    )
-    parser.add_argument(
-        "--agent-keys",
-        metavar="FILE",
-        help=(
-            "JSON file holding the Ed25519 public keys of agent certs: a JWK, a list "
-            "of JWKs, or a {keys:[...]} JWK Set, where an entry may wrap its key as "
-            "{publicKeyJwk:{...}}. Each is the publicKeyJwk an agent sent at cert "
-            "exchange (also the cnf.jwk claim in its certJws). An entry whose sealed "
-            "agent signature names one of them by thumbprint has that signature "
-            "re-verified offline, and fails CHAIN_AGENT_SIGNATURE_INVALID if it does "
-            "not verify. Applies to a dump directory (added to the cert keys the dump "
-            "itself signs) and to an /audit-export file. A dump not scoped to one org "
-            "carries the cert keys: each EPHEMERAL_CERT_ISSUED entry on the platform-ops "
-            "chain signs its cert's publicKeyJwk (engines from 1.8.0 on), used once that "
-            "chain verifies clean. An org-scoped dump and an /audit-export carry none, so "
-            "for those pass this flag. Where no key is at hand the check reports 'not "
-            "checked' and changes no verdict."
-        ),
-    )
-    parser.add_argument(
-        "--trust-anchor",
-        metavar="DIGEST",
-        action="append",
-        default=None,
-        help=(
-            "SPKI digest (sha256:<64 hex>) of a vault key you hold or took out of band: "
-            "the installer prints the first key's, and the Server's signing-key-digest.js "
-            "derives one from any key. Repeat it once per key. "
-            "The signed key statements the target carries are walked from it, and "
-            "anything signed by a key the walk does not reach fails "
-            "(CHAIN_SIGNING_KEY_UNANCHORED and the checkpoint and read-log twins). An "
-            "export's anchoredFrom is the export's own word and never a pin. Without it "
-            "a pass is UNANCHORED, not trusted."
-        ),
-    )
-    parser.add_argument(
-        "--distrusted-key",
-        metavar="ENTRY",
-        action="append",
-        default=None,
-        help=(
-            "A key the operator distrusts, in the Server's VAULT_DISTRUSTED_KEYS form: "
-            "sha256:<64 hex>, optionally @<RFC 3339 instant>. What it signed from the "
-            "instant on (with none, from the retirement a trusted key signed for it) "
-            "counts for nothing in the walk. Repeat it once per key. Requires "
-            "--trust-anchor."
-        ),
-    )
-    parser.add_argument(
-        "-k",
-        "--keys",
-        metavar="FILE",
-        help=(
-            "JSON file holding public keys you supply, for an /audit-export file. "
-            "Accepts a {keyId: SPKI-DER-base64} map, a [{keyId, publicKey, ...}] list, "
-            "or the raw GET /v1/verification-keys response envelope (the .data array is "
-            "unwrapped automatically, and each key's statements are walked with the "
-            "export's own). Merged over any keys embedded in the export. Where a key "
-            "came from does not make it trusted; --trust-anchor does."
-        ),
-    )
-    parser.add_argument(
-        "--require-key-id",
-        metavar="ID",
-        help=(
-            "Require every entry to reference this keyId, rejecting an otherwise-valid "
-            "export signed by a retired or unexpected key "
-            "(else CHAIN_KEY_POLICY_VIOLATION)."
-        ),
-    )
-    parser.add_argument(
-        "--require-supplied-keys",
-        action="store_true",
-        help=(
-            "Refuse keys embedded in the export: an entry whose only key is the "
-            "export's own fails CHAIN_KEY_POLICY_VIOLATION. Supply keys via --keys."
-        ),
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="suppress stdout; communicate the result through the exit code only",
-    )
-    return parser
+@dataclass
+class ParsedArgs:
+    """The parsed command line, as ``@agledger/verify``'s ``parseArgs`` gives it."""
+
+    target: str | None = None
+    report_format: str = "text"
+    show_help: bool = False
+    keys: str | None = None
+    require_key_id: str | None = None
+    require_supplied_keys: bool = False
+    agent_keys: str | None = None
+    trust_anchors: list[str] = field(default_factory=list[str])
+    """``--trust-anchor`` values, in the order given."""
+    distrusted_keys: list[str] = field(default_factory=list[str])
+    """``--distrusted-key`` values, one entry each, in the order given."""
+
+
+class UsageError(Exception):
+    """A command line ``parse_args`` refuses; the message is the CLI's."""
+
+
+_PLURAL_DISTRUSTED = (
+    "--distrusted-keys is now --distrusted-key, given once per key: "
+    "--distrusted-key sha256:<hex>[@<RFC 3339 instant>]."
+)
+
+
+def parse_args(argv: Sequence[str]) -> ParsedArgs:
+    """Parse the command line exactly as ``@agledger/verify`` does: whole flag
+    names only, a flag's value is the next argument unless that starts with
+    ``-``, and every refusal carries ``@agledger/verify``'s message. Raises
+    :class:`UsageError`."""
+    out = ParsedArgs()
+
+    def take_value(flag: str, nxt: str | None) -> str:
+        if nxt is None or nxt.startswith("-"):
+            raise UsageError(f"{flag} requires a value (got {nxt if nxt is not None else 'nothing'})")
+        return nxt
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        nxt = argv[i + 1] if i + 1 < len(argv) else None
+        if not arg:
+            pass
+        elif arg in ("--help", "-h"):
+            out.show_help = True
+        elif arg in ("--report-format", "-f"):
+            if nxt not in ("json", "text"):
+                raise UsageError(f'--report-format must be "json" or "text" (got {nxt if nxt is not None else "nothing"})')
+            out.report_format = nxt
+            i += 1
+        elif arg.startswith("--report-format="):
+            value = arg[len("--report-format=") :]
+            if value not in ("json", "text"):
+                raise UsageError(f'--report-format must be "json" or "text" (got {value})')
+            out.report_format = value
+        elif arg in ("--keys", "-k"):
+            out.keys = take_value("--keys", nxt)
+            i += 1
+        elif arg.startswith("--keys="):
+            out.keys = arg[len("--keys=") :]
+            if not out.keys:
+                raise UsageError("--keys requires a value")
+        elif arg == "--require-key-id":
+            out.require_key_id = take_value("--require-key-id", nxt)
+            i += 1
+        elif arg.startswith("--require-key-id="):
+            out.require_key_id = arg[len("--require-key-id=") :]
+            if not out.require_key_id:
+                raise UsageError("--require-key-id requires a value")
+        elif arg == "--agent-keys":
+            out.agent_keys = take_value("--agent-keys", nxt)
+            i += 1
+        elif arg.startswith("--agent-keys="):
+            out.agent_keys = arg[len("--agent-keys=") :]
+            if not out.agent_keys:
+                raise UsageError("--agent-keys requires a value")
+        elif arg == "--trust-anchor":
+            out.trust_anchors.append(take_value("--trust-anchor", nxt))
+            i += 1
+        elif arg.startswith("--trust-anchor="):
+            value = arg[len("--trust-anchor=") :]
+            if not value:
+                raise UsageError("--trust-anchor requires a value")
+            out.trust_anchors.append(value)
+        elif arg == "--distrusted-key":
+            out.distrusted_keys.append(take_value("--distrusted-key", nxt))
+            i += 1
+        elif arg.startswith("--distrusted-key="):
+            value = arg[len("--distrusted-key=") :]
+            if not value:
+                raise UsageError("--distrusted-key requires a value")
+            out.distrusted_keys.append(value)
+        elif arg == "--distrusted-keys" or arg.startswith("--distrusted-keys="):
+            raise UsageError(_PLURAL_DISTRUSTED)
+        elif arg == "--require-supplied-keys":
+            out.require_supplied_keys = True
+        elif arg == "--require-out-of-band-keys":
+            raise UsageError(
+                "--require-out-of-band-keys is now --require-supplied-keys: a key fetched from the "
+                "Server is supplied, not independent of it. Pin --trust-anchor for that."
+            )
+        elif arg.startswith("-"):
+            raise UsageError(f"Unknown flag: {arg}")
+        elif out.target is None:
+            out.target = arg
+        else:
+            raise UsageError(f"Unexpected positional argument: {arg}")
+        i += 1
+    return out
+
+
+HELP_TEXT = """agledger-verify: offline verifier for AGLedger audit chains
+
+Usage:
+  agledger-verify <target> [--trust-anchor sha256:<hex>]...
+                  [--distrusted-key sha256:<hex>[@<instant>]]...
+                  [--agent-keys <file>]
+                  [--report-format text|json]
+                  [--keys <file>] [--require-key-id <id>]
+                  [--require-supplied-keys]
+
+<target> is auto-detected:
+  - a directory: a full-vault NDJSON dump (audit_vault.ndjson + the five
+    companion files) verified with the full-installation dump verifier.
+  - a file: a single /audit-export JSON document (object with exportMetadata +
+    entries) verified with the per-record export verifier.
+
+Options:
+  --trust-anchor              SPKI digest of a vault key you hold or took out
+                              of band, as sha256:<64 hex>. Repeatable. The
+                              installer prints the first key's digest, and the
+                              Server's signing-key-digest.js derives one from
+                              any key. The signed key statements are walked
+                              from the pins, and an entry, checkpoint or
+                              read-log row signed by a key they do not reach
+                              fails (CHAIN_SIGNING_KEY_UNANCHORED and its
+                              checkpoint and read-log counterparts). Applies
+                              to a dump directory and to an /audit-export file.
+  --distrusted-key            A key the operator distrusts, as in the Server's
+                              VAULT_DISTRUSTED_KEYS: sha256:<64 hex>,
+                              optionally @<RFC 3339 instant>. Repeat it once
+                              per key. What such a key stored from the
+                              instant on (or, with none, from its retirement)
+                              counts for nothing in the walk. Requires
+                              --trust-anchor.
+  --report-format, -f         Output format. Default: text.
+  --agent-keys                Path to a JSON file holding the Ed25519 public
+                              keys of agent certs: a JWK, a list of JWKs, or a
+                              {keys:[...]} JWK Set. An entry may wrap its key
+                              as {publicKeyJwk:{...}}. Each is the
+                              publicKeyJwk an agent sent at cert exchange (also
+                              the cnf.jwk claim in its certJws). An entry whose
+                              sealed agent signature names one of them by
+                              thumbprint has that signature re-verified
+                              offline, and fails CHAIN_AGENT_SIGNATURE_INVALID
+                              if it does not verify. Applies to a dump
+                              directory (added to the cert keys the dump
+                              itself signs) and to an /audit-export file.
+  --keys, -k                  Path to a JSON file holding supplied public
+                              keys, for an /audit-export file. Accepts a
+                              {keyId: SPKI-DER-base64} map, a
+                              [{keyId, publicKey, ...}] list, or the raw
+                              GET /v1/verification-keys response envelope
+                              (the .data array is unwrapped automatically, and
+                              the key statements it carries are walked with
+                              the export's). Merged over any keys embedded in
+                              the export.
+  --require-key-id            Require every entry to reference this keyId.
+                              Rejects otherwise-valid exports signed by a
+                              retired or unexpected key.
+  --require-supplied-keys     Refuse keys embedded in the export: an entry
+                              whose only key is the export's own fails. This
+                              says where a key came from, not that it is
+                              trusted; pin --trust-anchor for that.
+  --help, -h                  Show this help.
+
+Without --trust-anchor no key is anchored. Every key is taken from the
+artifact itself (the dump's vault_signing_keys, the export's embedded keys, or
+keys fetched from the same Server), and a key written into the Server's
+database alone would verify. Such a run still finds tampering and still exits
+0 when nothing fails, but it reports VERIFIED, NOT ANCHORED (JSON verdict
+"unanchored"), never a trusted verdict. Ask the operator for the digest of a
+vault key: the installer prints it, and signing-key-digest.js derives it.
+
+The key-policy flags (--keys, --require-key-id, --require-supplied-keys)
+apply to /audit-export files only; a dump directory carries its own signed key
+history and rejects them.
+
+A dump not scoped to one org carries the cert keys itself: each
+EPHEMERAL_CERT_ISSUED entry on the platform-ops chain signs its cert's
+publicKeyJwk (engines from 1.8.0 on), and a key is used once that chain has
+verified clean. An org-scoped dump leaves the platform-ops chain out, and a
+per-record /audit-export carries no cert keys, so for those pass --agent-keys.
+Where no key is at hand the agent-signature check reports "not checked" and
+changes no verdict.
+
+A dump directory must contain:
+  audit_vault.ndjson
+  vault_checkpoints.ndjson
+  vault_signing_keys.ndjson
+  vault_key_statements.ndjson
+  org_admin_reads.ndjson
+  org_admin_reads_checkpoints.ndjson
+
+Exit codes:
+  0  verified, no failures (read the verdict: trusted with a --trust-anchor,
+     unanchored without one)
+  1  verification FAILED (the chain, log, or key statements do not hold up)
+  2  could NOT verify (input missing, unreadable, or malformed; no verdict)
+
+Codes 1 and 2 mean opposite things. Treat only 1 as evidence of tampering.
+"""
+"""The ``--help`` text: ``@agledger/verify``'s, less its line on streaming
+``audit_vault.ndjson``, which this verifier reads whole."""
+
+
+def _fs_message(err: OSError, path: str) -> str:
+    """A file that cannot be read, in the words Node's ``readFileSync`` uses, so
+    the message reads as ``@agledger/verify``'s."""
+    code = errno.errorcode.get(err.errno) if err.errno is not None else None
+    if code == "EISDIR":
+        return "EISDIR: illegal operation on a directory, read"
+    if code is None or not err.strerror:
+        return str(err)
+    return f"{code}: {err.strerror[:1].lower()}{err.strerror[1:]}, open '{path}'"
 
 
 _AGENT_KEYS_SHAPE = (
@@ -188,7 +304,9 @@ def load_agent_keys(path: str) -> list[dict[str, Any]] | str:
     try:
         with open(path, encoding="utf-8") as fh:
             raw: Any = json.load(fh)
-    except (OSError, ValueError) as err:
+    except OSError as err:
+        return f"Cannot read --agent-keys file {path}: {_fs_message(err, path)}"
+    except ValueError as err:
         return f"Cannot read --agent-keys file {path}: {err}"
     if isinstance(raw, list):
         entries: list[Any] = list(cast("list[Any]", raw))
@@ -219,8 +337,8 @@ def load_agent_keys(path: str) -> list[dict[str, Any]] | str:
 
 
 _KEYS_SHAPE = (
-    'The --keys file must be a {"keyId": "<SPKI-DER-base64>"} map or a list of '
-    '{"keyId", "publicKey"} entries (the .data list from GET /v1/verification-keys).'
+    "The --keys file must be a {keyId: SPKI-DER-base64} map or a list of {keyId, publicKey, ...} "
+    "entries (the .data list from /v1/verification-keys)."
 )
 
 
@@ -229,12 +347,16 @@ def load_supplied_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
     return the usage-error message. A ``GET /v1/verification-keys`` response is
     unwrapped to its ``data`` list so the file can be saved verbatim; every
     other shape passes through, and ``verify_export`` validates it at the
-    supplied-key boundary. Mirrors ``unwrapKeys`` in ``@agledger/verify``."""
+    supplied-key boundary. Mirrors ``unwrapKeys`` in ``@agledger/verify``, and
+    its messages: a file that cannot be read in the words Node gives, JSON
+    that does not parse as ``Invalid JSON in <path>: ...``, and a value that is
+    no key set at all as the supplied-key ``TypeError`` and the shape the file
+    must have."""
     try:
         with open(path, encoding="utf-8") as fh:
             raw: Any = json.load(fh)
     except OSError as err:
-        return f"Cannot read --keys file {path}: {err}"
+        return _fs_message(err, path)
     except ValueError as err:
         return f"Invalid JSON in {path}: {err}"
     if isinstance(raw, dict) and isinstance(
@@ -244,8 +366,8 @@ def load_supplied_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
     if isinstance(raw, (dict, list)):
         return cast("Mapping[str, Any] | list[Any]", raw)
     return (
-        f"Invalid --keys file {path}: expected a JSON object or array, got "
-        f"{type(raw).__name__}.\n{_KEYS_SHAPE}"
+        "verify_export: public_keys must be a {keyId: base64SpkiDer} mapping or a sequence of "
+        f"{{keyId, publicKey}} entries (got {type(raw).__name__}).\n{_KEYS_SHAPE}"
     )
 
 
@@ -454,18 +576,6 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
     return "\n".join(lines)
 
 
-_REFUSED_FLAGS = {
-    "--distrusted-keys": (
-        "--distrusted-keys is now --distrusted-key, given once per key: "
-        "--distrusted-key sha256:<hex>[@<RFC 3339 instant>]."
-    ),
-    "--require-out-of-band-keys": (
-        "--require-out-of-band-keys is now --require-supplied-keys: a key fetched from the "
-        "Server is supplied, not independent of it. Pin --trust-anchor for that."
-    ),
-}
-
-
 def _flag_message(message: str) -> str:
     """A pin parser's message, named by the flag that carried the value."""
     for prefix, flag in (
@@ -489,35 +599,41 @@ def _cannot_verify(message: str, report_format: str) -> int:
     return _EXIT_USAGE
 
 
+def _usage(message: str) -> int:
+    """A refusal before the report format is known: plain text and the help."""
+    print(f"{message}\n\n{HELP_TEXT}", file=sys.stderr, end="")
+    return _EXIT_USAGE
+
+
+_EXIT_BY_VERDICT = {"trusted": _EXIT_OK, "unanchored": _EXIT_OK, "failed": _EXIT_VERIFICATION_FAILED}
+
+
 def run_cli(argv: Sequence[str]) -> int:
     """Parse args, verify the target, and return an exit code. Stdout/stderr are
-    written directly so the function is also a clean unit-test seam."""
-    parser = _build_parser()
-    for arg in argv:
-        refused = _REFUSED_FLAGS.get(arg.split("=", 1)[0])
-        if refused is not None:
-            print(f"{refused}\n\n{parser.format_help()}", file=sys.stderr)
-            return _EXIT_USAGE
-    # argparse exits 2 on bad args and 0 on --help on its own; that already
-    # matches our exit codes.
-    args = parser.parse_args(argv)
+    written directly so the function is also a clean unit-test seam. The
+    flags, the refusals and their messages, the headlines and the exit codes
+    are ``@agledger/verify``'s ``runCli``'s."""
+    try:
+        args = parse_args(argv)
+    except UsageError as err:
+        # The format is not known yet, so a usage error stays plain text.
+        return _usage(str(err))
+    if args.show_help:
+        print(HELP_TEXT, end="")
+        return _EXIT_OK
+    if args.target is None:
+        return _usage("Missing <target>.")
 
-    target: str = args.target
-    quiet: bool = args.quiet
-    report_format: str = args.report_format
-
-    require_key_id: str | None = args.require_key_id
-    require_supplied_keys: bool = args.require_supplied_keys
+    target = args.target
+    report_format = args.report_format
     has_key_policy_flags = (
-        args.keys is not None or require_key_id is not None or require_supplied_keys
+        args.keys is not None or args.require_key_id is not None or args.require_supplied_keys
     )
-    trust_anchors: list[str] = list(args.trust_anchor or [])
-    distrusted_keys: list[str] = list(args.distrusted_key or [])
     # Parsed before anything is read, so a mistyped pin is a usage error and
     # never a verdict: a run that silently dropped it would read as unanchored.
     try:
-        parse_trust_anchors(trust_anchors)
-        parse_distrusted_keys(distrusted_keys)
+        trust_anchors = [f"sha256:{d}" for d in parse_trust_anchors(args.trust_anchors)]
+        distrusted_keys = parse_distrusted_keys(args.distrusted_keys)
     except TypeError as err:
         return _cannot_verify(_flag_message(str(err)), report_format)
     if distrusted_keys and not trust_anchors:
@@ -540,13 +656,12 @@ def run_cli(argv: Sequence[str]) -> int:
     if os.path.isdir(target):
         # A dump carries its own key registry, so a supplied key set has
         # nothing to override and a silent no-op would read as an audit that
-        # honoured the policy. Mirrors @agledger/verify.
+        # honoured the policy.
         if has_key_policy_flags:
             return _cannot_verify(
-                "--keys / --require-key-id / --require-supplied-keys apply to "
-                "/audit-export files only; a dump directory carries its own key "
-                "registry and signed key statements (vault_signing_keys.ndjson, "
-                "vault_key_statements.ndjson). Anchor its keys with --trust-anchor.",
+                "--keys / --require-key-id / --require-supplied-keys apply to /audit-export files "
+                "only; a dump directory carries its own signed key history (vault_signing_keys.ndjson "
+                "and vault_key_statements.ndjson). Pin it with --trust-anchor.",
                 report_format,
             )
         try:
@@ -558,31 +673,29 @@ def run_cli(argv: Sequence[str]) -> int:
             )
         except (DumpLoadError, TypeError) as err:
             return _cannot_verify(str(err), report_format)
-        if not quiet:
-            if report_format == "json":
-                print(json.dumps(report.to_json(), indent=2))
-            else:
-                print(_format_dump_text(report, agent_keys is not None))
-        return _EXIT_OK if report.ok else _EXIT_VERIFICATION_FAILED
+        if report_format == "json":
+            print(json.dumps(report.to_json(), indent=2))
+        else:
+            print(_format_dump_text(report, agent_keys is not None))
+        return _EXIT_BY_VERDICT[report.verdict]
 
     # File -> parse JSON, branch on exportMetadata.
     try:
         with open(target, encoding="utf-8") as fh:
             raw = fh.read()
     except OSError as err:
-        return _cannot_verify(str(err), report_format)
+        return _cannot_verify(_fs_message(err, target), report_format)
     try:
         parsed = json.loads(raw)
-    except json.JSONDecodeError as err:
+    except ValueError as err:
         return _cannot_verify(f"Invalid JSON in {target}: {err}", report_format)
     if not _looks_like_audit_export(parsed):
-        return _cannot_verify(
+        return _usage(
             f"{target} is neither a dump directory nor an /audit-export JSON document "
-            f"(expected exportMetadata + entries).",
-            report_format,
+            "(expected exportMetadata + entries)."
         )
 
-    public_keys: Mapping[str, Any] | list[Any] | None = None
+    public_keys: Any = None
     if args.keys is not None:
         loaded_keys = load_supplied_keys(args.keys)
         if isinstance(loaded_keys, str):
@@ -596,20 +709,20 @@ def run_cli(argv: Sequence[str]) -> int:
         result = verify_export(
             parsed,
             public_keys=public_keys,
-            require_key_id=require_key_id,
-            require_supplied_keys=require_supplied_keys,
+            require_key_id=args.require_key_id,
+            require_supplied_keys=args.require_supplied_keys,
             agent_keys=agent_keys,
             trust_anchors=trust_anchors,
             distrusted_keys=distrusted_keys,
         )
     except TypeError as err:
         return _cannot_verify(f"{err}\n{_KEYS_SHAPE}", report_format)
-    if not quiet:
-        if report_format == "json":
-            print(json.dumps(_export_to_json(result), indent=2))
-        else:
-            print(_format_export_text(result, agent_keys is not None))
-    return _EXIT_OK if result.valid else _EXIT_VERIFICATION_FAILED
+    verdict = export_verdict(result)
+    if report_format == "json":
+        print(json.dumps(_export_to_json(result), indent=2))
+    else:
+        print(_format_export_text(result, agent_keys is not None))
+    return _EXIT_BY_VERDICT[verdict]
 
 
 def main(argv: Sequence[str] | None = None) -> None:
