@@ -186,6 +186,23 @@ def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothi
     assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
 
 
+def test_a_key_distrusted_from_an_instant_and_never_retired_fails_what_it_wrote_after_worded_as_the_cutoff() -> None:
+    exp = _load("valid.json")
+    cutoff = "2026-09-30T22:06:08.770000Z"
+    r = verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[f"{_pin_of(exp)}@{cutoff}"])
+    key_id = exp["entries"][1]["integrity"]["signingKeyId"]
+    assert r.entries[0].valid
+    assert r.broken_at is not None
+    assert (r.broken_at.position, r.broken_at.code) == (2, "CHAIN_KEY_EXPIRED")
+    assert r.broken_at.detail == (
+        f"Entry written {exp['entries'][1]['createdAt']} postdates {cutoff}, the instant distrustedKeys "
+        f"(VAULT_DISTRUSTED_KEYS on the Server) gives for key {key_id}; the key was not retired then."
+    )
+    assert "retirement" not in (r.broken_at.detail or "")
+    # Not a retirement, so the active registry column is no drift.
+    assert r.key_trust.findings == []
+
+
 def test_refuses_a_malformed_anchor_or_distrusted_key_by_name() -> None:
     with pytest.raises(TypeError, match="15d63684b387235c"):
         verify_export(_load("valid.json"), trust_anchors=["15d63684b387235c"])

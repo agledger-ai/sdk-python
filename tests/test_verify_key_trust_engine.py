@@ -240,7 +240,10 @@ def _verdict(trust: KeyTrust) -> dict[str, Any]:
     windows: dict[str, list[str | None]] = {}
     for i in trusted:
         w = trust.by_digest.get(POOL[i].digest)
-        windows[str(i)] = [w.activated_at if w else None, w.retired_at if w else None]
+        # The engine folds a distrust cutoff into the window's upper edge; the
+        # port carries it apart from the signed retirement, so compare the
+        # edge entries are graded against.
+        windows[str(i)] = [w.activated_at if w else None, (w.distrust_cutoff or w.retired_at) if w else None]
     findings = sorted(
         f"{f.code}|{f.statement_id or ''}|{'' if f.key_id is None else _INDEX_OF_KID.get(f.key_id, f.key_id)}"
         for f in trust.findings

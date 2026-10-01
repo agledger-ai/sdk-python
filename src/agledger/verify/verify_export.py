@@ -686,6 +686,12 @@ class RegisteredKey:
     #: where the wire carries no key windows: the temporal check then no-ops.
     activated_at: str | None = None
     retired_at: str | None = None
+    #: The instant from which ``distrusted_keys`` (``VAULT_DISTRUSTED_KEYS`` on
+    #: the Server) voids what this key signs, set by :func:`apply_key_trust`
+    #: when it ends the window before ``retired_at``. Entries written after it
+    #: fail CHAIN_KEY_EXPIRED worded as past the distrust cutoff: the key was
+    #: not retired there.
+    distrust_cutoff: str | None = None
     #: Algorithm the key registry DECLARES for this key (the engine's
     #: ``vault_signing_keys.algorithm`` column), when the input carries it.
     #: Cross-checked against the algorithm the SPKI key material actually
@@ -1095,7 +1101,13 @@ def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
         )
         signed = trust.by_digest.get(digest)
         if anchored and signed is not None:
-            out[key_id] = replace(key, trust=state, activated_at=signed.activated_at, retired_at=signed.retired_at)
+            out[key_id] = replace(
+                key,
+                trust=state,
+                activated_at=signed.activated_at,
+                retired_at=signed.retired_at,
+                distrust_cutoff=signed.distrust_cutoff,
+            )
         else:
             out[key_id] = replace(key, trust=state)
     return KeyCache(out, signing_since=keys.signing_since, walked=True)
@@ -1533,7 +1545,9 @@ def verify_entry(
     # placed inside the window, and fails closed rather than skipping it.
     # Mirrors verify-core chain.ts temporalKeyFailure.
     activated_at, retired_at = keys.window(signing_key_id)
-    if activated_at is not None or retired_at is not None:
+    registered_key = keys.entry(signing_key_id)
+    distrust_cutoff = registered_key.distrust_cutoff if registered_key is not None else None
+    if activated_at is not None or retired_at is not None or distrust_cutoff is not None:
         if applied_checks is not None:
             applied_checks.add("key_temporal")
         if not isinstance(created_at, str) or instant_ms(created_at) is None:
@@ -1547,7 +1561,7 @@ def verify_entry(
                 ),
             )
         temporal = _temporal_key_failure(
-            created_at, signing_key_id, activated_at, retired_at
+            created_at, signing_key_id, activated_at, retired_at, distrust_cutoff
         )
         if temporal is not None:
             temporal_code, temporal_detail = temporal
@@ -2416,6 +2430,7 @@ def _temporal_key_failure(
     key_id: str,
     activated_at: str | None,
     retired_at: str | None,
+    distrust_cutoff: str | None = None,
 ) -> tuple[FailureCode, str] | None:
     """Return ``(code, detail)`` if ``created_at`` falls outside the key's
     activated..retired window, else ``None``. Bounds are inclusive: an entry
@@ -2435,6 +2450,16 @@ def _temporal_key_failure(
             return (
                 "CHAIN_KEY_NOT_YET_ACTIVE",
                 f"Entry written {created_at} predates key {key_id} activation {activated_at}.",
+            )
+    if distrust_cutoff:
+        cutoff = _instant_ms(distrust_cutoff)
+        if cutoff is not None and written > cutoff:
+            return (
+                "CHAIN_KEY_EXPIRED",
+                (
+                    f"Entry written {created_at} postdates {distrust_cutoff}, the instant distrustedKeys "
+                    f"(VAULT_DISTRUSTED_KEYS on the Server) gives for key {key_id}; the key was not retired then."
+                ),
             )
     if retired_at:
         retired = _instant_ms(retired_at)
