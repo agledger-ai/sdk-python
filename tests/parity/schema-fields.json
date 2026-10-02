@@ -15,6 +15,7 @@
       "recordId",
       "recordRead",
       "recordStatus",
+      "rollupSynthesized",
       "settlementSignal",
       "structuralValidation",
       "validationErrors",

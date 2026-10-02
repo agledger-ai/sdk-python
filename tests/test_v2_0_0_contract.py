@@ -27,7 +27,12 @@ from agledger import (
 
 BASE = "https://agledger.example.com"
 OBO = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwZXJzb24tMSIsImFjdCI6eyJzdWIiOiJhZ2VudC0xIn19.c2ln"
-STATEMENT = {"kind": "genesis", "cose": ["0oRYJ6MB"]}
+STATEMENT = {
+    "id": "01a0fd24-a41c-79ab-b3b2-51bab8e97597",
+    "kind": "genesis",
+    "createdAt": "2026-10-02T15:03:52.092689Z",
+    "cose": ["0oRYJ6MB"],
+}
 
 
 def _client() -> AgledgerClient:
@@ -395,7 +400,12 @@ def test_verification_keys_carry_the_envelope_the_verifier_floor_and_the_signed_
     assert keys.anchored_from == "sha256:" + "a" * 64
     assert keys.key_statement_format == "application/vnd.agledger.key-statement+cbor"
     statement = keys.data[0].statements[0]
-    assert (statement.kind, statement.cose) == ("genesis", ["0oRYJ6MB"])
+    assert (statement.id, statement.kind, statement.created_at, statement.cose) == (
+        "01a0fd24-a41c-79ab-b3b2-51bab8e97597",
+        "genesis",
+        "2026-10-02T15:03:52.092689Z",
+        ["0oRYJ6MB"],
+    )
 
 
 @respx.mock
@@ -583,3 +593,68 @@ def test_vault_anchors_list_sends_the_required_record_id():
 def test_vault_anchors_list_requires_the_record_id():
     with pytest.raises(TypeError):
         _client().admin.vault.anchors.list()  # type: ignore[call-arg]
+
+
+# --- API main 63649593 ---
+
+
+def test_create_api_key_pairs_each_role_with_its_owner_kind():
+    # The Server refuses any other pair with a 400; the overloads say so to a type checker.
+    hints = [typing.get_type_hints(o) for o in typing.get_overloads(AgledgerClient(api_key="k", base_url=BASE).admin.create_api_key.__func__)]  # type: ignore[attr-defined]
+    pairs = {(typing.get_args(h["role"])[0], typing.get_args(h["owner_type"])[0]) for h in hints}
+    assert pairs == {("admin", "org"), ("agent", "agent"), ("platform", "platform")}
+
+
+@respx.mock
+def test_a_rollup_synthesized_completion_has_no_agent():
+    respx.get(f"{BASE}/v1/records/rec-1/completions/cmp-1").mock(return_value=httpx.Response(200, json={
+        "id": "cmp-1", "recordId": "rec-1", "agentId": None, "rollupSynthesized": True,
+        "evidence": {}, "createdAt": "2026-10-02T00:00:00Z",
+    }))
+    completion = _client().completions.get("rec-1", "cmp-1")
+    assert (completion.agent_id, completion.rollup_synthesized) == (None, True)
+
+
+@respx.mock
+def test_deleting_a_webhook_returns_the_dead_letters_it_still_holds():
+    body = {
+        "webhookId": "wh-1", "isActive": False, "deadLetters": 2,
+        "nextSteps": [{"action": "discard", "method": "DELETE", "href": "/v1/webhooks/wh-1/dlq/{dlqId}"}],
+    }
+    respx.delete(f"{BASE}/v1/webhooks/wh-1").mock(return_value=httpx.Response(200, json=body))
+    assert _client().webhooks.delete("wh-1") == body
+
+
+@respx.mock
+def test_a_dead_letter_is_discarded_from_its_subscription_or_by_the_platform():
+    body: dict[str, object] = {"discarded": True, "dlqId": "dlq-1", "webhookId": "wh-1", "nextSteps": []}
+    own = respx.delete(f"{BASE}/v1/webhooks/wh-1/dlq/dlq-1").mock(return_value=httpx.Response(200, json=body))
+    admin = respx.delete(f"{BASE}/v1/admin/webhook-dlq/dlq-1").mock(return_value=httpx.Response(200, json=body))
+    assert _client().webhooks.discard_dlq("wh-1", "dlq-1") == body
+    assert _client().admin.discard_dlq("dlq-1") == body
+    assert own.called and admin.called
+
+
+@respx.mock
+async def test_async_discard_and_delete():
+    body: dict[str, object] = {"discarded": True, "dlqId": "dlq-1", "webhookId": "wh-1", "nextSteps": []}
+    respx.delete(f"{BASE}/v1/webhooks/wh-1/dlq/dlq-1").mock(return_value=httpx.Response(200, json=body))
+    respx.delete(f"{BASE}/v1/admin/webhook-dlq/dlq-1").mock(return_value=httpx.Response(200, json=body))
+    respx.delete(f"{BASE}/v1/webhooks/wh-1").mock(return_value=httpx.Response(200, json={
+        "webhookId": "wh-1", "isActive": False, "deadLetters": 0, "nextSteps": [],
+    }))
+    async with AsyncAgledgerClient(api_key="test-key", base_url=BASE) as client:
+        assert await client.webhooks.discard_dlq("wh-1", "dlq-1") == body
+        assert await client.admin.discard_dlq("dlq-1") == body
+        assert (await client.webhooks.delete("wh-1"))["deadLetters"] == 0
+
+
+@respx.mock
+def test_a_status_component_names_the_worker_and_signing_key_causes():
+    reasons = ["database_unavailable", "signing_key_unusable", "no_worker_connected", "worker_not_consuming", "not_checked"]
+    respx.get(f"{BASE}/status").mock(return_value=httpx.Response(200, json={
+        "status": "outage",
+        "components": [{"name": "Workers", "status": "degraded", "reason": r} for r in reasons],
+        "uptime": 10, "timestamp": "2026-10-02T00:00:00Z",
+    }))
+    assert [c.reason for c in _client().health.status().components] == reasons

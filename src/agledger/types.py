@@ -706,8 +706,15 @@ class Completion(BaseModel):
     """Unique completion ID."""
     record_id: str = Field(alias="recordId")
     """Record this completion is for."""
-    agent_id: str = Field(alias="agentId")
-    """Agent that submitted the completion."""
+    agent_id: str | None = Field(alias="agentId")
+    """Agent that submitted the completion. None on the completion the engine
+    synthesizes for a delegation parent when its children's failure rollup is
+    held for the principal's verdict (``rollup_synthesized`` is True); every
+    agent-submitted completion carries one."""
+    rollup_synthesized: bool | None = Field(None, alias="rollupSynthesized")
+    """True on a completion the engine wrote for a delegation parent from its
+    children's failure rollup rather than one an agent submitted. A principal
+    cannot accept it: reject, then revise and resubmit."""
     evidence: dict[str, Any]
     """Evidence of completion."""
     evidence_hash: str | None = Field(None, alias="evidenceHash")
@@ -2059,6 +2066,10 @@ class Event(BaseModel):
 
 ApiKeyRole = Literal["admin", "agent", "platform"]
 
+KeyOwnerType = Literal["org", "agent", "platform"]
+"""The owner kind that holds an API key. Each role takes exactly one: ``admin``
+an ``org``, ``agent`` an ``agent``, ``platform`` the ``platform``."""
+
 AutoProvisionScopeProfile = Literal[
     "agent-full", "agent-readonly", "agent-performer-only"
 ]
@@ -2170,6 +2181,11 @@ class StatusComponent(BaseModel):
             "shutting_down",
             "error",
             "chain_rewind_detected",
+            "database_unavailable",
+            "signing_key_unusable",
+            "no_worker_connected",
+            "worker_not_consuming",
+            "not_checked",
         ]
         | str
         | None
@@ -2180,7 +2196,14 @@ class StatusComponent(BaseModel):
     ``saturated`` the database at its connection limit). On the chain-writes
     component at ``degraded`` it is ``chain_rewind_detected``: every chain write
     answers 409 until an operator acknowledges it with
-    ``admin.vault.rewind.acknowledge()``. None when the component is healthy."""
+    ``admin.vault.rewind.acknowledge()``; at ``outage`` it is
+    ``database_unavailable`` (the database component is at ``outage``) or
+    ``signing_key_unusable`` (this process's vault signing key may not sign, so
+    every chain write answers 503). On the workers component it is
+    ``database_unavailable`` at ``outage``, and at ``degraded``
+    ``no_worker_connected`` (no worker is attached), ``worker_not_consuming``
+    (one is attached but has stopped taking jobs), ``not_checked`` (the database
+    could not be asked) or ``error``. None when the component is healthy."""
 
 
 class StatusResponse(BaseModel):
@@ -2491,9 +2514,15 @@ class KeyStatement(BaseModel):
         extra="allow", populate_by_name=True
     )
 
+    id: str
+    """The statement row's id: the tie-break of the write order."""
     kind: Literal["succession", "closure", "genesis"] | str
     """``genesis`` is self-signed, ``succession`` carries the predecessor's
     signature then the key's own, and ``closure`` is signed by another key."""
+    created_at: str = Field(alias="createdAt")
+    """When the database stored the statement (RFC 3339 UTC, microsecond
+    precision). The trust walk orders every statement by ``created_at``, then
+    ``id``, never by an instant a statement signs."""
     cose: list[str]
     """Base64 COSE_Sign1, in signing order."""
 
