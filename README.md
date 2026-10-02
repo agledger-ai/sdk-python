@@ -371,6 +371,13 @@ closure that counts for it, or a closure that should not count), and
 `CHAIN_KEY_WINDOW_DRIFT` (a listed window or status that differs from the
 signed value).
 
+`distrusted_keys` on an export is stricter than on a dump. A dump's
+`vault_key_statements` rows date what a distrusted key stored before its cutoff,
+as the engine does. An export's statements, and those on keys you pass, carry
+an `id` and `createdAt` nothing signs, so a leaked key's holder can backdate
+them at will: there every edge out of a distrusted key counts for nothing,
+whatever time it carries, and only its closures still count.
+
 Without `trust_anchors` the result still passes when nothing failed, flagged:
 `result.key_trust.status` is `"no_anchor"` and
 `result.optional_checks["key_anchoring"]` is `"skipped_no_input"`. That is not a
@@ -382,7 +389,8 @@ a statement signs: a dump carries each row's `created_at`, and an API 2.0
 export or `GET /v1/verification-keys` publishes each statement's row `id` and
 `createdAt`, ordered by `createdAt` then `id` (`key_trust.order` is
 `"written"`). Within such a document, a statement with no readable write time
-is `KEY_STATEMENT_INVALID`. A document from a Server that published neither
+is `KEY_STATEMENT_INVALID`, and so is one that is not strict RFC 3339 (a `T`,
+a `Z` or numeric offset, a real calendar date). A document from a Server that published neither
 field is walked in the order of the instants its statements sign
 (`key_trust.order` is `"signed"`), which agrees with the write order for a
 document the Server served but cannot hold a leaked key to when it actually

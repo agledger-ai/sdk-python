@@ -720,11 +720,19 @@ def test_two_statements_published_in_the_same_microsecond_are_ordered_by_id() ->
         assert c.digest not in walk([], _published(order), [p.digest]).trusted
 
 
-def test_a_published_statement_with_no_readable_write_time_is_invalid_and_admits_nothing() -> None:
+def test_a_published_statement_with_no_strict_rfc3339_write_time_is_invalid_and_admits_nothing() -> None:
     c, n = make_key(), make_key()
     g = statement("genesis", c, signers=[c], activated_at=T0, created_at=T0)
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
-    for broken in (None, 7, "yesterday"):
+    lenient = (
+        "2026-09-01T00:00:00",
+        "2026-09-01 00:00:00Z",
+        "1",
+        "2026-02-30T00:00:00.000000Z",
+        "2026-09-01T24:00:00Z",
+        "2026-09-01T00:00:00+24:00",
+    )
+    for broken in (None, 7, "yesterday", *lenient):
         filed = as_published([g, succ])
         if broken is None:
             del filed[n.kid][0]["createdAt"]
@@ -757,6 +765,19 @@ def test_a_published_row_listed_twice_is_one_row_and_a_copy_under_another_id_is_
     assert anchored_kids(walk(keys, key_statements_from_export(twice), [n.digest])) == sorted([c.kid, n.kid])
     copied = _published([succ, replace(succ, id=next_id())])
     assert anchored_kids(walk(keys, copied, [n.digest])) == [n.kid]
+
+
+def test_one_published_row_spelled_two_ways_is_one_row() -> None:
+    c, n = make_key(), make_key()
+    succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
+    keys = [TrustKeyInput(key_id=c.kid, public_key=c.public_key)]
+    filed = as_published([succ])
+    other = dict(filed[n.kid][0])
+    other["id"] = other["id"].upper()
+    other["createdAt"] = other["createdAt"].replace("Z", "+00:00")
+    filed[n.kid].append(other)
+    # Read twice, the second copy would be a second admission and cut n's edge back to c.
+    assert anchored_kids(walk(keys, key_statements_from_export(filed), [n.digest])) == sorted([c.kid, n.kid])
 
 
 def test_a_listed_activation_no_admission_this_walk_could_verify_signs_is_window_drift() -> None:
@@ -1248,3 +1269,17 @@ def test_random_registries_a_document_walk_over_the_honest_history_matches_the_d
                 if doc.by_digest.get(d) != dump.by_digest.get(d)
             )
     assert failures == []
+
+
+def test_a_write_time_is_strict_rfc3339_and_reads_every_offset_and_case_it_allows() -> None:
+    from agledger.verify.key_statements import instant_ms, rfc3339_ms
+
+    z = rfc3339_ms("2026-09-01T00:00:00Z")
+    assert z is not None
+    for same in ("2026-09-01T00:00:00.000Z", "2026-09-01t00:00:00z", "2026-09-01T02:00:00+02:00", "2026-08-31T23:30:00-00:30"):
+        assert rfc3339_ms(same) == z, same
+    assert rfc3339_ms("2024-02-29T00:00:00Z") is not None
+    for bad in ("2026-09-01T00:00:00", "2026-09-01 00:00:00Z", "1", "2026-02-30T00:00:00.000000Z", "2025-02-29T00:00:00Z", "2026-09-01T00:60:00Z", ""):
+        assert rfc3339_ms(bad) is None, bad
+    # A key window a caller supplies is still read as ISO-8601.
+    assert instant_ms("2026-09-01T00:00:00") == z

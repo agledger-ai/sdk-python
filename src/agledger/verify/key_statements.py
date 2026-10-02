@@ -162,6 +162,13 @@ class KeyStatementInput:
     endorser_column: bool = False
     """Whether the source carries an ``endorser_key_id`` column at all. The key
     documents do not, so theirs is not bound."""
+    source: Literal["dump", "document"] | None = None
+    """Where the statement was read from. ``"dump"``: a row of a dump's
+    ``vault_key_statements.ndjson`` (:func:`key_statement_from_dump_row` sets
+    it), whose ``created_at`` the walk holds a distrusted key's statements to,
+    as the engine does. Anything else, ``None`` included, is a key document's
+    (an export's or a supplied ``/v1/verification-keys`` entry's): its
+    ``createdAt`` orders it but never keeps an edge out of a distrusted key."""
     created_at: str | None = None
     """The database write time (the dump's ``created_at``, a key document's
     ``createdAt``). Give it for every statement or for none: with it the walk
@@ -405,9 +412,6 @@ def settle_key_trust(report: KeyTrustReport, anchored_signatures: int) -> KeyTru
 # --- Instants and base64 ---
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_INSTANT = re.compile(
-    r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]+))?(Z|[+-][0-9]{2}:[0-9]{2})"
-)
 
 
 def _parse_iso_ms(value: str) -> int | None:
@@ -423,35 +427,84 @@ def _parse_iso_ms(value: str) -> int | None:
     return (parsed - _EPOCH) // timedelta(milliseconds=1)
 
 
+# RFC 3339 date-time: a ``T``, a numeric offset or ``Z``, any fraction.
+_RFC3339_STRICT = re.compile(
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt]([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]+))?([Zz]|([+-])([0-9]{2}):([0-9]{2}))"
+)
+
+
+def _days_from_civil(y: int, m: int, d: int) -> int:
+    """Days since 1970-01-01 of a proleptic Gregorian date (year 0 included)."""
+    y -= m <= 2
+    era = (y if y >= 0 else y - 399) // 400
+    yoe = y - era * 400
+    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+
+
+def _parse_rfc3339(instant: object) -> tuple[int, str] | None:
+    """Milliseconds and the fraction digits of a strict RFC 3339 instant: an
+    offset or ``Z``, a real calendar date and time of day. ``None`` for
+    anything else."""
+    if not isinstance(instant, str):
+        return None
+    m = _RFC3339_STRICT.fullmatch(instant)
+    if m is None:
+        return None
+    y, mo, d, h, mi, sec = (int(m.group(i)) for i in range(1, 7))
+    frac = m.group(7) or ""
+    if h > 23 or mi > 59 or sec > 59 or not 1 <= mo <= 12 or d < 1:
+        return None
+    leap = y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
+    if d > (29 if leap else 28) if mo == 2 else d > (30 if mo in (4, 6, 9, 11) else 31):
+        return None
+    offset = 0
+    if m.group(9) is not None:
+        oh, om = int(m.group(10)), int(m.group(11))
+        if oh > 23 or om > 59:
+            return None
+        offset = (-1 if m.group(9) == "-" else 1) * (oh * 60 + om) * 60_000
+    ms = ((_days_from_civil(y, mo, d) * 24 + h) * 60 + mi) * 60_000 + sec * 1000
+    return (ms + int(frac[:3].ljust(3, "0")) - offset, frac)
+
+
+def rfc3339_ms(instant: object) -> int | None:
+    """Milliseconds of a strict RFC 3339 instant (an offset or ``Z``, a real
+    calendar date and time of day), truncating any finer fraction. ``None`` for
+    anything else, so a write time is never placed by how a parser reads a date
+    with no offset, a space separator or an impossible day. Mirrors
+    verify-core ``rfc3339Ms``."""
+    parsed = _parse_rfc3339(instant)
+    return None if parsed is None else parsed[0]
+
+
 def instant_ms(instant: object) -> int | None:
     """Milliseconds of an RFC 3339 instant, truncating any finer fraction the
     way the engine reads a microsecond instant. Key statements sign microsecond
     instants; entry write times, dump columns and key documents carry
-    milliseconds, so every comparison between them is made here. ``None`` when
-    the value does not parse. Mirrors verify-core ``instantMs``."""
+    milliseconds, so every comparison between them is made here. A string that
+    is not strict RFC 3339 falls back to an ISO-8601 read, for key windows a
+    caller supplies; a write time the walk places goes through
+    :func:`rfc3339_ms`, which does not. ``None`` when the value does not parse.
+    Mirrors verify-core ``instantMs``."""
     if not isinstance(instant, str) or not instant:
         return None
-    m = _INSTANT.fullmatch(instant)
-    if m is None:
-        return _parse_iso_ms(instant)
-    frac = (m.group(2) or "")[:3].ljust(3, "0")
-    offset = "+00:00" if m.group(3) == "Z" else m.group(3)
-    return _parse_iso_ms(f"{m.group(1)}.{frac}{offset}")
+    strict = rfc3339_ms(instant)
+    return strict if strict is not None else _parse_iso_ms(instant)
 
 
 def _instant_us(instant: object) -> tuple[float, bool]:
-    """Microseconds of an RFC 3339 instant (``nan`` when it does not parse),
-    and whether it carries a full microsecond fraction. The key surfaces
-    publish a statement's write time at microsecond precision and a dump at
-    milliseconds, so two dump rows in one millisecond tie here without being
-    simultaneous. Mirrors verify-core ``instantUs``."""
-    ms = instant_ms(instant)
-    if ms is None:
+    """Microseconds of a strict RFC 3339 instant (``nan`` when it is not one,
+    see :func:`rfc3339_ms`), and whether it carries a full microsecond
+    fraction. The key surfaces publish a statement's write time at microsecond
+    precision and a dump at milliseconds, so two dump rows in one millisecond
+    tie here without being simultaneous. Mirrors verify-core ``instantUs``."""
+    parsed = _parse_rfc3339(instant)
+    if parsed is None:
         return (float("nan"), False)
-    m = _INSTANT.fullmatch(cast("str", instant))
-    frac = (m.group(2) or "") if m is not None else ""
-    sub = int(frac[3:6].ljust(3, "0")) if m is not None else 0
-    return (float(ms * 1000 + sub), len(frac) >= 6)
+    ms, frac = parsed
+    return (float(ms * 1000 + int(frac[3:6].ljust(3, "0"))), len(frac) >= 6)
 
 
 def _b64decode(value: str) -> bytes:
@@ -1090,7 +1143,13 @@ def compute_key_trust(
         if order == "written" and not isinstance(s.id, str):  # pyright: ignore[reportUnnecessaryIsInstance]
             inputs.append(s)
             continue
-        k = _dedup_key(s) if order == "signed" else repr((s.id, s.created_at, _dedup_key(s)))
+        if order == "signed":
+            k = _dedup_key(s)
+        else:
+            # One row however it is spelled: the instant parsed (``+00:00`` is
+            # ``Z``), the id lowercased (a uuid in capitals is the same uuid).
+            us = _instant_us(s.created_at)[0]
+            k = repr((str(s.id).lower(), s.created_at if us != us else us, _dedup_key(s)))
         if k in seen:
             continue
         seen.add(k)
@@ -1118,7 +1177,7 @@ def compute_key_trust(
     # the Server writes one on every row, so it was edited, and it admits nothing.
     def checked_of(st: KeyStatementInput) -> _Checked:
         c = _check_statement(st, key_by_digest)
-        if order != "written" or instant_ms(st.created_at) is not None:
+        if order != "written" or rfc3339_ms(st.created_at) is not None:
             return c
         return replace(c, verdict="invalid", detail="the row has no parseable created_at to order it by")
 
@@ -1175,7 +1234,7 @@ def compute_key_trust(
                 subject=c.payload.subject.spki_sha256,
                 endorser=c.payload.endorser.spki_sha256 if c.payload.endorser else None,
                 at=at,
-                stored_ms=instant_ms(c.input.created_at) if order == "written" else instant_ms(k),
+                stored_ms=rfc3339_ms(c.input.created_at) if order == "written" else instant_ms(k),
             )
         )
     valid = [s for s in in_write_order if s.check.verdict == "valid"]
@@ -1231,14 +1290,16 @@ def compute_key_trust(
 
     def distrusted(s: _Statement, signer: str | None) -> bool:
         """Signed by a distrusted key at or after its cutoff: counts for nothing.
-        Under the signed order there is no write time to hold a statement to,
-        and the instant it signs is the leaked key's own word. So every edge out
-        of a distrusted key is void whatever it signs, and every closure it
-        signed still counts: dropping an edge or keeping a closure only ever
-        takes trust away. Narrower than the engine, never wider."""
+        Only a dump row's ``created_at`` holds a statement to when it was
+        written. Under the signed order the instant it signs is the leaked key's
+        own word, and a key document's ``createdAt`` is unsigned, so whoever
+        holds the leaked key writes whatever time it likes. For those every
+        edge out of a distrusted key is void whatever time it gives, and every
+        closure it signed still counts: dropping an edge or keeping a closure
+        only ever takes trust away. Narrower than the engine, never wider."""
         if signer is None or signer not in cutoffs:
             return False
-        if order == "signed":
+        if order == "signed" or s.check.input.source != "dump":
             return s.payload.typ != "closure"
         cutoff = cutoffs[signer]
         return cutoff is None or (s.stored_ms is not None and s.stored_ms >= cutoff[0])
@@ -1539,6 +1600,7 @@ def key_statement_from_dump_row(row: Mapping[str, Any]) -> KeyStatementInput:
         endorser_column="endorser_key_id" in row,
         cose=cast("list[str]", statement) if isinstance(statement, list) else [],
         created_at=created if isinstance(created, str) else "",
+        source="dump",
     )
 
 
@@ -1600,6 +1662,7 @@ def _statements_from_map(
                     id=row_id if isinstance(row_id, str) else f"{prefix}{key_id}#{i}",
                     kind=kind,
                     subject_key_id=key_id,
+                    source="document",
                     cose=list(cast("Sequence[str]", cose)),
                     created_at=(created if isinstance(created, str) else "") if timed else None,
                 )

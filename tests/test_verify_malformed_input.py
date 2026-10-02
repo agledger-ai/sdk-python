@@ -57,7 +57,19 @@ def _dump_codes(report: VerifyReport) -> list[str]:
 # --- an entry with no readable createdAt fails closed -------------------------
 
 
-@pytest.mark.parametrize("blank", ["drop", None, "garbage", 7])
+@pytest.mark.parametrize(
+    "blank",
+    [
+        "drop",
+        None,
+        "garbage",
+        7,
+        "2026-09-01T00:00:00",
+        "2026-09-01 00:00:00Z",
+        "1",
+        "2026-02-30T00:00:00.000000Z",
+    ],
+)
 def test_a_distrusted_key_cannot_be_slipped_past_its_cutoff_by_nulling_entry_times(blank: object) -> None:
     plain = verify_export(_load("export/valid.json"), trust_anchors=[ANCHOR], distrusted_keys=[_mid_cutoff()])
     assert "CHAIN_KEY_EXPIRED" in {e.code for e in plain.entries}
