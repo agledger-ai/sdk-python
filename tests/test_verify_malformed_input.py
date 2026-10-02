@@ -7,9 +7,11 @@ mutation of a real corpus vector."""
 
 from __future__ import annotations
 
+import copy
 import json
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -23,8 +25,10 @@ from agledger.verify import (
     verify_dump,
     verify_export,
 )
-from agledger.verify.key_statements import no_anchor_report
+from agledger.verify.key_statements import instant_ms, no_anchor_report
 from agledger.verify.types import Dump, VerifyReport
+
+from .key_statement_helpers import under_admitted_key
 
 CONFORMANCE = Path(__file__).resolve().parent.parent / "testdata" / "conformance"
 STRANGER = "sha256:" + "a" * 64
@@ -40,10 +44,6 @@ def _rows(rel: str) -> list[dict[str, Any]]:
 
 ANCHOR: str = _load("export/valid.json")["exportMetadata"]["anchoredFrom"]
 KEY_ID = ANCHOR[len("sha256:") : len("sha256:") + 16]
-
-
-def _mid_cutoff() -> str:
-    return f"{ANCHOR}@{_load('export/valid.json')['entries'][1]['createdAt']}"
 
 
 def _dump_codes(report: VerifyReport) -> list[str]:
@@ -71,20 +71,22 @@ def _dump_codes(report: VerifyReport) -> list[str]:
     ],
 )
 def test_a_distrusted_key_cannot_be_slipped_past_its_cutoff_by_nulling_entry_times(blank: object) -> None:
-    plain = verify_export(_load("export/valid.json"), trust_anchors=[ANCHOR], distrusted_keys=[_mid_cutoff()])
+    # valid.json under a key its pinned root admitted, distrusted from the middle entry's write time.
+    exp, pin, key = under_admitted_key()
+    distrust = [f"sha256:{key.digest}@{exp['entries'][1]['createdAt']}"]
+    plain = verify_export(copy.deepcopy(exp), trust_anchors=[pin], distrusted_keys=distrust)
     assert "CHAIN_KEY_EXPIRED" in {e.code for e in plain.entries}
 
-    exp = _load("export/valid.json")
     for e in exp["entries"]:
         if blank == "drop":
             del e["createdAt"]
         else:
             e["createdAt"] = blank
-    r = verify_export(exp, trust_anchors=[ANCHOR], distrusted_keys=[_mid_cutoff()])
+    r = verify_export(exp, trust_anchors=[pin], distrusted_keys=distrust)
     assert r.valid is False
     assert r.broken_at is not None
     assert (r.broken_at.position, r.broken_at.code) == (1, "CHAIN_MALFORMED_ENTRY")
-    assert r.broken_at.detail == f"Entry has no parseable createdAt, so it cannot be placed inside key {KEY_ID}'s window."
+    assert r.broken_at.detail == f"Entry has no parseable createdAt, so it cannot be placed inside key {key.kid}'s window."
     assert r.optional_checks["key_temporal"] == "applied"
 
 
@@ -107,13 +109,20 @@ def test_a_single_unsigned_entry_with_its_time_nulled_is_not_early_history_under
 
 
 def test_nulling_every_vault_write_time_does_not_pass_a_distrusted_key() -> None:
-    d = load_dump(CONFORMANCE / "dump" / "valid")
-    pin = f"sha256:{spki_sha256(d.signing_keys[0]['public_key'])}"
-    mid = d.vault_entries[len(d.vault_entries) // 2]["created_at"]
-    assert "CHAIN_KEY_EXPIRED" in _dump_codes(verify_dump(d, trust_anchors=[pin], distrusted_keys=[f"{pin}@{mid}"]))
+    # Pinned on the current key; the key it succeeded is distrusted from just
+    # before the entry that key signed.
+    d = load_dump(CONFORMANCE / "dump" / "valid-key-succession")
+    previous = next(k for k in d.signing_keys if k["status"] == "retired")
+    current = next(k for k in d.signing_keys if k["status"] == "active")
+    pin = f"sha256:{spki_sha256(current['public_key'])}"
+    entry = next(e for e in d.vault_entries if e["signing_key_id"] == previous["key_id"])
+    cutoff_ms = cast("int", instant_ms(entry["created_at"])) - 1
+    at = datetime.fromtimestamp(cutoff_ms / 1000, tz=UTC)
+    distrust = [f"sha256:{spki_sha256(previous['public_key'])}@{at.strftime('%Y-%m-%dT%H:%M:%S')}.{cutoff_ms % 1000:03d}Z"]
+    assert "CHAIN_KEY_EXPIRED" in _dump_codes(verify_dump(d, trust_anchors=[pin], distrusted_keys=distrust))
     for e in d.vault_entries:
         e["created_at"] = None
-    report = verify_dump(d, trust_anchors=[pin], distrusted_keys=[f"{pin}@{mid}"])
+    report = verify_dump(d, trust_anchors=[pin], distrusted_keys=distrust)
     assert report.verdict == "failed"
     assert "CHAIN_MALFORMED_ENTRY" in _dump_codes(report)
 

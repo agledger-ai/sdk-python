@@ -62,6 +62,12 @@ class Failure:
         return out
 
 
+#: Failures listed in a report's JSON, as ``@agledger/verify`` caps them: a
+#: systemic problem on a large vault yields one per entry. ``failureCount``
+#: carries the true total.
+MAX_REPORTED_FAILURES = 1000
+
+
 @dataclass
 class VaultChainsReport:
     record_count: int = 0
@@ -110,7 +116,8 @@ class VaultChainsReport:
             "recordCount": self.record_count,
             "entryCount": self.entry_count,
             "checkpointCount": self.checkpoint_count,
-            "failures": [f.to_json() for f in self.failures],
+            "failures": [f.to_json() for f in self.failures[:MAX_REPORTED_FAILURES]],
+            "failureCount": len(self.failures),
             "optionalChecks": dict(self.optional_checks),
             "agentSignatures": {
                 "present": self.agent_signatures_present,
@@ -146,7 +153,8 @@ class TenantAdminReadsReport:
             "witnessCosignedCheckpoints": [
                 w.to_json() for w in self.witness_cosigned_checkpoints
             ],
-            "failures": [f.to_json() for f in self.failures],
+            "failures": [f.to_json() for f in self.failures[:MAX_REPORTED_FAILURES]],
+            "failureCount": len(self.failures),
         }
 
 

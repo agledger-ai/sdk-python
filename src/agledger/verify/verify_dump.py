@@ -47,6 +47,7 @@ from agledger.verify.key_statements import (
     DistrustedKey,
     KeyTrust,
     KeyTrustReport,
+    assert_not_pinned_and_distrusted,
     cbor_plain,
     compute_key_trust,
     key_statement_from_dump_row,
@@ -1200,11 +1201,13 @@ def walk_dump_keys(
     anchored, unanchored or undecided. Returns the registry both passes grade
     against and the report of the walk. Raises ``TypeError`` on a malformed
     anchor or distrusted key, on ``distrusted_keys`` without
-    ``trust_anchors``, and on a statement file the walk cannot order (rows with
+    ``trust_anchors``, on a key both pinned and distrusted (the Server refuses
+    to start with that pair), and on a statement file the walk cannot order (rows with
     and without ``created_at``)."""
     keys = _build_vault_key_registry(signing_keys)
     trust: KeyTrust | None = None
     if trust_anchors is not None and len(trust_anchors) > 0:
+        assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
         trust = compute_key_trust(
             keys=[trust_key_from_dump_row(k) for k in signing_keys],
             statements=[key_statement_from_dump_row(r) for r in key_statements],

@@ -624,6 +624,29 @@ def parse_distrusted_keys(raw: str | Sequence[str]) -> list[DistrustedKey]:
     return out
 
 
+def assert_not_pinned_and_distrusted(
+    trust_anchors: str | Sequence[str] | None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None,
+) -> None:
+    """Raise ``TypeError`` when a key is both pinned and distrusted, as the
+    Server refuses to boot on the same pair (``VaultKeyDistrustedError``): a key
+    is the root the walk trusts or one it must not, never both.
+    :func:`compute_key_trust` itself walks such a pair as the engine's walk
+    does; a verifier calls this on what its caller passed before it walks."""
+    if trust_anchors is None or distrusted_keys is None:
+        return
+    anchors = set(parse_trust_anchors(trust_anchors))
+    both = next((d for d in _normalize_distrusted(distrusted_keys) if d.spki_sha256 in anchors), None)
+    if both is None:
+        return
+    raise TypeError(
+        f"sha256:{both.spki_sha256} is both a trust anchor and a distrusted key. Pin a key you trust and "
+        "distrust one that leaked, never the same key: pin its successor and keep the distrust entry, or drop "
+        "the distrust entry. The Server refuses to start with the same pair in VAULT_TRUST_ANCHORS and "
+        "VAULT_DISTRUSTED_KEYS."
+    )
+
+
 def _normalize_distrusted(raw: str | Sequence[str | DistrustedKey] | None) -> list[DistrustedKey]:
     if raw is None:
         return []
@@ -1491,6 +1514,33 @@ def compute_key_trust(
                     f"the closure retires {s.payload.subject.kid} at {retired}, before the {activated} it was "
                     f"activated, and still counts. {distrust_hint}",
                 )
+            elif e not in trusted and (s.subject in trusted or s.subject in undecided):
+                # The engine publishes only trusted keys and the undecided ones
+                # one step from them, so a walk over the subject's key document
+                # cannot verify this closure. It reads differently from the
+                # engine only where no closure a published key signed dates the
+                # window as early, or forces it too.
+                published = [c for c in counting if c.subject == s.subject and (c.endorser or "") in trusted]
+                earlier = all(retired < (c.payload.subject.retired_at or "") for c in published)
+                forced_alone = s.payload.forced is True and not any(c.payload.forced is True for c in published)
+                if earlier or forced_alone:
+                    effect = (
+                        f"ends {s.payload.subject.kid}'s window at {retired}"
+                        if earlier
+                        else f"retires {s.payload.subject.kid} with force"
+                    )
+                    written = s.check.input.created_at
+                    at = f"@{written}" if isinstance(written, str) else ""
+                    finding(
+                        "KEY_CLOSURE_INVALID",
+                        s,
+                        f"the closure is signed by {by}, which is reached but not anchored, and still counts: it "
+                        f"{effect}, and no key surface publishes {by}, so an offline walk over the published "
+                        f"statements cannot verify it and reads {s.payload.subject.kid} as the engine does not. If "
+                        f"{by} is honest, pin sha256:{e} in trustAnchors (VAULT_TRUST_ANCHORS on the Server, which "
+                        f"publishes it); if it leaked, distrustedKeys sha256:{e}{at} (VAULT_DISTRUSTED_KEYS on the "
+                        f"Server) makes this closure, and what {by} signed after it, count for nothing.",
+                    )
             continue
         closed_subject = closed_at.get(s.subject)
         if s.subject not in trusted and (e is None or e not in trusted):

@@ -193,6 +193,10 @@ _PIN = f"sha256:{'a' * 64}"
             ["/nonexistent", "--distrusted-key", _PIN],
             "--distrusted-key acts only inside the key-statement walk, which runs from --trust-anchor; pass the pin as well.",
         ),
+        (
+            ["/nonexistent", "--trust-anchor", _PIN, "--distrusted-key", f"{_PIN}@2026-09-01T00:00:00Z"],
+            f"{_PIN} is both a --trust-anchor and a --distrusted-key. Pin a key you trust and distrust one that leaked, never the same key",
+        ),
         (["/nonexistent", "--trust-anchor", _PIN], "Cannot read /nonexistent: no such file or directory."),
         (
             ["/nonexistent", "--distrusted-keys", _PIN],

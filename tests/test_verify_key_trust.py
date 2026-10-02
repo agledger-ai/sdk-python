@@ -38,6 +38,7 @@ from .key_statement_helpers import (
     make_opaque_key,
     row,
     statement,
+    under_admitted_key,
 )
 
 _CONFORMANCE = Path(__file__).resolve().parents[1] / "testdata" / "conformance"
@@ -201,21 +202,29 @@ def test_a_statement_the_export_and_a_supplied_key_document_both_carry_is_walked
     assert r.key_trust.findings == []
 
 
-def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothing_even_as_the_pin() -> None:
+def test_refuses_a_key_both_pinned_and_distrusted_as_the_server_refuses_to_start_with_it() -> None:
     exp = _load("valid.json")
-    r = verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[_pin_of(exp)])
+    for distrust in (_pin_of(exp), f"{_pin_of(exp)}@2026-09-01T00:00:00Z"):
+        with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
+            verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[distrust])
+
+
+def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothing_though_its_root_is_pinned() -> None:
+    exp, pin, key = under_admitted_key()
+    assert verify_export(copy.deepcopy(exp), trust_anchors=[pin]).valid is True
+    r = verify_export(exp, trust_anchors=[pin], distrusted_keys=[f"sha256:{key.digest}"])
     assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
 
 
 def test_a_key_distrusted_from_an_instant_and_never_retired_fails_what_it_wrote_after_worded_as_the_cutoff() -> None:
-    exp = _load("valid.json")
+    exp, pin, key = under_admitted_key()
     # A millisecond after the first entry's write time, before the second's.
     first_ms = cast("int", instant_ms(exp["entries"][0]["createdAt"]))
     assert first_ms + 1 < cast("int", instant_ms(exp["entries"][1]["createdAt"]))
     at = datetime.fromtimestamp((first_ms + 1) / 1000, tz=UTC)
     cutoff = f"{at.strftime('%Y-%m-%dT%H:%M:%S')}.{(first_ms + 1) % 1000:03d}000Z"
-    r = verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[f"{_pin_of(exp)}@{cutoff}"])
-    key_id = exp["entries"][1]["integrity"]["signingKeyId"]
+    r = verify_export(exp, trust_anchors=[pin], distrusted_keys=[f"sha256:{key.digest}@{cutoff}"])
+    key_id = key.kid
     assert r.entries[0].valid
     assert r.broken_at is not None
     assert (r.broken_at.position, r.broken_at.code) == (2, "CHAIN_KEY_EXPIRED")

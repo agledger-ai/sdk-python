@@ -340,7 +340,10 @@ _SUGGESTIONS: dict[str, str] = {
     "KEY_CLOSURE_INVALID": (
         "A key is retired with no closure that counts for it, or a closure is signed by a"
         " key the walk does not anchor, by a key after its own retirement, or dates a "
-        "retirement before its subject was activated. A closure that still counts ends "
+        "retirement before its subject was activated, or is signed by a key the walk "
+        "reaches but does not anchor and retires an anchored key earlier, or with force, "
+        "than any closure a published key signed (so a walk over the published key "
+        "documents reads that key differently). A closure that still counts ends "
         "its subject's window whoever wrote it; if its signer leaked, have the operator "
         "add it to VAULT_DISTRUSTED_KEYS and pass the same entry as distrustedKeys."
     ),
