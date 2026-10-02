@@ -471,6 +471,7 @@ def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
     for f in key_trust.findings:
         lines.append(f"    [{f.code}] key {f.key_id or '-'}: {f.detail}")
         lines.append(f"      -> {suggestion(f.code)}")
+    lines.extend(f"    note: key {n.key_id or '-'}: {n.detail}" for n in key_trust.notes)
     return lines
 
 

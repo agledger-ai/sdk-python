@@ -242,3 +242,16 @@ def test_the_headline_and_exit_code_per_verdict(
         1: "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
     }[code]
     assert lines[1].startswith(explanation)
+
+
+def test_a_key_note_is_listed_when_an_honest_rotation_off_a_key_distrusted_after_it_passes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fx = _REPO_ROOT / "tests" / "fixtures" / "distrusted-rotation"
+    meta = json.loads((fx / "meta.json").read_text())
+    argv = [str(fx / "export.json"), "--keys", str(fx / "keys.json"), "--trust-anchor", meta["pin"]]
+    assert run_cli([*argv, "--distrusted-key", meta["distrust"]]) == _EXIT_OK
+    out = capsys.readouterr().out
+    assert out.startswith("[PASS]")
+    assert "note: key " in out
+    assert "which distrustedKeys distrusts" in out
