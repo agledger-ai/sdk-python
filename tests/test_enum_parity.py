@@ -75,9 +75,10 @@ COVERED = sorted(set(SDK_LITERALS) & set(PINNED))
 # Named Literals with no pinned API enum to check against. Each is deliberate:
 #   AcceptanceStatus    the spec declares it ``type: ["null", "string"]``
 #   ApiKeyRole          key roles are an SDK concept, not a served enum
+#   KeyOwnerType        the owner kind each role pairs with, likewise
 #   RecordType          customer-registered, so the API cannot enumerate it
 #   RiskClassification  EU AI Act tiers plus ``unclassified``, an SDK addition
-UNCOVERED = ["AcceptanceStatus", "ApiKeyRole", "RecordType", "RiskClassification"]
+UNCOVERED = ["AcceptanceStatus", "ApiKeyRole", "KeyOwnerType", "RecordType", "RiskClassification"]
 
 
 # Pinned unions the TS SDK names and this one does not yet. The comparison

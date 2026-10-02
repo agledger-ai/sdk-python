@@ -149,7 +149,11 @@ class SchemasResource:
         return self._http.post("/v1/schemas/import", json=body)
 
     def register(self, schema_input: dict[str, Any]) -> dict[str, Any]:
-        """Register a new custom Type schema."""
+        """Register a new custom Type schema.
+
+        A body that repeats the latest version of the type registers nothing:
+        the Server answers 200 with that version rather than 201 with a new
+        one, so a retried registration is safe."""
         return self._http.post("/v1/schemas", json=schema_input)
 
     def get_versions(self, type: str, *, publisher: str | None = None) -> Page[dict[str, Any]]:

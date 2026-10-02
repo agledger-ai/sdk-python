@@ -85,8 +85,13 @@ class WebhooksResource:
             params["url"] = url
         return Page[dict[str, Any]].model_validate(self._http.get_page("/v1/webhooks", params=params))
 
-    def delete(self, webhook_id: str) -> None:
-        self._http.delete(f"/v1/webhooks/{webhook_id}")
+    def delete(self, webhook_id: str) -> dict[str, Any]:
+        """Deactivate a webhook subscription. Returns ``{webhookId, isActive:
+        False, deadLetters, nextSteps}``: its dead-lettered deliveries stay in
+        the DLQ, where a retry is now refused, and each keeps system health
+        degraded until discarded with :meth:`discard_dlq`. Repeating the delete
+        answers the current count."""
+        return self._http.delete(f"/v1/webhooks/{webhook_id}")
 
     def rotate(self, webhook_id: str) -> Webhook:
         """Rotate webhook signing secret."""
@@ -122,6 +127,13 @@ class WebhooksResource:
     def retry_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Retry a single DLQ entry for a webhook."""
         return self._http.post(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}/retry")
+
+    def discard_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
+        """Discard a DLQ entry without delivering it. On an inactive
+        subscription this is the only way to clear one. The event itself is
+        kept: ``events.list()`` and the record still carry it. Returns
+        ``{discarded, dlqId, webhookId, nextSteps}``."""
+        return self._http.delete(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}")
 
 
 class AsyncWebhooksResource:
@@ -195,8 +207,9 @@ class AsyncWebhooksResource:
             params["url"] = url
         return Page[dict[str, Any]].model_validate(await self._http.get_page("/v1/webhooks", params=params))
 
-    async def delete(self, webhook_id: str) -> None:
-        await self._http.delete(f"/v1/webhooks/{webhook_id}")
+    async def delete(self, webhook_id: str) -> dict[str, Any]:
+        """Deactivate a webhook subscription. See the sync counterpart."""
+        return await self._http.delete(f"/v1/webhooks/{webhook_id}")
 
     async def rotate(self, webhook_id: str) -> Webhook:
         """Rotate webhook signing secret."""
@@ -232,3 +245,7 @@ class AsyncWebhooksResource:
     async def retry_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Retry a single DLQ entry for a webhook."""
         return await self._http.post(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}/retry")
+
+    async def discard_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
+        """Discard a DLQ entry without delivering it. See the sync counterpart."""
+        return await self._http.delete(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}")

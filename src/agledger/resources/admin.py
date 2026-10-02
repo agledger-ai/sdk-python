@@ -4,11 +4,13 @@ vault inspection, and platform operations. Requires an ``admin``-role key."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import Any, Literal, overload
 
 from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import (
+    ApiKeyRole,
     AutoProvisionScopeProfile,
+    KeyOwnerType,
     TrustedIssuer,
     TrustedIssuerAlg,
     TrustedIssuerAppliesTo,
@@ -723,12 +725,54 @@ class AdminResource:
             "/v1/admin/api-keys", params=params, max_pages=max_pages
         )
 
+    @overload
     def create_api_key(
         self,
         *,
-        role: str,
+        role: Literal["admin"],
         owner_id: str,
-        owner_type: str,
+        owner_type: Literal["org"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def create_api_key(
+        self,
+        *,
+        role: Literal["agent"],
+        owner_id: str,
+        owner_type: Literal["agent"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def create_api_key(
+        self,
+        *,
+        role: Literal["platform"],
+        owner_id: str,
+        owner_type: Literal["platform"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    def create_api_key(
+        self,
+        *,
+        role: ApiKeyRole,
+        owner_id: str,
+        owner_type: KeyOwnerType,
         label: str | None = None,
         scopes: list[str] | None = None,
         scope_profile: str | None = None,
@@ -736,6 +780,13 @@ class AdminResource:
         allowed_ips: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create an API key.
+
+        The role fixes the owner kind: an ``admin`` key is owned by an org
+        (``owner_type="org"``, ``owner_id`` the org id), an ``agent`` key by an
+        agent (``"agent"``), a ``platform`` key by the platform
+        (``"platform"``). The Server refuses any other pair with a 400 whose
+        ``recoveryHint`` lists the valid ones, and the overloads make a
+        mismatched pair a type error.
 
         ``allowed_ips`` restricts where the key may be used from: addresses or
         CIDR blocks, IPv4 or IPv6 (``203.0.113.7``, ``10.0.0.0/8``). A request
@@ -767,7 +818,8 @@ class AdminResource:
         (→ ``allowedIps``) here. ``allowed_ips`` replaces the whole list;
         ``None`` or ``[]`` removes the restriction. ``label`` and
         ``expires_at`` are settable only at create time, and the Server refuses
-        them on update (``additionalProperties: false``)."""
+        them on update (``additionalProperties: false``). The response names
+        the key ``keyId``, as the create response does."""
         body = _api_key_update_body(params)
         return self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
@@ -810,7 +862,10 @@ class AdminResource:
     # --- Webhook DLQ ---
 
     def list_dlq(self, **params: Any) -> dict[str, Any]:
-        """List webhook dead-letter queue entries."""
+        """List webhook dead-letter queue entries. An entry's
+        ``subscriptionActive`` is False when its subscription is deleted,
+        disabled or pruned: a retry is then refused, and :meth:`discard_dlq`
+        clears it."""
         return self._http.get_page("/v1/admin/webhook-dlq", params=params)
 
     def retry_dlq(self, dlq_id: str) -> dict[str, Any]:
@@ -818,8 +873,17 @@ class AdminResource:
         return self._http.post(f"/v1/admin/webhook-dlq/{dlq_id}/retry")
 
     def retry_all_dlq(self) -> dict[str, Any]:
-        """Retry all DLQ entries."""
+        """Retry all DLQ entries. ``skippedInactive`` counts the entries left
+        in place because their subscription is inactive; discard each with
+        :meth:`discard_dlq`."""
         return self._http.post("/v1/admin/webhook-dlq/retry-all")
+
+    def discard_dlq(self, dlq_id: str) -> dict[str, Any]:
+        """Discard a DLQ entry on any subscription without delivering it
+        (platform key). This is how an entry whose subscription is inactive is
+        cleared. The event itself is kept. Returns ``{discarded, dlqId,
+        webhookId, nextSteps}``."""
+        return self._http.delete(f"/v1/admin/webhook-dlq/{dlq_id}")
 
     def get_webhook_health(self, **params: Any) -> dict[str, Any]:
         """Get health status of all webhooks."""
@@ -1352,18 +1416,61 @@ class AsyncAdminResource:
         ):
             yield item
 
+    @overload
     async def create_api_key(
         self,
         *,
-        role: str,
+        role: Literal["admin"],
         owner_id: str,
-        owner_type: str,
+        owner_type: Literal["org"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    async def create_api_key(
+        self,
+        *,
+        role: Literal["agent"],
+        owner_id: str,
+        owner_type: Literal["agent"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    async def create_api_key(
+        self,
+        *,
+        role: Literal["platform"],
+        owner_id: str,
+        owner_type: Literal["platform"],
+        label: str | None = None,
+        scopes: list[str] | None = None,
+        scope_profile: str | None = None,
+        expires_at: str | None = None,
+        allowed_ips: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def create_api_key(
+        self,
+        *,
+        role: ApiKeyRole,
+        owner_id: str,
+        owner_type: KeyOwnerType,
         label: str | None = None,
         scopes: list[str] | None = None,
         scope_profile: str | None = None,
         expires_at: str | None = None,
         allowed_ips: list[str] | None = None,
     ) -> dict[str, Any]:
+        """Create an API key. Each role takes one owner kind; see the sync counterpart."""
         body: dict[str, Any] = {
             "role": role,
             "ownerId": owner_id,
@@ -1423,6 +1530,10 @@ class AsyncAdminResource:
 
     async def retry_all_dlq(self) -> dict[str, Any]:
         return await self._http.post("/v1/admin/webhook-dlq/retry-all")
+
+    async def discard_dlq(self, dlq_id: str) -> dict[str, Any]:
+        """Discard a DLQ entry without delivering it. See the sync counterpart."""
+        return await self._http.delete(f"/v1/admin/webhook-dlq/{dlq_id}")
 
     async def get_webhook_health(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/webhooks/health", params=params)
