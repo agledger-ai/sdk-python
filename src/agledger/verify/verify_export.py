@@ -67,10 +67,10 @@ from agledger.verify.key_statements import (
     _b64decode,  # pyright: ignore[reportPrivateUsage]
     _statements_from_map,  # pyright: ignore[reportPrivateUsage]
     compute_key_trust,
-    instant_ms,
     key_statements_from_export,
     no_anchor_report,
     report_key_trust,
+    rfc3339_ms,
     settle_key_trust,
     spki_sha256,
 )
@@ -1423,7 +1423,7 @@ def verify_entry(
         # The engine times every entry. Without a time the walk can read, an
         # unsigned entry cannot be placed before signing began, so it is not
         # early history: it fails closed.
-        if keys.signing_since is not None and instant_ms(created_at) is None:
+        if keys.signing_since is not None and rfc3339_ms(created_at) is None:
             return EntryVerificationResult(
                 position=position,
                 valid=False,
@@ -1570,7 +1570,7 @@ def verify_entry(
     if activated_at is not None or retired_at is not None or distrust_cutoff is not None:
         if applied_checks is not None:
             applied_checks.add("key_temporal")
-        if not isinstance(created_at, str) or instant_ms(created_at) is None:
+        if not isinstance(created_at, str) or rfc3339_ms(created_at) is None:
             return EntryVerificationResult(
                 position=position,
                 valid=False,
@@ -2439,7 +2439,7 @@ def written_while_signing(written_at: object, signing_since: object) -> bool:
     since = _instant_ms(signing_since)
     if since is None:
         return False
-    written = _instant_ms(written_at)
+    written = rfc3339_ms(written_at)
     if written is None:
         return True
     return written >= since
@@ -2461,7 +2461,7 @@ def _temporal_key_failure(
     for a key that had not started yet sent consumers to investigate rotation
     when the real condition is a backdated entry or clock skew.
     """
-    written = _instant_ms(created_at)
+    written = rfc3339_ms(created_at)
     if written is None:
         return None
     if activated_at:

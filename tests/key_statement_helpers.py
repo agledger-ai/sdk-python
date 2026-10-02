@@ -199,6 +199,7 @@ def statement(
         subject_key_id=subject.kid,
         endorser_key_id=endorser.kid if endorser else None,
         endorser_column=True,
+        source="dump",
         cose=[sign_statement(data, k) for k in signers],
         created_at=ms(created_at or T1),
         digest=hashlib.sha256(data).hexdigest(),
