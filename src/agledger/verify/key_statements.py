@@ -1531,15 +1531,24 @@ def compute_key_trust(
                     )
                     written = s.check.input.created_at
                     at = f"@{written}" if isinstance(written, str) else ""
+                    # A distrusted signer cannot be pinned; on a key document its
+                    # closure still counts, since a closure only narrows trust.
+                    remedy = (
+                        f"{by} is in distrustedKeys, and a closure it signed in a key document still counts here, "
+                        "since a closure only narrows trust; the Server counts it for nothing only when it was "
+                        "stored at or after the cutoff."
+                        if e in cutoffs
+                        else f"If {by} is honest, pin sha256:{e} in trustAnchors (VAULT_TRUST_ANCHORS on the Server, "
+                        f"which publishes it); if it leaked, distrustedKeys sha256:{e}{at} (VAULT_DISTRUSTED_KEYS on "
+                        f"the Server) makes this closure, and what {by} signed after it, count for nothing."
+                    )
                     finding(
                         "KEY_CLOSURE_INVALID",
                         s,
                         f"the closure is signed by {by}, which is reached but not anchored, and still counts: it "
                         f"{effect}, and no key surface publishes {by}, so an offline walk over the published "
-                        f"statements cannot verify it and reads {s.payload.subject.kid} as the engine does not. If "
-                        f"{by} is honest, pin sha256:{e} in trustAnchors (VAULT_TRUST_ANCHORS on the Server, which "
-                        f"publishes it); if it leaked, distrustedKeys sha256:{e}{at} (VAULT_DISTRUSTED_KEYS on the "
-                        f"Server) makes this closure, and what {by} signed after it, count for nothing.",
+                        f"statements cannot verify it and reads {s.payload.subject.kid} as the engine does not. "
+                        f"{remedy}",
                     )
             continue
         closed_subject = closed_at.get(s.subject)
