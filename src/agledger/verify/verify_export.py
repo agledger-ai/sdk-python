@@ -50,7 +50,6 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel
@@ -850,6 +849,28 @@ class _SuppliedKey:
     statements: list[object] | None = None
 
 
+def _refuse_a_malformed_window(i: int, key_id: str, item: object) -> None:
+    """Raise ``TypeError`` naming the key when a supplied ``activatedAt`` or
+    ``retiredAt`` is given and is not an RFC 3339 instant: a window the caller
+    supplies is held to RFC 3339, as ``distrusted_keys`` is, since one that is
+    not would be read by a lenient parser or not at all. Mirrors verify-core's
+    ``normalizeSuppliedKeys``."""
+    for edge, snake in (("activatedAt", "activated_at"), ("retiredAt", "retired_at")):
+        if isinstance(item, Mapping):
+            m = cast("Mapping[str, Any]", item)
+            value: object = m[edge] if edge in m else m.get(snake)
+        else:
+            value = getattr(item, edge, None)
+            if value is None:
+                value = getattr(item, snake, None)
+        if value is not None and rfc3339_ms(value) is None:
+            raise TypeError(
+                f"verify_export: public_keys[{i}] (key {key_id}) has {edge} {json.dumps(value, default=repr)}, "
+                "which is not an RFC 3339 instant (2026-09-01T00:00:00.000Z: a T, an offset or Z, a real "
+                "calendar date)."
+            )
+
+
 def _supplied_window(item: object) -> tuple[str | None, str | None, bool]:
     """The ``(activated_at, retired_at, carries_window)`` a caller-supplied key
     entry brings, read the way verify-core reads ``activatedAt`` /
@@ -965,6 +986,7 @@ def _normalize_supplied_keys(
                 f"Empty fields are a structural error; fix the upstream "
                 f"serializer rather than pass the empty value through."
             )
+        _refuse_a_malformed_window(i, key_id, cast(object, item))
         activated_at, retired_at, carries = _supplied_window(cast(object, item))
         if isinstance(item, Mapping):
             statements: object = cast("Mapping[str, Any]", item).get("statements")
@@ -1165,7 +1187,7 @@ class KeyCache:
             # Refused rather than read as "no activation time", which would
             # silently switch the time half of the rule off.
             raise TypeError(
-                f"signing_since must be an ISO-8601 time or None (got {signing_since!r})."
+                f"signing_since must be an RFC 3339 instant or None (got {signing_since!r})."
             )
         self.signing_since: str | None = signing_since
 
@@ -1570,6 +1592,23 @@ def verify_entry(
     if activated_at is not None or retired_at is not None or distrust_cutoff is not None:
         if applied_checks is not None:
             applied_checks.add("key_temporal")
+        # A window edge that is not RFC 3339 cannot place anything either, and
+        # the check fails closed on it rather than skipping that edge.
+        for edge, value in (
+            ("activatedAt", activated_at),
+            ("retiredAt", retired_at),
+            ("distrustCutoff", distrust_cutoff),
+        ):
+            if isinstance(value, str) and rfc3339_ms(value) is None:
+                return EntryVerificationResult(
+                    position=position,
+                    valid=False,
+                    code="CHAIN_MALFORMED_ENTRY",
+                    detail=(
+                        f"Key {signing_key_id}'s {edge} {json.dumps(value)} is not an RFC 3339 instant, "
+                        "so the entry cannot be placed inside its window."
+                    ),
+                )
         if not isinstance(created_at, str) or rfc3339_ms(created_at) is None:
             return EntryVerificationResult(
                 position=position,
@@ -2382,24 +2421,12 @@ def verify_cose_sign1(envelope: bytes, key: RegisteredKey) -> CoseVerifyOutcome:
 # --- temporal key-validity (mirror verify-core chain.ts temporalKeyFailure) ---
 
 
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-
-
 def _instant_ms(value: object) -> int | None:
-    """An ISO-8601 time as integer milliseconds since the epoch, the
-    resolution ``Date.parse`` gives the TS verifier, so the two agree on every
-    boundary. A time without an offset (including a bare date) is read as
-    UTC. ``None`` for anything that does not parse: the caller reads that as
-    "cannot place this row", never as a failure."""
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return (parsed - _EPOCH) // timedelta(milliseconds=1)
+    """An RFC 3339 instant as integer milliseconds since the epoch, strict as
+    verify-core's ``instantMs`` is: a ``T``, an offset or ``Z``, a real
+    calendar date. ``None`` for anything else: the caller reads that as "cannot
+    place this row", never as a failure."""
+    return rfc3339_ms(value)
 
 
 def earliest_key_activation(keys: Iterable[Mapping[str, Any]]) -> str | None:

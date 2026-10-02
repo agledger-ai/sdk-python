@@ -1281,5 +1281,6 @@ def test_a_write_time_is_strict_rfc3339_and_reads_every_offset_and_case_it_allow
     assert rfc3339_ms("2024-02-29T00:00:00Z") is not None
     for bad in ("2026-09-01T00:00:00", "2026-09-01 00:00:00Z", "1", "2026-02-30T00:00:00.000000Z", "2025-02-29T00:00:00Z", "2026-09-01T00:60:00Z", ""):
         assert rfc3339_ms(bad) is None, bad
-    # A key window a caller supplies is still read as ISO-8601.
-    assert instant_ms("2026-09-01T00:00:00") == z
+    # Every instant is strict, a key window included.
+    assert instant_ms("2026-09-01T00:00:00") is None
+    assert instant_ms("2026-09-01T00:00:00Z") == z

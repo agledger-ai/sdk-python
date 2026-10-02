@@ -48,6 +48,7 @@ function project(r) {
       unanchoredKeyIds: r.keyTrust.unanchoredKeyIds,
       undecidedKeyIds: r.keyTrust.undecidedKeyIds,
       findings: r.keyTrust.findings.map((f) => ({ code: f.code, keyId: f.keyId, statementId: f.statementId, detail: f.detail })),
+      notes: (r.keyTrust.notes ?? []).map((n) => ({ keyId: n.keyId, statementId: n.statementId, detail: n.detail })),
     },
   };
 }
