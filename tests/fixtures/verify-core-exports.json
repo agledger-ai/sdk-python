@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.0.0 @ 53cfe9cd",
+ "verifyCore": "2.0.0 @ 7221c1f1",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
@@ -137,7 +137,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -287,7 +287,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -437,7 +437,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -458,7 +458,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -472,7 +472,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -532,7 +532,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -546,7 +546,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -587,7 +587,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -608,7 +608,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -622,14 +622,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -682,7 +682,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -696,14 +696,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 80e548552027b60c... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -737,7 +737,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -887,7 +887,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -929,7 +929,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -1003,7 +1003,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -1037,7 +1037,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -1058,7 +1058,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022)."
     },
     "entries": [
      {
@@ -1072,7 +1072,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022).",
       "signature": "not-checked"
      },
      {
@@ -1132,7 +1132,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022)."
     },
     "entries": [
      {
@@ -1146,7 +1146,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=408ebcceb8f902bd24d8426e4e9da48da1140a1aedc49a76981c43f55acd064a).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022).",
       "signature": "not-checked"
      },
      {
@@ -1187,7 +1187,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -1231,7 +1231,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=c8922c283f916c4de2281da60d6b8d6dd585a0dcca0044c468673f776e7f6d85).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=ef52f53a82c64607f20e615d4ad47688228cda3e58d4f6cde41aa6e067ce9297).",
       "signature": "not-checked"
      }
     ],
@@ -1307,7 +1307,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=80e548552027b60ca986acb7fe6ec8e0199715a3111f6b3e52b0f778c2864f75) diverges from row columns (position=3, prev=c8922c283f916c4de2281da60d6b8d6dd585a0dcca0044c468673f776e7f6d85).",
+      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=ef52f53a82c64607f20e615d4ad47688228cda3e58d4f6cde41aa6e067ce9297).",
       "signature": "not-checked"
      }
     ],
@@ -1341,7 +1341,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -1491,7 +1491,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -1833,7 +1833,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -1989,7 +1989,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2135,7 +2135,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2147,11 +2147,11 @@
     }
    }
   },
-  "export/key-substitution.json|keysFile,requireOutOfBandKeys": {
+  "export/key-substitution.json|keysFile,requireSuppliedKeys": {
    "file": "export/key-substitution.json",
    "options": {
     "keysFile": "export/keys-oob.json",
-    "requireOutOfBandKeys": true
+    "requireSuppliedKeys": true
    },
    "trustAnchors": null,
    "result": {
@@ -2222,11 +2222,11 @@
     }
    }
   },
-  "export/key-substitution.json|pinned|keysFile,requireOutOfBandKeys": {
+  "export/key-substitution.json|pinned|keysFile,requireSuppliedKeys": {
    "file": "export/key-substitution.json",
    "options": {
     "keysFile": "export/keys-oob.json",
-    "requireOutOfBandKeys": true
+    "requireSuppliedKeys": true
    },
    "trustAnchors": [
     "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"
@@ -2293,7 +2293,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2445,7 +2445,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2601,7 +2601,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2624,7 +2624,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5)."
     },
     "entries": [
      {
@@ -2638,7 +2638,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5).",
       "signature": "not-checked"
      },
      {
@@ -2700,7 +2700,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5)."
     },
     "entries": [
      {
@@ -2714,7 +2714,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed da93de1e-0e6b-451a-b714-884e4a432f51).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5).",
       "signature": "not-checked"
      },
      {
@@ -2755,7 +2755,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -2887,7 +2887,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3033,7 +3033,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3187,7 +3187,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3307,7 +3307,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3331,14 +3331,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -3394,14 +3394,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert fcebeac5-16de-411a-830e-d8baa8433a7e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -3435,7 +3435,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3561,7 +3561,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3679,7 +3679,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3797,7 +3797,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -3923,7 +3923,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -4139,7 +4139,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -4293,7 +4293,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -4314,21 +4314,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z."
+     "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.274Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.883Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
       "signature": "not-checked"
      }
     ],
@@ -4381,21 +4381,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z."
+     "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.266Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-09-30T22:06:09.274Z, at or after the earliest signing key activation 2026-09-30T22:06:05.594Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.883Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
       "signature": "not-checked"
      }
     ],
@@ -4429,7 +4429,7 @@
      ],
      "anchoredFrom": "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c"
      ],
@@ -4575,7 +4575,7 @@
      ],
      "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c",
       "3f8077ed9d166e62",
@@ -4621,7 +4621,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=5d933f1e3fc6d1d33b9e3f10a74a2dfa2865727b569ab40cbb917435044f893d) diverges from row columns (position=3, prev=170d1abb34bd39abfddf62a4c91b85525fcb9936832fd281ba52275d74fa8762).",
+      "detail": "Signed protected-header chain claim (position=3, prev=64d1dc4de9582747e7e088d19442374d155a755fd01a7cf324b76f4ed7dca005) diverges from row columns (position=3, prev=f595658e41f36284f31f68370157a0159f52aa9eb8292658e7369092c1422aa0).",
       "signature": "not-checked"
      }
     ],
@@ -4697,7 +4697,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=5d933f1e3fc6d1d33b9e3f10a74a2dfa2865727b569ab40cbb917435044f893d) diverges from row columns (position=3, prev=170d1abb34bd39abfddf62a4c91b85525fcb9936832fd281ba52275d74fa8762).",
+      "detail": "Signed protected-header chain claim (position=3, prev=64d1dc4de9582747e7e088d19442374d155a755fd01a7cf324b76f4ed7dca005) diverges from row columns (position=3, prev=f595658e41f36284f31f68370157a0159f52aa9eb8292658e7369092c1422aa0).",
       "signature": "not-checked"
      }
     ],
@@ -4731,7 +4731,7 @@
      ],
      "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c",
       "3f8077ed9d166e62",
@@ -4887,7 +4887,7 @@
      ],
      "anchoredFrom": "sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a",
      "anchoredFromPinned": true,
-     "order": "signed",
+     "order": "written",
      "anchoredKeyIds": [
       "15d63684b387235c",
       "3f8077ed9d166e62",

@@ -65,6 +65,7 @@ from agledger.verify.key_statements import (
     KeyTrustState,
     TrustKeyInput,
     _b64decode,  # pyright: ignore[reportPrivateUsage]
+    _statements_from_map,  # pyright: ignore[reportPrivateUsage]
     compute_key_trust,
     instant_ms,
     key_statements_from_export,
@@ -1075,12 +1076,31 @@ def _trust_statements_of(
     meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey] | None
 ) -> list[KeyStatementInput]:
     """The export's key statements, plus any a supplied key carries (a
-    ``/v1/verification-keys`` ``data`` entry)."""
+    ``/v1/verification-keys`` ``data`` entry). A statement both carry is one
+    row, which the walk reads once by its id and write time. When one source
+    publishes write order and the other does not (an export and a key document
+    from Servers on either side of that change), a statement without a write
+    time that the other source carries with one is dropped as the same row; if
+    any other remains, the walk falls back to the signed order for all of them,
+    which ``key_trust.order`` reports. Mirrors verify-core ``trustStatementsOf``."""
     raw = meta.get("signingKeyStatements")
-    out = key_statements_from_export(cast("Mapping[str, Any]", raw) if raw is not None else None)
-    by_key = {key_id: key.statements for key_id, key in (supplied or {}).items() if key.statements is not None}
-    out.extend(replace(st, id=f"supplied:{st.id or ''}") for st in key_statements_from_export(by_key))
-    return out
+    own = key_statements_from_export(cast("Mapping[str, Any]", raw) if raw is not None else None)
+    if supplied is None:
+        return own
+    by_key = [(key_id, key.statements) for key_id, key in supplied.items() if key.statements is not None]
+    every = [*own, *_statements_from_map(by_key, "signingKeyStatements", "supplied:")]
+    timed = [st for st in every if st.created_at is not None]
+    if not timed or len(timed) == len(every):
+        return every
+
+    def bytes_of(st: KeyStatementInput) -> str:
+        return "|".join(c if isinstance(c, str) else base64.b64encode(c).decode() for c in st.cose)
+
+    timed_bytes = {bytes_of(st) for st in timed}
+    rest = [st for st in every if st.created_at is not None or bytes_of(st) not in timed_bytes]
+    if all(st.created_at is not None for st in rest):
+        return rest
+    return [replace(st, created_at=None) for st in every]
 
 
 def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:

@@ -9,9 +9,9 @@ from __future__ import annotations
 import copy
 import importlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import cbor2
 import pytest
@@ -25,6 +25,7 @@ from agledger.verify import (
     verify_dump,
     verify_export,
 )
+from agledger.verify.key_statements import instant_ms
 from agledger.verify.verify_dump import report_codes
 from agledger.verify.verify_export import KeyCache, RegisteredKey, apply_key_trust
 
@@ -75,7 +76,7 @@ def test_pinned_on_the_vault_key_every_entry_is_anchored() -> None:
     kt = r.key_trust
     assert (kt.status, kt.order, kt.anchored_from_pinned, kt.unanchored_key_ids, kt.findings) == (
         "walked",
-        "signed",
+        "written",
         True,
         [],
         [],
@@ -180,6 +181,26 @@ def test_walks_the_statements_of_the_sdks_own_verification_key_models() -> None:
     assert r.key_trust.anchored_key_ids == [key_id]
 
 
+def test_a_statement_the_export_and_a_supplied_key_document_both_carry_is_walked_once() -> None:
+    from agledger.types import VerificationKey
+
+    exp = _load("valid.json")
+    key_id = exp["entries"][0]["integrity"]["signingKeyId"]
+    model = VerificationKey.model_validate(
+        {
+            "keyId": key_id,
+            "algorithm": "Ed25519",
+            "publicKey": exp["exportMetadata"]["signingPublicKeys"][key_id],
+            "status": "active",
+            "statements": exp["exportMetadata"]["signingKeyStatements"][key_id],
+        }
+    )
+    r = verify_export(exp, public_keys=[model], trust_anchors=[_pin_of(exp)])
+    # A second copy of the genesis would read as an admission after the first.
+    assert r.valid is True
+    assert r.key_trust.findings == []
+
+
 def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothing_even_as_the_pin() -> None:
     exp = _load("valid.json")
     r = verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[_pin_of(exp)])
@@ -188,7 +209,11 @@ def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothi
 
 def test_a_key_distrusted_from_an_instant_and_never_retired_fails_what_it_wrote_after_worded_as_the_cutoff() -> None:
     exp = _load("valid.json")
-    cutoff = "2026-09-30T22:06:08.770000Z"
+    # A millisecond after the first entry's write time, before the second's.
+    first_ms = cast("int", instant_ms(exp["entries"][0]["createdAt"]))
+    assert first_ms + 1 < cast("int", instant_ms(exp["entries"][1]["createdAt"]))
+    at = datetime.fromtimestamp((first_ms + 1) / 1000, tz=UTC)
+    cutoff = f"{at.strftime('%Y-%m-%dT%H:%M:%S')}.{(first_ms + 1) % 1000:03d}000Z"
     r = verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[f"{_pin_of(exp)}@{cutoff}"])
     key_id = exp["entries"][1]["integrity"]["signingKeyId"]
     assert r.entries[0].valid
@@ -242,9 +267,11 @@ def test_pinned_unsigned_entries_before_the_anchored_keys_signed_activation_stay
 
 
 def test_pinned_unsigned_entries_after_the_anchored_keys_signed_activation_fail_with_the_windows_stripped() -> None:
-    exp, pin, _ = _unsigned_with_anchored_key()
+    exp, pin, activated_at = _unsigned_with_anchored_key()
+    # An hour after the anchored key's signed activation.
+    after = datetime.fromtimestamp((cast("int", instant_ms(activated_at)) + 3_600_000) / 1000, tz=UTC)
     for e in exp["entries"]:
-        e["createdAt"] = "2026-09-30T23:00:00.000Z"
+        e["createdAt"] = after.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     signed = _load("valid.json")
     with_windows = copy.deepcopy(exp)
     with_windows["exportMetadata"]["signingKeyWindows"] = signed["exportMetadata"]["signingKeyWindows"]
@@ -349,15 +376,14 @@ def test_chain_signing_key_unanchored_pinned_on_the_vault_key_fails_the_planted_
     assert "CHAIN_SIGNING_KEY_UNANCHORED" in _grade(vector, [_current_pin(vector)])
 
 
-def test_the_registry_column_edits_read_as_drift_from_the_signed_window_not_as_their_manifest_codes() -> None:
-    # These vectors move a vault_signing_keys column and leave the statements
-    # alone. Entries are graded against the signed window, so the column is
-    # drift; the manifest still expects the pre-statement verdicts, which hold
-    # only without a pin (the conformance runner checks those).
-    for vector in ("dump/valid-rotation-boundary", "dump/chain-key-not-yet-active"):
-        assert _grade(vector, [_current_pin(vector)]) == ["CHAIN_KEY_WINDOW_DRIFT"]
-    # A retired row no closure signs is the engine's key_closure_invalid.
-    assert _grade("dump/chain-key-expired", [_current_pin("dump/chain-key-expired")]) == ["KEY_CLOSURE_INVALID"]
+def test_the_key_window_vectors_sign_the_window_they_test_and_grade_as_their_manifest_codes_pinned() -> None:
+    # Each signs the window it tests and sets the column to the signed value,
+    # so pinned on the vault key there is no drift and no closure finding:
+    # only the code the manifest names, or nothing.
+    for v in _PINNED:
+        if v["file"] in ("dump/valid-rotation-boundary", "dump/chain-key-not-yet-active", "dump/chain-key-expired"):
+            want = [v["failureCode"]] if v["expect"] == "fail" else []
+            assert sorted(set(_grade(v["file"], v["options"]["trustAnchors"]))) == want, v["file"]
 
 
 def test_a_dump_without_anchors_passes_flagged_and_says_so() -> None:
