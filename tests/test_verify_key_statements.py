@@ -20,6 +20,7 @@ from agledger.verify.key_statements import (
     KeyTrust,
     TrustKeyInput,
     compute_key_trust,
+    key_statements_from_export,
     parse_distrusted_keys,
     parse_trust_anchors,
 )
@@ -34,6 +35,7 @@ from .key_statement_helpers import (
     Stored,
     TestKey,
     as_document,
+    as_published,
     encode_payload,
     envelope,
     make_key,
@@ -656,6 +658,133 @@ def test_a_document_walk_voids_the_forward_edge_of_a_forced_closure_whatever_ins
     assert x.digest not in trust.trusted
 
 
+# --- a walk over a key document that publishes write order ---
+
+
+def _published(statements: list[Stored]) -> list[KeyStatementInput]:
+    return key_statements_from_export(as_published(statements))
+
+
+def test_a_published_document_is_walked_in_write_order_and_agrees_with_the_dump_on_an_honest_rotation() -> None:
+    c, n, m = make_key(), make_key(), make_key()
+    statements = [
+        statement("genesis", c, signers=[c], activated_at=T0, created_at=T0),
+        statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1),
+        statement("closure", c, endorser=n, signers=[n], retired_at=T2, created_at=T2),
+        statement("succession", m, endorser=n, signers=[n, m], activated_at=T2, created_at=T2),
+        statement("closure", n, endorser=m, signers=[m], retired_at=T3, forced=False, created_at=T3),
+    ]
+    # Filed under each key, newest key first.
+    doc = _published(list(reversed(statements)))
+    assert {st.id for st in doc} == {st.id for st in statements}
+    for pin in (c, n, m):
+        dump = walk([], statements, [pin.digest])
+        from_doc = walk([], doc, [pin.digest])
+        assert from_doc.order == dump.order == "written"
+        assert anchored_kids(from_doc) == anchored_kids(dump) == sorted([c.kid, n.kid, m.kid])
+        for d in (c, n, m):
+            assert from_doc.by_digest[d.digest] == dump.by_digest[d.digest]
+        assert from_doc.findings == []
+
+
+def test_a_published_document_orders_by_the_write_time_never_by_an_instant_a_statement_signs() -> None:
+    p, c, x = make_key(), make_key(), make_key()
+    g = statement("genesis", p, signers=[p], activated_at=T0, created_at=T0)
+    s = statement("succession", c, endorser=p, signers=[p, c], activated_at=T1, created_at=T1)
+    cl = statement("closure", p, endorser=c, signers=[c], retired_at=T2, created_at=T2)
+    # Signs an activation before the closure, and was stored after it.
+    late = statement("succession", x, endorser=p, signers=[p, x], activated_at=T1, created_at=T3)
+    for order in ([g, s, cl, late], [late, cl, s, g], [cl, late, g, s]):
+        trust = walk([], _published(order), [p.digest])
+        assert trust.order == "written"
+        assert anchored_kids(trust) == sorted([p.kid, c.kid])
+        assert x.digest not in trust.trusted
+    # The same document with the write times stripped falls back to the signed
+    # order, where the backdated succession reads as before the closure.
+    assert x.digest in walk([], as_document([g, s, cl, late]), [p.digest]).trusted
+
+
+def test_two_statements_published_in_the_same_microsecond_are_ordered_by_id() -> None:
+    p, c = make_key(), make_key()
+    g = statement("genesis", p, signers=[p], activated_at=T0, created_at=T0)
+    s = replace(statement("succession", c, endorser=p, signers=[p, c], activated_at=T1, created_at=T1), id="b")
+    # Stored in the same microsecond as the succession, with the larger id: after it.
+    cl = replace(statement("closure", p, endorser=c, signers=[c], retired_at=T1, created_at=T1), id="c")
+    for order in ([g, s, cl], [cl, s, g]):
+        trust = walk([], _published(order), [p.digest])
+        assert anchored_kids(trust) == sorted([p.kid, c.kid])
+        assert trust.findings == []
+    # With the smaller id the closure is first, and the succession after it admits nothing.
+    early = replace(cl, id="a")
+    for order in ([g, s, early], [early, s, g]):
+        assert c.digest not in walk([], _published(order), [p.digest]).trusted
+
+
+def test_a_published_statement_with_no_readable_write_time_is_invalid_and_admits_nothing() -> None:
+    c, n = make_key(), make_key()
+    g = statement("genesis", c, signers=[c], activated_at=T0, created_at=T0)
+    succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
+    for broken in (None, 7, "yesterday"):
+        filed = as_published([g, succ])
+        if broken is None:
+            del filed[n.kid][0]["createdAt"]
+        else:
+            filed[n.kid][0]["createdAt"] = broken
+        doc = key_statements_from_export(filed)
+        trust = walk([], doc, [c.digest])
+        assert trust.order == "written"
+        assert anchored_kids(trust) == [c.kid]
+        assert codes(trust) == [("KEY_STATEMENT_INVALID", succ.id)]
+
+
+def test_a_later_admission_a_document_publishes_dates_the_window_and_cuts_the_edge_back() -> None:
+    c, n = make_key(), make_key()
+    g = statement("genesis", c, signers=[c], activated_at=T0, created_at=T0)
+    succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
+    again = statement("genesis", n, signers=[n], activated_at=T2, created_at=T2)
+    dump = walk([], [g, succ, again], [n.digest])
+    from_doc = walk([], _published([g, succ, again]), [n.digest])
+    assert anchored_kids(from_doc) == anchored_kids(dump) == [n.kid]
+    assert from_doc.by_digest[n.digest].activated_at == dump.by_digest[n.digest].activated_at == T2
+
+
+def test_a_published_row_listed_twice_is_one_row_and_a_copy_under_another_id_is_a_second() -> None:
+    c, n = make_key(), make_key()
+    succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
+    keys = [TrustKeyInput(key_id=c.kid, public_key=c.public_key)]
+    twice = as_published([succ])
+    twice[n.kid] = twice[n.kid] * 2
+    assert anchored_kids(walk(keys, key_statements_from_export(twice), [n.digest])) == sorted([c.kid, n.kid])
+    copied = _published([succ, replace(succ, id=next_id())])
+    assert anchored_kids(walk(keys, copied, [n.digest])) == [n.kid]
+
+
+def test_a_listed_activation_no_admission_this_walk_could_verify_signs_is_window_drift() -> None:
+    c, n = make_key(), make_key()
+    # Published under n without its endorser c: the walk cannot verify it, so
+    # n (the pin) has no signed lower edge, wider than the listed one.
+    succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
+    trust = walk([row(n, T1)], _published([succ]), [n.digest])
+    assert anchored_kids(trust) == [n.kid]
+    assert trust.by_digest[n.digest].activated_at is None
+    assert ("CHAIN_KEY_WINDOW_DRIFT", None) in codes(trust)
+    # Listed with no activation, there is nothing to drift from.
+    bare = TrustKeyInput(key_id=n.kid, public_key=n.public_key, algorithm=n.alg)
+    assert ("CHAIN_KEY_WINDOW_DRIFT", None) not in codes(walk([bare], _published([succ]), [n.digest]))
+
+
+def test_a_key_listed_retired_before_the_distrust_cutoff_the_walk_ends_it_at_is_window_drift() -> None:
+    c = make_key()
+    g = statement("genesis", c, signers=[c], activated_at=T0, created_at=T0)
+    cutoff = [DistrustedKey(c.digest, T2)]
+    early = walk([row(c, T0, T1)], [g], [c.digest], cutoff)
+    assert early.by_digest[c.digest].distrust_cutoff == T2
+    assert codes(early) == [("CHAIN_KEY_WINDOW_DRIFT", None)]
+    # Listed active, or retired at or after the cutoff, is no drift: the cutoff is no retirement.
+    assert codes(walk([row(c, T0)], [g], [c.digest], cutoff)) == []
+    assert codes(walk([row(c, T0, T3)], [g], [c.digest], cutoff)) == []
+
+
 # --- distrusted keys over a key document (no write order) ---
 
 
@@ -814,6 +943,16 @@ def _in_write_order(statements: list[Stored]) -> list[Stored]:
 
 def _ms(iso: str) -> int:
     return int(datetime.fromisoformat(iso).timestamp() * 1000)
+
+
+def _sim_walk_published(statements: list[Stored], anchors: set[str], keys: list[TestKey]) -> KeyTrust:
+    """The same walk over the statements as a key surface publishes them,
+    filed under their subject key, newest first."""
+    return walk(
+        [TrustKeyInput(key_id=k.kid, public_key=k.public_key, algorithm=k.alg) for k in keys],
+        key_statements_from_export(as_published(list(reversed(statements)))),
+        list(anchors),
+    )
 
 
 def _sim_walk(
@@ -1096,6 +1235,11 @@ def test_random_registries_a_document_walk_over_the_honest_history_matches_the_d
                 list(sim.anchors_for(pin)),
             )
             tag = f"seed {sim.seed}, pinned on {pin.name}"
+            published = _sim_walk_published(honest_only, sim.anchors_for(pin), sim.keys_of(False))
+            if sorted(published.trusted) != sorted(dump.trusted) or any(
+                published.by_digest.get(d) != dump.by_digest.get(d) for d in dump.trusted
+            ):
+                failures.append(f"{tag}: the published document's walk differs")
             if sorted(doc.trusted) != sorted(dump.trusted):
                 failures.append(f"{tag}: trusted set differs")
             failures.extend(

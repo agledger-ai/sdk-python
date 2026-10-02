@@ -206,6 +206,19 @@ def statement(
     )
 
 
+def as_published(statements: list[Stored]) -> dict[str, list[dict[str, Any]]]:
+    """The same statements as an API 2.0 key surface publishes them, filed
+    under their subject key in the order given: each with its row ``id`` and
+    its ``createdAt`` at microsecond precision."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for s in statements:
+        created = f"{s.created_at[:-1]}000Z" if s.created_at else s.created_at
+        out.setdefault(s.subject_key_id or "", []).append(
+            {"id": s.id, "kind": s.kind, "createdAt": created, "cose": list(s.cose)}
+        )
+    return out
+
+
 def as_document(statements: list[Stored]) -> list[KeyStatementInput]:
     """The same statements as a key document carries them: no write time, no endorser column."""
     return [KeyStatementInput(id=s.id, kind=s.kind, subject_key_id=s.subject_key_id, cose=s.cose) for s in statements]

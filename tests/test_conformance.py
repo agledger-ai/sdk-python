@@ -74,7 +74,7 @@ def _vector_id(vector: dict[str, Any]) -> str:
     opts = vector.get("options") or {}
     if opts.get("requireKeyId"):
         suffix += "+requireKeyId"
-    if opts.get("requireOutOfBandKeys"):
+    if opts.get("requireSuppliedKeys"):
         suffix += "+requireSupplied"
     if opts.get("trustAnchors"):
         suffix += "+pinned"
@@ -111,8 +111,7 @@ def test_conformance_vector(vector: dict[str, Any]) -> None:
         kwargs["public_keys"] = json.loads((_CONFORMANCE_DIR / keys_file).read_text())
     if options.get("requireKeyId"):
         kwargs["require_key_id"] = options["requireKeyId"]
-    # The manifest keeps the engine's pre-2.0 option name.
-    if options.get("requireOutOfBandKeys"):
+    if options.get("requireSuppliedKeys"):
         kwargs["require_supplied_keys"] = True
     if options.get("trustAnchors"):
         kwargs["trust_anchors"] = options["trustAnchors"]

@@ -60,7 +60,7 @@ for (const v of manifest.vectors) {
   if (o.keysFile) options.publicKeys = unwrapKeys(json(o.keysFile));
   if (o.agentKeysFile) options.agentKeys = json(o.agentKeysFile);
   if (o.requireKeyId) options.requireKeyId = o.requireKeyId;
-  if (o.requireOutOfBandKeys) options.requireSuppliedKeys = true;
+  if (o.requireSuppliedKeys) options.requireSuppliedKeys = true;
   if (o.trustAnchors) options.trustAnchors = o.trustAnchors;
   const pins = [undefined];
   const anchoredFrom = doc.exportMetadata?.anchoredFrom;

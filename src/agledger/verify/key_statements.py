@@ -27,19 +27,29 @@ precision. A succession is signed by the endorser and then by the subject; a
 closure by a key other than its subject; a genesis by its subject alone, and it
 grants no trust.
 
-**Write order.** The rule orders statements by the database's write order. A
-dump carries it (``created_at``, then the file's own row order, which the
-producer writes as ``created_at, id``). The key documents (``GET
-/v1/verification-keys``, an export's ``exportMetadata.signingKeyStatements``)
-do not, so statements read from them are ordered by the instant they sign (a
-genesis or succession by ``subject.activatedAt``, a closure by
-``subject.retiredAt``). For an honest document the two orders agree, because
-the Server signs the instant it writes. What the signed order cannot do is hold
-a leaked key to the time it actually wrote a statement: a key retired without
-``forced`` whose private half later leaks can date a statement before its
-retirement. Such a statement is only ever in a document that did not come from
-the Server. A forced closure voids every edge out of its key whatever the
-order, and a walk over a dump applies the real write order.
+**Write order.** The rule orders statements by the database's write order,
+``created_at`` then the row ``id``, never by an instant a statement signs. A
+dump carries it (``created_at`` at milliseconds, then the file's own row order,
+which the producer writes as ``created_at, id``). Every key document (``GET
+/v1/verification-keys``, ``/.well-known/agledger-vault-keys.json``, an export's
+``exportMetadata.signingKeyStatements``) carries it too, as each statement's
+``id`` and ``createdAt`` at microseconds, and lists under a trusted key its
+admission, every later genesis or succession it signed, and its counting
+closures. A walk over a document therefore dates a window and cuts an edge back
+as the engine does, except for a later succession whose endorser the document
+does not carry: it cannot be verified here, is KEY_STATEMENT_INVALID, and the
+window opens earlier than the engine's, which the listed ``activatedAt``
+reports as CHAIN_KEY_WINDOW_DRIFT.
+
+A document from a Server that published neither field is ordered by the
+instant each statement signs (a genesis or succession by
+``subject.activatedAt``, a closure by ``subject.retiredAt``). For an honest
+document the two orders agree, because the Server signs the instant it writes.
+What the signed order cannot do is hold a leaked key to the time it actually
+wrote a statement: a key retired without ``forced`` whose private half later
+leaks can date a statement before its retirement. Such a statement is only
+ever in a document that did not come from the Server. A forced closure voids
+every edge out of its key whatever the order.
 """
 
 from __future__ import annotations
@@ -52,6 +62,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from functools import cmp_to_key
 from typing import Any, Literal, cast
 
 from agledger._runtime_crypto import runtime_can_compute
@@ -138,7 +149,10 @@ class KeyStatementInput:
     cose: Sequence[str | bytes]
     """The COSE_Sign1 signatures, base64 or bytes, in signing order."""
     id: str | None = None
-    """Row id (the dump's ``id``), named in findings."""
+    """Row id (the dump's or a key document's ``id``), named in findings. Under
+    the write order it breaks a tie between two statements whose
+    ``created_at`` are the same microsecond, as the engine's ``created_at, id``
+    does."""
     subject_key_id: str | None = None
     """The key id the source files the statement under, bound to the signed
     ``subject.kid``. ``None`` when the source names none."""
@@ -149,12 +163,14 @@ class KeyStatementInput:
     """Whether the source carries an ``endorser_key_id`` column at all. The key
     documents do not, so theirs is not bound."""
     created_at: str | None = None
-    """The database write time (the dump's ``created_at``). Give it for every
-    statement or for none: with it the walk applies the write order, without it
-    the signed order (see the module docstring). Under the write order a
-    statement whose ``created_at`` is not an RFC 3339 instant cannot be placed,
-    and is KEY_STATEMENT_INVALID (:func:`key_statement_from_dump_row` gives
-    ``""`` for a row without one)."""
+    """The database write time (the dump's ``created_at``, a key document's
+    ``createdAt``). Give it for every statement or for none: with it the walk
+    applies the write order, without it the signed order (see the module
+    docstring). Statements are ordered by it at the precision given, then, for
+    two at the same microsecond, by ``id``, and otherwise in input order. Under
+    the write order a statement whose ``created_at`` is not an RFC 3339 instant
+    cannot be placed, and is KEY_STATEMENT_INVALID (the adapters give ``""``
+    for a row or document statement without one)."""
 
 
 @dataclass(frozen=True)
@@ -239,7 +255,9 @@ class KeyTrust:
     """The walk's result. See :func:`compute_key_trust`."""
 
     order: Literal["written", "signed"]
-    """``written`` when every statement carried ``created_at``, else ``signed``."""
+    """``written`` when every statement carried ``created_at`` (a dump, or a key
+    document from a Server that publishes each statement's write time), else
+    ``signed`` (an older document; see the module docstring)."""
     anchors: list[str]
     """The anchors walked from, as ``sha256:<hex>``."""
     by_digest: dict[str, KeyTrustEntry]
@@ -419,6 +437,21 @@ def instant_ms(instant: object) -> int | None:
     frac = (m.group(2) or "")[:3].ljust(3, "0")
     offset = "+00:00" if m.group(3) == "Z" else m.group(3)
     return _parse_iso_ms(f"{m.group(1)}.{frac}{offset}")
+
+
+def _instant_us(instant: object) -> tuple[float, bool]:
+    """Microseconds of an RFC 3339 instant (``nan`` when it does not parse),
+    and whether it carries a full microsecond fraction. The key surfaces
+    publish a statement's write time at microsecond precision and a dump at
+    milliseconds, so two dump rows in one millisecond tie here without being
+    simultaneous. Mirrors verify-core ``instantUs``."""
+    ms = instant_ms(instant)
+    if ms is None:
+        return (float("nan"), False)
+    m = _INSTANT.fullmatch(cast("str", instant))
+    frac = (m.group(2) or "") if m is not None else ""
+    sub = int(frac[3:6].ljust(3, "0")) if m is not None else 0
+    return (float(ms * 1000 + sub), len(frac) >= 6)
 
 
 def _b64decode(value: str) -> bytes:
@@ -1047,18 +1080,21 @@ def compute_key_trust(
     # nulled) vouches for nothing and is no endorser's fallback.
     listed_keys = [k for k in keys if isinstance(k.public_key, str) and k.public_key]  # pyright: ignore[reportUnnecessaryIsInstance]
     order: Literal["written", "signed"] = "written" if statements and with_time == len(statements) else "signed"
-    inputs = list(statements)
-    if order == "signed":
-        # With no write time and no row id, two identical statements are one.
-        seen: set[str] = set()
-        deduped: list[KeyStatementInput] = []
-        for s in inputs:
-            k = _dedup_key(s)
-            if k in seen:
-                continue
-            seen.add(k)
-            deduped.append(s)
-        inputs = deduped
+    # One stored row, read from two sources (an export and a key document), is
+    # one statement. With no write time and no row id, two identical
+    # statements are one; with them, a row is its id and write time, and a
+    # copy of a row under another id is a second row, as the engine reads it.
+    seen: set[str] = set()
+    inputs: list[KeyStatementInput] = []
+    for s in statements:
+        if order == "written" and not isinstance(s.id, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+            inputs.append(s)
+            continue
+        k = _dedup_key(s) if order == "signed" else repr((s.id, s.created_at, _dedup_key(s)))
+        if k in seen:
+            continue
+        seen.add(k)
+        inputs.append(s)
 
     findings: list[KeyRegistryFinding] = []
     # An endorser's key material, by digest. A statement's subject SPKI is bound
@@ -1088,11 +1124,13 @@ def compute_key_trust(
 
     checked = [checked_of(st) for st in inputs]
 
-    def sort_key(c: _Checked) -> float | str:
+    def sort_key(c: _Checked) -> tuple[float | str, bool]:
+        """Under the write order ``created_at`` at the precision given, and
+        whether it is a full microsecond (only then does ``id`` break a tie)."""
         if order == "written":
-            at = instant_ms(c.input.created_at)
-            return float("inf") if at is None else at
-        return _signed_instant_of(c) or "￿"
+            us, micro = _instant_us(c.input.created_at)
+            return (float("inf") if us != us else us, micro)
+        return (_signed_instant_of(c) or "￿", False)
 
     def closure_last(c: _Checked) -> int:
         """Under the signed order a closure sorts after every admission that
@@ -1106,11 +1144,28 @@ def compute_key_trust(
         first anyway."""
         return 1 if order == "signed" and c.payload is not None and c.payload.typ == "closure" else 0
 
-    keyed = sorted(
-        ((sort_key(c), closure_last(c), i, c) for i, c in enumerate(checked)), key=lambda t: (t[0], t[1], t[2])
-    )
+    # Under the write order: ``created_at``, then ``id`` for two stored in the
+    # same microsecond (the engine's ``created_at, id``), then input order,
+    # which a dump writes as ``created_at, id`` at the microseconds its
+    # milliseconds hide.
+    placed = [(sort_key(c), closure_last(c), i, c) for i, c in enumerate(checked)]
+
+    def compare(a: tuple[tuple[float | str, bool], int, int, _Checked], b: tuple[tuple[float | str, bool], int, int, _Checked]) -> int:
+        (ka, ma), (kb, mb) = a[0], b[0]
+        if ka != kb:
+            return -1 if ka < kb else 1  # pyright: ignore[reportOperatorIssue]
+        if a[1] != b[1]:
+            return a[1] - b[1]
+        x, y = a[3].input.id, b[3].input.id
+        if ma and mb and isinstance(x, str) and isinstance(y, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+            lx, ly = x.lower(), y.lower()
+            if lx != ly:
+                return -1 if lx < ly else 1
+        return a[2] - b[2]
+
+    keyed = sorted(placed, key=cmp_to_key(compare))
     in_write_order: list[_Statement] = []
-    for at, (k, _r, _i, c) in enumerate(keyed):
+    for at, ((k, _m), _r, _i, c) in enumerate(keyed):
         if c.verdict == "invalid" or c.payload is None:
             continue
         in_write_order.append(
@@ -1120,7 +1175,7 @@ def compute_key_trust(
                 subject=c.payload.subject.spki_sha256,
                 endorser=c.payload.endorser.spki_sha256 if c.payload.endorser else None,
                 at=at,
-                stored_ms=k if isinstance(k, int) else instant_ms(k),
+                stored_ms=instant_ms(c.input.created_at) if order == "written" else instant_ms(k),
             )
         )
     valid = [s for s in in_write_order if s.check.verdict == "valid"]
@@ -1357,6 +1412,15 @@ def compute_key_trust(
             if closed is not None and s.at > closed:
                 finding("KEY_STATEMENT_INVALID", s, f"a {s.payload.typ} by {by} stored after its closure")
 
+    # Keys an admission names that this walk could not verify. A key document
+    # carries a key's admissions but not every endorser, so the walk can date a
+    # trusted key's window earlier than the engine did, or not at all.
+    unverified_admission = {
+        c.payload.subject.spki_sha256
+        for c in checked
+        if c.verdict == "invalid" and c.payload is not None and c.payload.typ != "closure"
+    }
+
     # Findings on listed keys: their columns against the signed values, compared
     # at millisecond precision, the precision a dump or key document carries.
     for key in listed_keys:
@@ -1376,7 +1440,38 @@ def compute_key_trust(
                     f"activatedAt {key.activated_at} differs from the signed {entry.activated_at}",
                 )
             )
+        elif (
+            entry.activated_at is None
+            and isinstance(key.activated_at, str)
+            and entry.spki_sha256 in unverified_admission
+        ):
+            # The window then has no lower edge here, which is wider than the
+            # listed one: the same drift, read the other way.
+            findings.append(
+                KeyRegistryFinding(
+                    "CHAIN_KEY_WINDOW_DRIFT",
+                    key.key_id,
+                    None,
+                    f"activatedAt {key.activated_at} is signed by no admission this walk could verify",
+                )
+            )
         if entry.distrust_cutoff is not None:
+            # The cutoff is no retirement, so a listed key left active is no
+            # drift; one listed retired earlier than the cutoff is graded more
+            # loosely here than where it was listed (a closure this walk could
+            # not verify).
+            listed_retired = instant_ms(key.retired_at)
+            cutoff_ms = instant_ms(entry.distrust_cutoff)
+            if listed_retired is not None and cutoff_ms is not None and listed_retired < cutoff_ms:
+                findings.append(
+                    KeyRegistryFinding(
+                        "CHAIN_KEY_WINDOW_DRIFT",
+                        key.key_id,
+                        None,
+                        f"retiredAt {key.retired_at} is earlier than {entry.distrust_cutoff}, the distrust "
+                        "cutoff this walk ends the key at, and no closure it could verify signs it",
+                    )
+                )
             continue
         if key.status == "retired":
             if entry.retired_at is None:
@@ -1470,30 +1565,43 @@ def trust_key_from_dump_row(row: Mapping[str, Any]) -> TrustKeyInput:
     )
 
 
-def _statement_fields(st: object) -> tuple[object, object]:
+def _statement_fields(st: object) -> tuple[object, object, object, object, bool]:
+    """``kind``, ``cose``, ``id``, ``createdAt`` and whether ``createdAt`` is
+    there at all (JSON ``null`` included) of one published statement."""
     if isinstance(st, Mapping):
         m = cast("Mapping[str, object]", st)
-        return m.get("kind"), m.get("cose")
-    return getattr(st, "kind", None), getattr(st, "cose", None)
+        return m.get("kind"), m.get("cose"), m.get("id"), m.get("createdAt"), "createdAt" in m
+    created = getattr(st, "created_at", None)
+    return getattr(st, "kind", None), getattr(st, "cose", None), getattr(st, "id", None), created, created is not None
 
 
-def _statements_from_map(by_key: Sequence[tuple[str, object]], source: str) -> list[KeyStatementInput]:
-    out: list[KeyStatementInput] = []
+def _statements_from_map(
+    by_key: Sequence[tuple[str, object]], source: str, prefix: str = ""
+) -> list[KeyStatementInput]:
+    """The statements of a document keyed by key id. When any statement of the
+    document carries ``createdAt``, the document publishes write order, so one
+    without it (or with another type) maps to ``""`` and is
+    KEY_STATEMENT_INVALID rather than turning the whole document back to the
+    signed order. A statement with no ``id`` is named
+    ``<prefix><key id>#<index>``. Mirrors verify-core ``statementsFromMap``."""
     for key_id, statements in by_key:
-        if statements is None:
-            continue
-        if not isinstance(statements, (list, tuple)):
+        if statements is not None and not isinstance(statements, (list, tuple)):
             raise TypeError(f"{source}: the statements for key {key_id} are not a list.")
-        for i, st in enumerate(cast("Sequence[object]", statements)):
-            kind, cose = _statement_fields(st)
+    lists = [(k, list(cast("Sequence[object]", v))) for k, v in by_key if isinstance(v, (list, tuple))]
+    timed = any(_statement_fields(st)[4] for _k, sts in lists for st in sts)
+    out: list[KeyStatementInput] = []
+    for key_id, statements in lists:
+        for i, st in enumerate(statements):
+            kind, cose, row_id, created, _has = _statement_fields(st)
             if not isinstance(kind, str) or not isinstance(cose, (list, tuple)):
                 raise TypeError(f"{source}: statement {i} for key {key_id} is not {{kind, cose: [base64...]}}.")
             out.append(
                 KeyStatementInput(
-                    id=f"{key_id}#{i}",
+                    id=row_id if isinstance(row_id, str) else f"{prefix}{key_id}#{i}",
                     kind=kind,
                     subject_key_id=key_id,
                     cose=list(cast("Sequence[str]", cose)),
+                    created_at=(created if isinstance(created, str) else "") if timed else None,
                 )
             )
     return out

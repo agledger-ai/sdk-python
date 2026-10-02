@@ -377,11 +377,20 @@ Without `trust_anchors` the result still passes when nothing failed, flagged:
 trusted verdict, because a key written into the Server's database alone would
 pass too.
 
-A key document carries no write times, so a walk over an export or
-`GET /v1/verification-keys` orders statements by the instant each one signs;
-for a document the Server served that agrees with the order it wrote them. A
-dump carries the write time and is walked in write order, which is the only
-order that holds a leaked key to when it actually wrote a statement. The walk
+Statements are walked in the order the Server wrote them, never by an instant
+a statement signs: a dump carries each row's `created_at`, and an API 2.0
+export or `GET /v1/verification-keys` publishes each statement's row `id` and
+`createdAt`, ordered by `createdAt` then `id` (`key_trust.order` is
+`"written"`). Within such a document, a statement with no readable write time
+is `KEY_STATEMENT_INVALID`. A document from a Server that published neither
+field is walked in the order of the instants its statements sign
+(`key_trust.order` is `"signed"`), which agrees with the write order for a
+document the Server served but cannot hold a leaked key to when it actually
+wrote a statement. A trusted key's document lists every admission it signed,
+so the walk opens its window where the engine does; where it cannot (a later
+succession whose endorser is not itself published, which the walk cannot
+check), the key's listed window is reported as `CHAIN_KEY_WINDOW_DRIFT`. A dump
+carries that endorser and agrees with the engine. The walk
 is `agledger.verify.compute_key_trust`, with
 `key_statements_from_verification_keys()` for a saved `GET
 /v1/verification-keys` response.

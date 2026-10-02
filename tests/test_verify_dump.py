@@ -315,9 +315,16 @@ def _codes(report: VerifyReport) -> set[str]:
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
 def test_a_chain_that_reappears_after_it_closed_is_refused_as_out_of_producer_order() -> None:
     dump = load_dump(str(_VALID_DUMP))
-    first = dump.vault_entries[0]
-    assert any(e["chain_key"] != first["chain_key"] for e in dump.vault_entries)
-    dump.vault_entries = [*dump.vault_entries[1:], first]
+    # A chain with more than one entry, its first entry ahead of every other
+    # chain and the rest after them, so the chain reappears once closed.
+    counts: dict[str, int] = {}
+    for e in dump.vault_entries:
+        counts[e["chain_key"]] = counts.get(e["chain_key"], 0) + 1
+    long_chain = next(k for k, n in counts.items() if n > 1)
+    own = [e for e in dump.vault_entries if e["chain_key"] == long_chain]
+    others = [e for e in dump.vault_entries if e["chain_key"] != long_chain]
+    assert others
+    dump.vault_entries = [own[0], *others, *own[1:]]
     report = verify_dump(dump)
     assert not report.ok
     assert any(

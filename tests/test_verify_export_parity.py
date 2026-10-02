@@ -73,7 +73,7 @@ def test_verify_export_gives_verify_core_s_result_field_for_field(run_id: str) -
         kwargs["agent_keys"] = _json(options["agentKeysFile"])
     if "requireKeyId" in options:
         kwargs["require_key_id"] = options["requireKeyId"]
-    if options.get("requireOutOfBandKeys"):
+    if options.get("requireSuppliedKeys"):
         kwargs["require_supplied_keys"] = True
     result = verify_export(_json(run["file"]), trust_anchors=run["trustAnchors"], **kwargs)
     assert _project(result) == run["result"]
