@@ -226,6 +226,23 @@ class KeyRegistryFinding:
         return {"code": self.code, "keyId": self.key_id, "statementId": self.statement_id, "detail": self.detail}
 
 
+@dataclass(frozen=True)
+class KeyTrustNote:
+    """Something the walk did that is not a finding and never fails a verdict:
+    a statement from a key document, signed by a distrusted key, that admits
+    nothing here because the document's write time is the holder's word and is
+    never held against the key's cutoff, though the engine, holding it to the
+    time it was stored, counts it. It still dates windows and cuts edges back.
+    Mirrors verify-core ``KeyTrustNote``."""
+
+    key_id: str | None
+    statement_id: str | None
+    detail: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {"keyId": self.key_id, "statementId": self.statement_id, "detail": self.detail}
+
+
 @dataclass
 class KeyTrustEntry:
     """What the walk concludes about one key."""
@@ -275,6 +292,8 @@ class KeyTrust:
     """SPKI digests of the undecided keys."""
     findings: list[KeyRegistryFinding]
     statements: KeyStatementCounts
+    notes: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
+    """Non-fatal: see :class:`KeyTrustNote`."""
 
 
 _NO_ANCHOR_DETAIL = (
@@ -324,6 +343,8 @@ class KeyTrustReport:
     unanchored_key_ids: list[str] = field(default_factory=list[str])
     undecided_key_ids: list[str] = field(default_factory=list[str])
     findings: list[KeyRegistryFinding] = field(default_factory=list[KeyRegistryFinding])
+    notes: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
+    """Non-fatal notes from the walk (see :class:`KeyTrustNote`); they never fail a verdict."""
 
     def to_json(self) -> dict[str, Any]:
         """camelCase dict, the shape ``@agledger/verify-core``'s ``KeyTrustReport`` serializes to."""
@@ -338,6 +359,7 @@ class KeyTrustReport:
             "unanchoredKeyIds": list(self.unanchored_key_ids),
             "undecidedKeyIds": list(self.undecided_key_ids),
             "findings": [f.to_json() for f in self.findings],
+            "notes": [n.to_json() for n in self.notes],
         }
 
 
@@ -384,6 +406,7 @@ def report_key_trust(
         unanchored_key_ids=unanchored,
         undecided_key_ids=ids("undecided"),
         findings=list(trust.findings),
+        notes=list(trust.notes),
     )
 
 
@@ -410,22 +433,6 @@ def settle_key_trust(report: KeyTrustReport, anchored_signatures: int) -> KeyTru
 
 
 # --- Instants and base64 ---
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-
-
-def _parse_iso_ms(value: str) -> int | None:
-    """Milliseconds of an ISO-8601 time as ``Date.parse`` reads the forms the
-    verifier meets, or ``None`` when it does not parse. A time without an offset
-    reads as UTC."""
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return (parsed - _EPOCH) // timedelta(milliseconds=1)
-
 
 # RFC 3339 date-time: a ``T``, a numeric offset or ``Z``, any fraction.
 _RFC3339_STRICT = re.compile(
@@ -483,15 +490,12 @@ def instant_ms(instant: object) -> int | None:
     """Milliseconds of an RFC 3339 instant, truncating any finer fraction the
     way the engine reads a microsecond instant. Key statements sign microsecond
     instants; entry write times, dump columns and key documents carry
-    milliseconds, so every comparison between them is made here. A string that
-    is not strict RFC 3339 falls back to an ISO-8601 read, for key windows a
-    caller supplies; a write time the walk places goes through
-    :func:`rfc3339_ms`, which does not. ``None`` when the value does not parse.
+    milliseconds, so every comparison between them is made here. Strict: a
+    ``T``, an offset or ``Z``, a real calendar date and time of day; ``None``
+    for anything else, so no instant is ever placed by how a lenient parser
+    reads a date with no offset, a space separator or an impossible day.
     Mirrors verify-core ``instantMs``."""
-    if not isinstance(instant, str) or not instant:
-        return None
-    strict = rfc3339_ms(instant)
-    return strict if strict is not None else _parse_iso_ms(instant)
+    return rfc3339_ms(instant)
 
 
 def _instant_us(instant: object) -> tuple[float, bool]:
@@ -1304,6 +1308,16 @@ def compute_key_trust(
         cutoff = cutoffs[signer]
         return cutoff is None or (s.stored_ms is not None and s.stored_ms >= cutoff[0])
 
+    def voided_by_stored_time(s: _Statement, signer: str) -> bool:
+        """What the engine would void: signed by a distrusted key with no
+        cutoff, or stored at or after its cutoff. On a key document the stored
+        time is the holder's word, so this decides only whether voiding it is a
+        finding."""
+        cutoff = cutoffs.get(signer)
+        return cutoff is None or (order == "written" and s.stored_ms is not None and s.stored_ms >= cutoff[0])
+
+    notes: list[KeyTrustNote] = []
+
     # Pass 1, then the closures it lets count.
     pass1 = _reach(anchors, [e for e in edges if not distrusted(e.via, e.from_)])
     counting = [
@@ -1411,7 +1425,24 @@ def compute_key_trust(
     for s in valid:
         e = s.endorser
         by = s.payload.endorser.kid if s.payload.endorser else ""
-        if e is not None and distrusted(s, e):
+        if e is not None and distrusted(s, e) and not voided_by_stored_time(s, e):
+            # Voided only because a key document's time is not held against the
+            # cutoff: it admits nothing, but a statement the engine would count
+            # is no finding. It still dates windows and cuts edges back, so it
+            # can only narrow trust. The checks below still apply to it.
+            note_cutoff = cast("tuple[int, str]", cutoffs[e])
+            written = s.check.input.created_at
+            notes.append(
+                KeyTrustNote(
+                    s.payload.subject.kid,
+                    s.check.id,
+                    f"a {s.payload.typ} by {by}, which distrustedKeys distrusts from {note_cutoff[1]}; it admits "
+                    f"nothing here, because a key document's write time"
+                    f"{f' ({written})' if isinstance(written, str) else ''} is not signed and is not held against "
+                    "the cutoff. A dump taken from the Server holds it to the time it was stored.",
+                )
+            )
+        elif e is not None and distrusted(s, e):
             cutoff = cutoffs.get(e)
             closed = s.payload.subject.retired_at
             now = by_digest.get(s.subject)
@@ -1523,7 +1554,9 @@ def compute_key_trust(
             # not verify).
             listed_retired = instant_ms(key.retired_at)
             cutoff_ms = instant_ms(entry.distrust_cutoff)
-            if listed_retired is not None and cutoff_ms is not None and listed_retired < cutoff_ms:
+            if isinstance(key.retired_at, str) and not (
+                listed_retired is not None and cutoff_ms is not None and listed_retired >= cutoff_ms
+            ):
                 findings.append(
                     KeyRegistryFinding(
                         "CHAIN_KEY_WINDOW_DRIFT",
@@ -1571,6 +1604,7 @@ def compute_key_trust(
         trusted=trusted,
         undecided=undecided,
         findings=findings,
+        notes=notes,
         statements=KeyStatementCounts(
             total=len(checked),
             valid=sum(1 for c in checked if c.verdict == "valid"),

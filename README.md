@@ -375,8 +375,19 @@ signed value).
 `vault_key_statements` rows date what a distrusted key stored before its cutoff,
 as the engine does. An export's statements, and those on keys you pass, carry
 an `id` and `createdAt` nothing signs, so a leaked key's holder can backdate
-them at will: there every edge out of a distrusted key counts for nothing,
-whatever time it carries, and only its closures still count.
+them at will: there a statement a distrusted key signed admits no key, whatever
+time it carries. It still does everything that can only narrow trust (it dates
+its subject's window, cuts that key's edge back as a later admission, and a
+closure it signed still retires its subject). Where the document dates such a
+statement before the cutoff, so the engine would have counted it, voiding it is
+a note in `key_trust.notes`, never a finding, so an honest rotation away from a
+key you later distrust still passes pinned on its successor.
+
+Every instant is read as strict RFC 3339 (a `T`, a `Z` or numeric offset, a real
+calendar date and time of day). A key window you pass in `public_keys` that is
+not raises `TypeError` naming the key; one the export embeds in
+`signingKeyWindows` fails the entries under that key `CHAIN_MALFORMED_ENTRY`
+rather than skipping that edge.
 
 Without `trust_anchors` the result still passes when nothing failed, flagged:
 `result.key_trust.status` is `"no_anchor"` and

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import cbor2
+import pytest
 
 from agledger.verify import verify_export
 
@@ -153,3 +154,107 @@ def test_stripping_the_exports_times_beside_an_honest_supplied_document_reopens_
     assert r.valid is False
     assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
     assert (r.key_trust.status, r.key_trust.order) == ("no_anchored_signature", "signed")
+
+
+def _honest_rotation(distrusted: list[str], pin_current: bool = True) -> Any:
+    """Probe 4: genesis C, rotation C->N, closure of C by N, entries under N,
+    the operator's own timed key document supplied, and C distrusted from
+    after the rotation. Nothing here was forged."""
+    c, n = make_key(), make_key()
+    exp = _resigned_under(n)
+    gen = statement("genesis", c, signers=[c], activated_at=T0)
+    rot = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
+    clo = statement("closure", c, endorser=n, signers=[n], retired_at=T1)
+    honest = {
+        c.kid: [_pub(gen, "2026-09-01T00:00:00.000100Z"), _pub(clo, "2026-09-02T00:00:00.000300Z")],
+        n.kid: [_pub(rot, "2026-09-02T00:00:00.000200Z")],
+    }
+    m = exp["exportMetadata"]
+    m["signingPublicKey"] = n.public_key
+    m["signingPublicKeys"] = {c.kid: c.public_key, n.kid: n.public_key}
+    m["signingKeyWindows"] = {
+        n.kid: {"activatedAt": "2026-09-02T00:00:00.000Z", "retiredAt": None},
+        c.kid: {"activatedAt": "2026-09-01T00:00:00.000Z", "retiredAt": "2026-09-02T00:00:00.000Z"},
+    }
+    m["anchoredFrom"] = f"sha256:{n.digest}"
+    m["signingKeyStatements"] = copy.deepcopy(honest)
+    public_keys: list[dict[str, Any]] = [
+        {
+            "keyId": c.kid,
+            "publicKey": c.public_key,
+            "activatedAt": "2026-09-01T00:00:00.000Z",
+            "retiredAt": "2026-09-02T00:00:00.000Z",
+            "statements": honest[c.kid],
+        },
+        {
+            "keyId": n.kid,
+            "publicKey": n.public_key,
+            "activatedAt": "2026-09-02T00:00:00.000Z",
+            "retiredAt": None,
+            "statements": honest[n.kid],
+        },
+    ]
+    pin = n if pin_current else c
+    return verify_export(
+        exp,
+        public_keys=public_keys,
+        trust_anchors=[f"sha256:{pin.digest}"],
+        distrusted_keys=[d.replace("{C}", c.digest) for d in distrusted],
+    )
+
+
+def test_an_honest_rotation_out_of_a_key_distrusted_after_it_still_passes_pinned_on_the_current_key() -> None:
+    plain = _honest_rotation([])
+    assert plain.valid is True
+    assert plain.key_trust.notes == []
+    r = _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"])
+    assert r.valid is True, r.broken_at
+    assert (r.key_trust.status, r.key_trust.findings) == ("walked", [])
+    assert len(r.key_trust.anchored_key_ids) == 2
+    # The rotation C signed admits nothing here, which is a note, not a finding.
+    assert len(r.key_trust.notes) == 1
+    assert "is not signed and is not held against the cutoff" in r.key_trust.notes[0].detail
+    assert r.key_trust.to_json()["notes"] == [n.to_json() for n in r.key_trust.notes]
+
+
+_MALFORMED_WINDOWS = [
+    "2026-10-02T15:03:54.500",
+    "2026-10-02 15:03:54.5",
+    "Oct 2 2026 15:03:54",
+    "2026-10-02T15:03:54.500+24:00",
+    "garbage",
+    "2026-02-30T00:00:00Z",
+]
+
+
+def test_a_window_the_caller_supplies_that_is_not_rfc3339_raises_naming_the_key() -> None:
+    exp: dict[str, Any] = json.loads((_EXPORT / "valid.json").read_text())
+    key_id = exp["entries"][0]["integrity"]["signingKeyId"]
+    public_key = exp["exportMetadata"]["signingPublicKeys"][key_id]
+    for bad in [*_MALFORMED_WINDOWS, 7]:
+        for edge in ("activatedAt", "retiredAt"):
+            entry = {"keyId": key_id, "publicKey": public_key, "activatedAt": "2026-01-01T00:00:00Z", "retiredAt": None}
+            entry[edge] = bad
+            with pytest.raises(TypeError, match=rf"\(key {key_id}\) has {edge}"):
+                verify_export(copy.deepcopy(exp), public_keys=[entry])
+
+
+def test_a_window_the_export_embeds_that_is_not_rfc3339_fails_its_entries_malformed() -> None:
+    for bad in _MALFORMED_WINDOWS:
+        for edge in ("activatedAt", "retiredAt"):
+            exp: dict[str, Any] = json.loads((_EXPORT / "valid.json").read_text())
+            key_id = exp["entries"][0]["integrity"]["signingKeyId"]
+            exp["exportMetadata"]["signingKeyWindows"][key_id][edge] = bad
+            r = verify_export(exp)
+            assert r.broken_at is not None, (edge, bad)
+            assert (r.broken_at.position, r.broken_at.code) == (1, "CHAIN_MALFORMED_ENTRY")
+            assert r.broken_at.detail == (
+                f"Key {key_id}'s {edge} {json.dumps(bad)} is not an RFC 3339 instant, so the entry cannot be "
+                "placed inside its window."
+            )
+
+
+def test_pinned_only_on_the_distrusted_predecessor_the_current_keys_entries_stay_unanchored() -> None:
+    r = _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"], pin_current=False)
+    assert r.valid is False
+    assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
