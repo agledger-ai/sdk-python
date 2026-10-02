@@ -314,6 +314,50 @@ def test_leaked_after_a_routine_retirement_cannot_admit_a_key_whatever_time_it_c
         assert codes(trust) == [("KEY_STATEMENT_INVALID", leak.id)]
 
 
+_A = "2026-09-02T06:00:00.000000Z"
+_B = "2026-09-02T12:00:00.000000Z"
+_C = "2026-09-02T18:00:00.000000Z"
+
+
+@pytest.mark.parametrize(
+    ("by_n", "by_x", "expected"),
+    [
+        pytest.param([{"retired_at": _C}], {"retired_at": _B}, True, id="earlier than the one published closure"),
+        pytest.param([{"retired_at": _B}], {"retired_at": _B}, False, id="as the published closure dates it"),
+        pytest.param([{"retired_at": _B}], {"retired_at": _C}, False, id="later than the published closure"),
+        pytest.param([{"retired_at": _C}, {"retired_at": _A}], {"retired_at": _B}, False, id="between two published closures"),
+        pytest.param([{"retired_at": _C}, {"retired_at": _B}], {"retired_at": _A}, True, id="earlier than both published closures"),
+        pytest.param([{"retired_at": _B}], {"retired_at": _B, "forced": True}, True, id="forced where no published closure is"),
+        pytest.param([{"retired_at": _B, "forced": True}], {"retired_at": _B, "forced": True}, False, id="forced as a published closure is"),
+        pytest.param(
+            [{"retired_at": _B}, {"retired_at": _B, "forced": True}],
+            {"retired_at": _B, "forced": True},
+            False,
+            id="forced as one of two published closures is",
+        ),
+    ],
+)
+def test_a_closure_by_a_key_reached_but_not_anchored_is_a_finding_only_where_the_published_closures_differ(
+    by_n: list[dict[str, Any]], by_x: dict[str, Any], expected: bool
+) -> None:
+    c, n, genesis, succ = _history()
+    x = make_key()
+    from_n = [
+        statement("closure", c, endorser=n, signers=[n], created_at=f"2026-09-03T0{i}:00:00.000000Z", **cl)
+        for i, cl in enumerate(by_n)
+    ]
+    leak = statement("succession", x, endorser=c, signers=[c, x], activated_at=T3, created_at=T3)
+    from_x = statement("closure", c, endorser=x, signers=[x], created_at="2026-09-05T00:00:00.000000Z", **by_x)
+    trust = walk([], [genesis, succ, *from_n, leak, from_x], [n.digest])
+    assert c.digest in trust.trusted and x.digest not in trust.trusted
+    on_x = [f for f in trust.findings if f.statement_id == from_x.id]
+    assert [f.code for f in on_x] == (["KEY_CLOSURE_INVALID"] if expected else [])
+    if expected:
+        assert "reached but not anchored" in on_x[0].detail
+        assert f"pin sha256:{x.digest} in trustAnchors" in on_x[0].detail
+        assert f"distrustedKeys sha256:{x.digest}@{from_x.created_at}" in on_x[0].detail
+
+
 def test_leaked_cannot_admit_a_key_by_signing_it_in_as_its_own_predecessor_retired_or_not() -> None:
     c, n, genesis, succ = _history()
     x = make_key()

@@ -6,80 +6,49 @@ whatever write time puts its statement before the cutoff. Only a dump's own
 
 from __future__ import annotations
 
-import base64
 import copy
-import hashlib
 import json
-from pathlib import Path
 from typing import Any
 
-import cbor2
 import pytest
 
 from agledger.verify import verify_export
 
 from .key_statement_helpers import (
+    EXPORT_DIR,
     T0,
     T1,
     T2,
-    Stored,
-    TestKey,
     make_key,
-    raw_sign,
+    pub,
+    resigned_under,
     statement,
 )
 
-_EXPORT = Path(__file__).resolve().parents[1] / "testdata" / "conformance" / "export"
-
-
-def _resigned_under(x: TestKey) -> dict[str, Any]:
-    """valid.json with every entry re-signed under ``x``, chain links intact."""
-    exp: dict[str, Any] = json.loads((_EXPORT / "valid.json").read_text())
-    prev: bytes | None = None
-    for e in exp["entries"]:
-        tagged: Any = cbor2.loads(base64.b64decode(e["integrity"]["coseSign1"]))
-        protected, _unprotected, payload, _sig = tagged.value
-        header: dict[int, Any] = cbor2.loads(protected)
-        header[4] = bytes.fromhex(x.kid)
-        header[-65537] = {**header[-65537], 2: prev}
-        new_protected = cbor2.dumps(header, canonical=True)
-        signature = raw_sign(x, cbor2.dumps(["Signature1", new_protected, b"", payload], canonical=True))
-        env = cbor2.dumps(cbor2.CBORTag(18, [new_protected, {}, payload, signature]), canonical=True)
-        digest = hashlib.sha256(env).digest()
-        e["integrity"]["coseSign1"] = base64.b64encode(env).decode()
-        e["integrity"]["payloadHash"] = digest.hex()
-        e["integrity"]["previousHash"] = None if prev is None else prev.hex()
-        e["integrity"]["signingKeyId"] = x.kid
-        prev = digest
-    return exp
-
-
-def _pub(s: Stored, created_at: str | None) -> dict[str, Any]:
-    cose = [base64.b64encode(c if isinstance(c, bytes) else c.encode()).decode() for c in s.cose]
-    if created_at is None:
-        return {"kind": s.kind, "cose": cose}
-    return {"id": s.id, "kind": s.kind, "createdAt": created_at, "cose": cose}
-
 
 def _single_key_attack(succ_at: str | None) -> Any:
-    """Probe 2: anchor C, C distrusted from T1, the holder of leaked C admits X."""
-    c, x = make_key(), make_key()
-    exp = _resigned_under(x)
-    gen = statement("genesis", c, signers=[c], activated_at=T0)
+    """Probe 2: root R pinned admitted C, C distrusted from T1, and the holder of
+    leaked C admits X."""
+    r0, c, x = make_key(), make_key(), make_key()
+    exp = resigned_under(x)
+    root = statement("genesis", r0, signers=[r0], activated_at=T0)
+    admit = statement("succession", c, endorser=r0, signers=[r0, c], activated_at=T0)
     succ = statement("succession", x, endorser=c, signers=[c, x], activated_at=T2)
     m = exp["exportMetadata"]
     m["signingPublicKey"] = x.public_key
-    m["signingPublicKeys"] = {c.kid: c.public_key, x.kid: x.public_key}
+    m["signingPublicKeys"] = {r0.kid: r0.public_key, c.kid: c.public_key, x.kid: x.public_key}
     m["signingKeyWindows"] = {
+        r0.kid: {"activatedAt": "2026-09-01T00:00:00.000Z", "retiredAt": None},
         c.kid: {"activatedAt": "2026-09-01T00:00:00.000Z", "retiredAt": None},
         x.kid: {"activatedAt": "2026-09-03T00:00:00.000Z", "retiredAt": None},
     }
-    m["anchoredFrom"] = f"sha256:{c.digest}"
+    m["anchoredFrom"] = f"sha256:{r0.digest}"
     m["signingKeyStatements"] = {
-        c.kid: [_pub(gen, None if succ_at is None else "2026-09-01T00:00:00.000000Z")],
-        x.kid: [_pub(succ, succ_at)],
+        r0.kid: [pub(root, None if succ_at is None else "2026-09-01T00:00:00.000000Z")],
+        c.kid: [pub(admit, None if succ_at is None else "2026-09-01T00:00:00.000100Z")],
+        x.kid: [pub(succ, succ_at)],
     }
-    return verify_export(exp, trust_anchors=[f"sha256:{c.digest}"], distrusted_keys=[f"sha256:{c.digest}@{T1}"])
+    return verify_export(exp, trust_anchors=[f"sha256:{r0.digest}"], distrusted_keys=[f"sha256:{c.digest}@{T1}"])
 
 
 def test_a_distrusted_keys_succession_is_void_whatever_write_time_the_export_gives_it() -> None:
@@ -89,7 +58,7 @@ def test_a_distrusted_keys_succession_is_void_whatever_write_time_the_export_giv
         assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED", succ_at
         assert r.key_trust.status == "no_anchored_signature"
         assert r.key_trust.order == ("signed" if succ_at is None else "written")
-        assert len(r.key_trust.anchored_key_ids) == 1
+        assert len(r.key_trust.anchored_key_ids) == 2  # the root and the key it admitted
 
 
 def _rotation_attack(export_times: bool, succ_at: str) -> Any:
@@ -97,21 +66,21 @@ def _rotation_attack(export_times: bool, succ_at: str) -> Any:
     document it fetched itself, and distrusts the retired C; the export adds a
     succession from leaked C into X."""
     c, n, x = make_key(), make_key(), make_key()
-    exp = _resigned_under(x)
+    exp = resigned_under(x)
     gen = statement("genesis", c, signers=[c], activated_at=T0)
     rot = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
     clo = statement("closure", c, endorser=n, signers=[n], retired_at=T1)
     succ = statement("succession", x, endorser=c, signers=[c, x], activated_at="2026-09-01T06:00:00.000000Z")
     honest = {
-        c.kid: [_pub(gen, "2026-09-01T00:00:00.000100Z"), _pub(clo, "2026-09-02T00:00:00.000300Z")],
-        n.kid: [_pub(rot, "2026-09-02T00:00:00.000200Z")],
+        c.kid: [pub(gen, "2026-09-01T00:00:00.000100Z"), pub(clo, "2026-09-02T00:00:00.000300Z")],
+        n.kid: [pub(rot, "2026-09-02T00:00:00.000200Z")],
     }
     m = exp["exportMetadata"]
     m["signingPublicKey"] = x.public_key
     m["signingPublicKeys"] = {c.kid: c.public_key, n.kid: n.public_key, x.kid: x.public_key}
     m["signingKeyWindows"] = {x.kid: {"activatedAt": "2026-09-01T06:00:00.000Z", "retiredAt": None}}
     m["anchoredFrom"] = f"sha256:{n.digest}"
-    own = {**copy.deepcopy(honest), x.kid: [_pub(succ, succ_at)]}
+    own = {**copy.deepcopy(honest), x.kid: [pub(succ, succ_at)]}
     if not export_times:
         own = {k: [{"kind": s["kind"], "cose": s["cose"]} for s in v] for k, v in own.items()}
     m["signingKeyStatements"] = own
@@ -161,13 +130,13 @@ def _honest_rotation(distrusted: list[str], pin_current: bool = True) -> Any:
     the operator's own timed key document supplied, and C distrusted from
     after the rotation. Nothing here was forged."""
     c, n = make_key(), make_key()
-    exp = _resigned_under(n)
+    exp = resigned_under(n)
     gen = statement("genesis", c, signers=[c], activated_at=T0)
     rot = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
     clo = statement("closure", c, endorser=n, signers=[n], retired_at=T1)
     honest = {
-        c.kid: [_pub(gen, "2026-09-01T00:00:00.000100Z"), _pub(clo, "2026-09-02T00:00:00.000300Z")],
-        n.kid: [_pub(rot, "2026-09-02T00:00:00.000200Z")],
+        c.kid: [pub(gen, "2026-09-01T00:00:00.000100Z"), pub(clo, "2026-09-02T00:00:00.000300Z")],
+        n.kid: [pub(rot, "2026-09-02T00:00:00.000200Z")],
     }
     m = exp["exportMetadata"]
     m["signingPublicKey"] = n.public_key
@@ -228,7 +197,7 @@ _MALFORMED_WINDOWS = [
 
 
 def test_a_window_the_caller_supplies_that_is_not_rfc3339_raises_naming_the_key() -> None:
-    exp: dict[str, Any] = json.loads((_EXPORT / "valid.json").read_text())
+    exp: dict[str, Any] = json.loads((EXPORT_DIR / "valid.json").read_text())
     key_id = exp["entries"][0]["integrity"]["signingKeyId"]
     public_key = exp["exportMetadata"]["signingPublicKeys"][key_id]
     for bad in [*_MALFORMED_WINDOWS, 7]:
@@ -242,7 +211,7 @@ def test_a_window_the_caller_supplies_that_is_not_rfc3339_raises_naming_the_key(
 def test_a_window_the_export_embeds_that_is_not_rfc3339_fails_its_entries_malformed() -> None:
     for bad in _MALFORMED_WINDOWS:
         for edge in ("activatedAt", "retiredAt"):
-            exp: dict[str, Any] = json.loads((_EXPORT / "valid.json").read_text())
+            exp: dict[str, Any] = json.loads((EXPORT_DIR / "valid.json").read_text())
             key_id = exp["entries"][0]["integrity"]["signingKeyId"]
             exp["exportMetadata"]["signingKeyWindows"][key_id][edge] = bad
             r = verify_export(exp)
@@ -254,7 +223,6 @@ def test_a_window_the_export_embeds_that_is_not_rfc3339_fails_its_entries_malfor
             )
 
 
-def test_pinned_only_on_the_distrusted_predecessor_the_current_keys_entries_stay_unanchored() -> None:
-    r = _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"], pin_current=False)
-    assert r.valid is False
-    assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
+def test_pinned_only_on_the_distrusted_predecessor_is_refused() -> None:
+    with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
+        _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"], pin_current=False)

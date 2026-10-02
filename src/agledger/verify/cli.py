@@ -30,6 +30,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -38,6 +39,7 @@ from typing import Any, cast
 from agledger.verify.failures import suggestion
 from agledger.verify.key_statements import (
     KeyTrustReport,
+    assert_not_pinned_and_distrusted,
     parse_distrusted_keys,
     parse_trust_anchors,
 )
@@ -445,13 +447,6 @@ def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None) -
     ]
 
 
-def export_verdict(result: VerifyExportResult) -> str:
-    """The verdict of an /audit-export result, by the same rule as a dump's."""
-    if not result.valid:
-        return "failed"
-    return "trusted" if result.key_trust.status == "walked" else "unanchored"
-
-
 def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
     """What the key-statement walk concluded, in the text report. A report with
     no anchor says in plain words that its pass is not a trusted verdict."""
@@ -519,7 +514,7 @@ def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
 
 def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
     out: dict[str, Any] = {
-        "verdict": export_verdict(result),
+        "verdict": result.verdict,
         "valid": result.valid,
         "recordId": result.record_id,
         "totalEntries": result.total_entries,
@@ -547,11 +542,26 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "code": result.broken_at.code,
             "detail": result.broken_at.detail,
         }
+    # Per entry as @agledger/verify prints them, unset fields left out.
+    out["entries"] = [
+        {
+            k: v
+            for k, v in (
+                ("position", e.position),
+                ("valid", e.valid),
+                ("code", e.code),
+                ("detail", e.detail),
+                ("signature", e.signature),
+            )
+            if v is not None
+        }
+        for e in result.entries
+    ]
     return out
 
 
 def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
-    lines: list[str] = [*headline(export_verdict(result), "audit-export", result.key_trust), ""]
+    lines: list[str] = [*headline(result.verdict, "audit-export", result.key_trust), ""]
     lines.append(f"  record            : {result.record_id}")
     lines.append(
         f"  entries           : {result.verified_entries}/{result.total_entries} verified"
@@ -586,7 +596,11 @@ def _flag_message(message: str) -> str:
     ):
         if message.startswith(prefix):
             return flag + message[len(prefix) :]
-    return message
+    return re.sub(
+        r"^(sha256:[0-9a-f]{64}) is both a trust anchor and a distrusted key\.",
+        r"\1 is both a --trust-anchor and a --distrusted-key.",
+        message,
+    )
 
 
 def _cannot_verify(message: str, report_format: str) -> int:
@@ -643,6 +657,10 @@ def run_cli(argv: Sequence[str]) -> int:
             "--trust-anchor; pass the pin as well.",
             report_format,
         )
+    try:
+        assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
+    except TypeError as err:
+        return _cannot_verify(_flag_message(str(err)), report_format)
     if not os.path.exists(target):
         return _cannot_verify(f"Cannot read {target}: no such file or directory.", report_format)
 
@@ -718,7 +736,7 @@ def run_cli(argv: Sequence[str]) -> int:
         )
     except TypeError as err:
         return _cannot_verify(f"{err}\n{_KEYS_SHAPE}", report_format)
-    verdict = export_verdict(result)
+    verdict = result.verdict
     if report_format == "json":
         print(json.dumps(_export_to_json(result), indent=2))
     else:

@@ -65,6 +65,7 @@ from agledger.verify.key_statements import (
     TrustKeyInput,
     _b64decode,  # pyright: ignore[reportPrivateUsage]
     _statements_from_map,  # pyright: ignore[reportPrivateUsage]
+    assert_not_pinned_and_distrusted,
     compute_key_trust,
     key_statements_from_export,
     no_anchor_report,
@@ -422,6 +423,16 @@ class VerifyExportResult:
     #: ``valid`` false. Mirrors ``keyTrust`` in ``@agledger/verify-core``.
     key_trust: KeyTrustReport = field(default_factory=no_anchor_report)
 
+    @property
+    def verdict(self) -> Literal["trusted", "unanchored", "failed"]:
+        """``trusted``, ``unanchored`` or ``failed``, the word every AGLedger
+        verifier prints. Read this rather than ``valid`` alone: a valid result
+        with no ``trust_anchors``, or none that anchored a signature, is
+        ``unanchored``, which is not a trusted verdict."""
+        if not self.valid:
+            return "failed"
+        return "trusted" if self.key_trust.status == "walked" else "unanchored"
+
 
 def verify_export(
     export_data: Mapping[str, Any] | BaseModel,
@@ -443,8 +454,8 @@ def verify_export(
         embedded in the export under the same id. A key the Server serves
         comes from its database, so supplying keys says where they came from,
         not that they are trusted: pin ``trust_anchors`` for that. Accepts
-        either form: pass the ``.data`` list from
-        ``client.verification_keys.list()`` directly (each entry's
+        the result of ``client.verification_keys.list()`` or its ``.data``
+        list, or the ``/v1/verification-keys`` body as served (each entry's
         ``statements`` are walked with the export's own), or a compact
         ``{keyId: base64SpkiDer}`` mapping. The wrong shape raises
         ``TypeError`` rather than silently falling back to embedded keys.
@@ -486,7 +497,9 @@ def verify_export(
         such a key stored at or after the instant (with none, from the
         retirement a trusted key signed for it, and with neither, ever) counts
         for nothing in the walk. Used only with ``trust_anchors``: given
-        without them it raises ``TypeError``, since nothing would apply it.
+        without them it raises ``TypeError``, since nothing would apply it, as
+        does a key both pinned and distrusted (the Server refuses to start
+        with that pair: pin the successor of a key that leaked).
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
         signature-coverage discriminator, a key-provenance tally, the agent
         signatures present and verified, and the key-trust report.
@@ -510,6 +523,7 @@ def verify_export(
             "distrusted_keys act only inside the key-statement walk, which runs from "
             "trust_anchors; pass trust_anchors as well."
         )
+    assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
     meta = as_mapping(export_data.get("exportMetadata"))
     entries: list[Mapping[str, Any]] = [as_mapping(e) for e in cast("list[Any]", raw_entries or [])]
     record_id = str(meta.get("recordId", ""))
@@ -924,6 +938,11 @@ def _normalize_supplied_keys(
     """
     if public_keys is None:
         return None
+    # The /v1/verification-keys body, as served or as the typed response: its data.
+    if isinstance(public_keys, BaseModel) and isinstance(getattr(public_keys, "data", None), list):
+        public_keys = cast("list[Any]", getattr(public_keys, "data"))
+    elif isinstance(public_keys, Mapping) and isinstance(public_keys.get("data"), list):
+        public_keys = cast("list[Any]", public_keys["data"])
 
     if isinstance(public_keys, Mapping):
         out: dict[str, _SuppliedKey] = {}

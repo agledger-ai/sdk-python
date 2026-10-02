@@ -819,12 +819,22 @@ class AdminResource:
         ``None`` or ``[]`` removes the restriction. ``label`` and
         ``expires_at`` are settable only at create time, and the Server refuses
         them on update (``additionalProperties: false``). The response names
-        the key ``keyId``, as the create response does."""
+        the key ``keyId``, as the create response does.
+
+        Revocation is one-way for an admin key: ``is_active=False`` is allowed
+        on any key it reaches, but ``is_active=True`` on a revoked key is a 403
+        ``PLATFORM_REQUIRED``. Issue a replacement, or restore it with a
+        platform credential."""
         body = _api_key_update_body(params)
         return self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
     def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
-        """Enable or disable an API key. Convenience wrapper around update_api_key."""
+        """Disable an API key, or re-enable a revoked one. Convenience wrapper
+        around update_api_key.
+
+        Only a platform credential can re-enable: under an admin key,
+        ``is_active=True`` on a revoked key raises a 403 ``PLATFORM_REQUIRED``
+        error, so an admin key issues a replacement instead."""
         return self._http.patch(
             f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
         )
@@ -1495,6 +1505,8 @@ class AsyncAdminResource:
         return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
 
     async def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
+        """Disable or re-enable an API key. See the sync counterpart: only a
+        platform credential can re-enable a revoked key."""
         return await self._http.patch(
             f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
         )

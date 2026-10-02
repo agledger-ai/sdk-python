@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 import cbor2
@@ -223,3 +225,59 @@ def as_published(statements: list[Stored]) -> dict[str, list[dict[str, Any]]]:
 def as_document(statements: list[Stored]) -> list[KeyStatementInput]:
     """The same statements as a key document carries them: no write time, no endorser column."""
     return [KeyStatementInput(id=s.id, kind=s.kind, subject_key_id=s.subject_key_id, cose=s.cose) for s in statements]
+
+
+EXPORT_DIR = Path(__file__).resolve().parents[1] / "testdata" / "conformance" / "export"
+
+
+def resigned_under(x: TestKey) -> dict[str, Any]:
+    """valid.json with every entry re-signed under ``x``, chain links intact."""
+    exp: dict[str, Any] = json.loads((EXPORT_DIR / "valid.json").read_text())
+    prev: bytes | None = None
+    for e in exp["entries"]:
+        tagged: Any = cbor2.loads(base64.b64decode(e["integrity"]["coseSign1"]))
+        protected, _unprotected, payload, _sig = tagged.value
+        header: dict[int, Any] = cbor2.loads(protected)
+        header[4] = bytes.fromhex(x.kid)
+        header[-65537] = {**header[-65537], 2: prev}
+        new_protected = cbor2.dumps(header, canonical=True)
+        signature = raw_sign(x, cbor2.dumps(["Signature1", new_protected, b"", payload], canonical=True))
+        env = cbor2.dumps(cbor2.CBORTag(18, [new_protected, {}, payload, signature]), canonical=True)
+        digest = hashlib.sha256(env).digest()
+        e["integrity"]["coseSign1"] = base64.b64encode(env).decode()
+        e["integrity"]["payloadHash"] = digest.hex()
+        e["integrity"]["previousHash"] = None if prev is None else prev.hex()
+        e["integrity"]["signingKeyId"] = x.kid
+        prev = digest
+    return exp
+
+
+def pub(s: Stored, created_at: str | None) -> dict[str, Any]:
+    cose = [base64.b64encode(c if isinstance(c, bytes) else c.encode()).decode() for c in s.cose]
+    if created_at is None:
+        return {"kind": s.kind, "cose": cose}
+    return {"id": s.id, "kind": s.kind, "createdAt": created_at, "cose": cose}
+
+
+def under_admitted_key() -> tuple[dict[str, Any], str, TestKey]:
+    """valid.json re-signed under a key K that a genesis root G admitted, with
+    both statements and windows in the export: pin the returned anchor (G) and
+    distrust K, the shape a leak takes, since a key is never both pinned and
+    distrusted."""
+    g, k = make_key(), make_key()
+    genesis = statement("genesis", g, signers=[g], activated_at=T0)
+    succ = statement("succession", k, endorser=g, signers=[g, k], activated_at=T1)
+    exp = resigned_under(k)
+    m = exp["exportMetadata"]
+    m["signingPublicKey"] = k.public_key
+    m["signingPublicKeys"] = {g.kid: g.public_key, k.kid: k.public_key}
+    m["signingKeyWindows"] = {
+        g.kid: {"activatedAt": ms(T0), "retiredAt": None},
+        k.kid: {"activatedAt": ms(T1), "retiredAt": None},
+    }
+    m["anchoredFrom"] = f"sha256:{g.digest}"
+    m["signingKeyStatements"] = {
+        g.kid: [pub(genesis, "2026-09-01T00:00:00.000100Z")],
+        k.kid: [pub(succ, "2026-09-02T00:00:00.000100Z")],
+    }
+    return exp, f"sha256:{g.digest}", k
