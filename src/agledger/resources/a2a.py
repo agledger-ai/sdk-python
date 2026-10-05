@@ -9,6 +9,15 @@ from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
 from agledger.types import AgentCard
 
 
+def _envelope(method: str, params: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON-RPC envelope for ``call``. ``params`` is left out when ``None``:
+    the Server refuses ``"params": null`` (-32600) but takes the key absent."""
+    request: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": str(uuid.uuid4())}
+    if params is not None:
+        request["params"] = params
+    return request
+
+
 class A2AResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -28,10 +37,7 @@ class A2AResource:
         self, method: str, params: dict[str, Any] | None = None, *, on_behalf_of: str | None = None
     ) -> dict[str, Any]:
         """Convenience: call a named A2A method with params. Auto-generates JSON-RPC envelope."""
-        return self.dispatch(
-            {"jsonrpc": "2.0", "method": method, "params": params, "id": str(uuid.uuid4())},
-            on_behalf_of=on_behalf_of,
-        )
+        return self.dispatch(_envelope(method, params), on_behalf_of=on_behalf_of)
 
 
 class AsyncA2AResource:
@@ -50,8 +56,5 @@ class AsyncA2AResource:
         self, method: str, params: dict[str, Any] | None = None, *, on_behalf_of: str | None = None
     ) -> dict[str, Any]:
         """Convenience: call a named A2A method with params. Auto-generates JSON-RPC envelope."""
-        return await self.dispatch(
-            {"jsonrpc": "2.0", "method": method, "params": params, "id": str(uuid.uuid4())},
-            on_behalf_of=on_behalf_of,
-        )
+        return await self.dispatch(_envelope(method, params), on_behalf_of=on_behalf_of)
 

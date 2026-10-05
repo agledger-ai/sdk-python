@@ -256,7 +256,23 @@ class RateLimitError(APIError):
 
 
 class APIConnectionError(AgledgerError):
-    """Network connectivity error."""
+    """Network connectivity error.
+
+    ``idempotency_key`` is the ``Idempotency-Key`` the failed request carried,
+    on a write. The SDK reuses it across its own retries, so once they are
+    spent the first attempt may still have reached the Server (a proxy can hold
+    a 201 past the timeout). Re-send the same call with this key and the Server answers
+    with the original result instead of writing twice. The value is the full header as sent
+    (any prefix included), so replay it verbatim through
+    ``client.request(method, path, json=..., headers={"Idempotency-Key": key})``.
+    ``None`` on a request that carries no key (a read).
+    """
+
+    idempotency_key: str | None
+
+    def __init__(self, message: str = "", *, idempotency_key: str | None = None) -> None:
+        super().__init__(message)
+        self.idempotency_key = idempotency_key
 
 
 

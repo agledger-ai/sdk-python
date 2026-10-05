@@ -130,6 +130,45 @@ def _parse_holdback_seconds(headers: httpx.Headers) -> int | None:
         return None
 
 
+def _jsonrpc_error_body(parsed: Any) -> dict[str, Any] | None:
+    """Map an ``/a2a`` JSON-RPC error envelope onto the problem-body fields.
+
+    An ``/a2a`` HTTP 4xx answers ``{"jsonrpc": "2.0", "error": {...}}``: the
+    human text and recovery guidance sit in ``error.data[0].metadata`` (a
+    ``google.rpc.ErrorInfo``) and ``error.code`` is the numeric JSON-RPC code.
+    ``code`` stays a string: the ErrorInfo ``reason`` (the machine code a REST
+    ``error`` carries), else the JSON-RPC number as a string. The raw error
+    object is kept on ``details``. Same rule as the TypeScript SDK.
+    """
+    if not isinstance(parsed, dict):
+        return None
+    envelope = cast("dict[str, Any]", parsed)
+    err = envelope.get("error")
+    if envelope.get("jsonrpc") != "2.0" or not isinstance(err, dict):
+        return None
+    rpc = cast("dict[str, Any]", err)
+    data = rpc.get("data")
+    items = cast("list[Any]", data) if isinstance(data, list) else []
+    first: Any = items[0] if items else None
+    info: dict[str, Any] = cast("dict[str, Any]", first) if isinstance(first, dict) else {}
+    meta_raw = info.get("metadata")
+    meta: dict[str, Any] = cast("dict[str, Any]", meta_raw) if isinstance(meta_raw, dict) else {}
+    message = _str_or_none(rpc.get("message"))
+    reason = _str_or_none(info.get("reason"))
+    code = rpc.get("code")
+    retryable = meta.get("retryable")
+    return {
+        "error": reason or ("unknown" if code is None else str(code)),
+        "title": message,
+        "detail": _str_or_none(meta.get("detail")) or message,
+        "recoveryHint": _str_or_none(meta.get("recoveryHint")),
+        "requestId": _str_or_none(meta.get("requestId")),
+        # ErrorInfo metadata is a string map, so a boolean arrives as "false".
+        "retryable": True if retryable == "true" else False if retryable == "false" else None,
+        "details": rpc,
+    }
+
+
 def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
     try:
         return response.json()
@@ -149,7 +188,10 @@ def _str_list_or_none(value: object) -> list[str] | None:
 
 
 def build_error(response: httpx.Response) -> APIError:
-    body = _parse_error_body(response)
+    raw = _parse_error_body(response)
+    mapped = _jsonrpc_error_body(raw)
+    body = mapped if mapped is not None else raw
+    rpc_error = mapped is not None
     status = response.status_code
     cls = _ERROR_MAP.get(status, APIError)
 
@@ -197,17 +239,25 @@ def build_error(response: httpx.Response) -> APIError:
         else:
             kwargs["retry_after"] = None
 
-    if cls is APIError:
-        return cls(status, **kwargs)
-    return cls(**kwargs)
+    error = cls(status, **kwargs) if cls is APIError else cls(**kwargs)
+    if rpc_error:
+        # The envelope carries more than the mapped fields; keep it whole.
+        error.raw_body = response.content
+    return error
 
 
 def _backoff(attempt: int, retry_after: float | None = None) -> float:
+    """Seconds to wait before the next attempt.
+
+    The exponential step is capped at ``MAX_BACKOFF``. A server's ``retry-after``
+    is not: it is the server's own statement of when the limit lifts, so waiting
+    less only buys another 429 (the TypeScript SDK takes the larger of the two
+    the same way). The 0-25% jitter applies to the result.
+    """
+    delay = min(0.5 * (2**attempt), MAX_BACKOFF)
     if retry_after and retry_after > 0:
-        return min(retry_after, MAX_BACKOFF)
-    base = min(0.5 * (2**attempt), MAX_BACKOFF)
-    jitter = random.uniform(0, base * 0.25)
-    return base + jitter
+        delay = max(delay, retry_after)
+    return delay + random.uniform(0, delay * 0.25)
 
 
 def _query_params(params: dict[str, Any] | None) -> dict[str, Any]:
@@ -455,13 +505,13 @@ class HttpClient:
                     time.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError(str(e)) from e
+                raise APIConnectionError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
             except httpx.TimeoutException as e:
                 if attempt < self._max_retries:
                     time.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError(str(e)) from e
+                raise APITimeoutError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
 
             self._capture_response_meta(response)
 
@@ -754,13 +804,13 @@ class AsyncHttpClient:
                     await asyncio.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError(str(e)) from e
+                raise APIConnectionError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
             except httpx.TimeoutException as e:
                 if attempt < self._max_retries:
                     await asyncio.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APITimeoutError(str(e)) from e
+                raise APITimeoutError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
 
             self._capture_response_meta(response)
 
