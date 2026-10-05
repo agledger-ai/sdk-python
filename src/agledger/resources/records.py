@@ -633,9 +633,12 @@ class RecordsResource:
         checks: dict[str, Any] | None = None,
         notes: str | None = None,
         reason: str | None = None,
+        message: str | None = None,
         on_behalf_of: str | None = None,
     ) -> VerdictResult:
         """Submit the principal verdict (accept or reject) on a Completion.
+        ``reason`` and ``message`` are wire aliases of ``notes``; when several
+        are sent the Server takes ``notes``, then ``reason``, then ``message``.
         ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
         ``records.create``."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
@@ -645,6 +648,8 @@ class RecordsResource:
             body["notes"] = notes
         if reason is not None:
             body["reason"] = reason
+        if message is not None:
+            body["message"] = message
         return VerdictResult.model_validate(
             self._http.post(
                 f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
@@ -716,7 +721,12 @@ class RecordsResource:
         return self.transition(record.id, "activate")
 
     def get_valid_transitions(self, record: RecordRow) -> tuple[str, ...]:
-        """Get valid transitions for a Record's current status. Client-side lookup, no API call."""
+        """The display statuses this Record can reach now: its own
+        ``valid_transitions`` as the Server served it, or, on a row read without
+        them, what some Record at its status can reach (``GET /lifecycle``). No
+        API call."""
+        if record.valid_transitions is not None:
+            return tuple(record.valid_transitions)
         return get_valid_transitions(record.status)
 
 
@@ -1239,9 +1249,12 @@ class AsyncRecordsResource:
         checks: dict[str, Any] | None = None,
         notes: str | None = None,
         reason: str | None = None,
+        message: str | None = None,
         on_behalf_of: str | None = None,
     ) -> VerdictResult:
         """Submit the principal verdict (accept or reject) on a Completion.
+        ``reason`` and ``message`` are wire aliases of ``notes``; when several
+        are sent the Server takes ``notes``, then ``reason``, then ``message``.
         ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
         ``records.create``."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
@@ -1251,6 +1264,8 @@ class AsyncRecordsResource:
             body["notes"] = notes
         if reason is not None:
             body["reason"] = reason
+        if message is not None:
+            body["message"] = message
         return VerdictResult.model_validate(
             await self._http.post(
                 f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
@@ -1294,4 +1309,6 @@ class AsyncRecordsResource:
         return await self.transition(record.id, "activate")
 
     def get_valid_transitions(self, record: RecordRow) -> tuple[str, ...]:
+        if record.valid_transitions is not None:
+            return tuple(record.valid_transitions)
         return get_valid_transitions(record.status)

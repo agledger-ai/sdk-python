@@ -233,5 +233,26 @@ def test_a_422_carries_current_state_and_allowed_actions():
         client.request("POST", "/v1/records/r/transition", json={"action": "activate"})
     assert info.value.current_state == "ACTIVE"
     assert info.value.allowed_actions == ["cancel", "submit-completion"]
+    assert info.value.valid_transitions is None
     assert info.value.existing_id is None
     assert info.value.reason is None
+
+
+@respx.mock
+def test_a_refusal_about_a_record_carries_its_valid_transitions():
+    respx.post("https://agledger.example.com/v1/records/r/verdict").mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "error": "INVALID_ACTION",
+                "detail": "A verdict is refused on a FAILED record.",
+                "currentState": "FAILED",
+                "allowedActions": [],
+                "validTransitions": ["DISPUTED"],
+            },
+        )
+    )
+    client = AgledgerClient(api_key="agl_agt_test", base_url="https://agledger.example.com")
+    with pytest.raises(UnprocessableError) as info:
+        client.request("POST", "/v1/records/r/verdict", json={"completionId": "c", "verdict": "accept"})
+    assert info.value.valid_transitions == ["DISPUTED"]

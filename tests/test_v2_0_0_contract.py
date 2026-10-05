@@ -22,8 +22,10 @@ from agledger import (
     AuditChainIntegrityReasonCode,
     ConflictError,
     EventPage,
+    RecordRow,
     UnprocessableError,
 )
+from agledger.record_lifecycle import RECORD_TRANSITIONS, is_terminal_status
 
 BASE = "https://agledger.example.com"
 OBO = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwZXJzb24tMSIsImFjdCI6eyJzdWIiOiJhZ2VudC0xIn19.c2ln"
@@ -269,6 +271,9 @@ SPEC_CHAIN_INTEGRITY_REASON = {
     "signing_key_drift", "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
     # A key no signed key statement anchors.
     "checkpoint_key_unanchored", "signing_key_unanchored",
+    # An entry a VAULT_DISTRUSTED_KEYS key signed before a trusted key retired
+    # it, and key material that does not verify as a set.
+    "signing_key_distrusted", "signing_key_material_invalid",
 }
 SPEC_CHAIN_FAILURE = {
     "agent_signature_invalid", "audit_vault_truncated", "cert_actor_drift", "cert_expired",
@@ -276,7 +281,7 @@ SPEC_CHAIN_FAILURE = {
     "key_not_yet_active", "oidc_actor_drift", "payload_drift", "payload_hash_mismatch",
     "previous_hash_mismatch", "signature_invalid", "signature_missing", "signing_key_drift",
     "signing_key_unknown", "signing_key_unpublished", "unsupported_algorithm",
-    "signing_key_unanchored",
+    "signing_key_unanchored", "signing_key_distrusted",
 }
 
 
@@ -551,6 +556,32 @@ def test_a_bulk_item_carries_the_bounds_it_broke():
 
 
 @respx.mock
+def test_a_bulk_item_carries_the_values_its_field_may_take():
+    respx.post(f"{BASE}/v1/records/bulk").mock(return_value=httpx.Response(207, json={
+        "results": [{
+            "index": 0, "status": "error", "error": "Unknown type",
+            "allowedValues": ["notarize-generic-v1", 3],
+        }],
+        "summary": {"total": 1, "succeeded": 0, "failed": 1},
+    }))
+    result = _client().records.bulk_create([{"type": "t", "criteria": {}}])
+    assert result.results[0].allowed_values == ["notarize-generic-v1", 3]
+
+
+@respx.mock
+def test_a_verdict_sends_message_as_the_wire_alias_it_is():
+    route = respx.post(f"{BASE}/v1/records/rec-1/verdict").mock(return_value=httpx.Response(200, json={
+        "recordId": "rec-1", "completionId": "cmp-1", "verdict": "reject",
+        "recommendation": "HOLD", "recordStatus": "FAILED",
+        "reporterType": "principal", "reportedAt": "2026-09-30T00:00:00Z",
+    }))
+    _client().records.submit_verdict("rec-1", completion_id="cmp-1", verdict="reject", message="Late")
+    assert json.loads(route.calls.last.request.content) == {
+        "completionId": "cmp-1", "verdict": "reject", "message": "Late",
+    }
+
+
+@respx.mock
 def test_the_events_page_carries_the_bound_the_walk_serves():
     respx.get(f"{BASE}/v1/events").mock(return_value=httpx.Response(200, json={
         "data": [], "hasMore": False, "nextCursor": None,
@@ -658,3 +689,31 @@ def test_a_status_component_names_the_worker_and_signing_key_causes():
         "uptime": 10, "timestamp": "2026-10-02T00:00:00Z",
     }))
     assert [c.reason for c in _client().health.status().components] == reasons
+
+
+def test_the_lifecycle_table_is_the_graph_get_lifecycle_serves():
+    # agledger-api 5444a54f, record.states[s].validTransitions on GET /lifecycle.
+    assert RECORD_TRANSITIONS == {
+        "CREATED": ("ACTIVE", "CANCELLED", "EXPIRED", "PROPOSED"),
+        "PROPOSED": ("CANCELLED", "CREATED", "EXPIRED", "REJECTED"),
+        "ACTIVE": ("CANCELLED", "EXPIRED", "PROCESSING"),
+        "PROCESSING": ("ACTIVE", "CANCELLED", "EXPIRED", "FAILED", "FULFILLED"),
+        "REVISION_REQUESTED": ("ACTIVE", "CANCELLED", "EXPIRED", "PROCESSING"),
+        "DISPUTED": ("FAILED", "FULFILLED", "REMEDIATED"),
+        "FULFILLED": ("DISPUTED",),
+        "FAILED": ("DISPUTED", "FULFILLED", "REVISION_REQUESTED"),
+        "REMEDIATED": ("DISPUTED",),
+        "EXPIRED": (),
+        "CANCELLED": (),
+        "REJECTED": (),
+        "RECORDED": (),
+    }
+    assert is_terminal_status("FULFILLED") and is_terminal_status("REMEDIATED")
+    assert not is_terminal_status("FAILED")
+
+
+def test_a_record_s_own_valid_transitions_win_over_the_status_table():
+    row = RecordRow.model_validate(_record(status="FAILED", validTransitions=["REVISION_REQUESTED"]))
+    assert _client().records.get_valid_transitions(row) == ("REVISION_REQUESTED",)
+    bare = RecordRow.model_validate({**_record(status="FAILED"), "validTransitions": None})
+    assert _client().records.get_valid_transitions(bare) == ("DISPUTED", "FULFILLED", "REVISION_REQUESTED")

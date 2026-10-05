@@ -651,6 +651,10 @@ class BulkCreateResultItem(BaseModel):
     an inherited constraint), ``childValue``, ``reason``, and ``tolerance``
     where one applies. Carried for the criteria byte cap, the reference
     attributes byte cap, and constraints inherited from the parent Record."""
+    allowed_values: list[str | int | float] | None = Field(None, alias="allowedValues")
+    """The values the refused field may take, as a singleton caller gets them
+    in the error body. For an unregistered ``type``, the set registered for the
+    org."""
 
 
 class BulkCreateSummary(BaseModel):
@@ -1263,6 +1267,14 @@ AuditChainIntegrityReasonCode = (
         # Signed under a COSE algorithm this engine build cannot verify. Not a
         # tamper signal: check minVerifierVersion on the key.
         "unsupported_algorithm",
+        # Signed by a key the operator named in VAULT_DISTRUSTED_KEYS before a
+        # key the Server trusts retired it. Accounted for (a vault scan lists it
+        # under distrustedEntries, not as a break) but never verified.
+        "signing_key_distrusted",
+        # Every entry verified, and the signing-key material the export carries
+        # does not verify as a set, so every offline verifier fails it. A vault
+        # scan's keyRegistry block names each finding and its remedy.
+        "signing_key_material_invalid",
     ]
     | str
 )
@@ -1301,6 +1313,7 @@ AuditChainFailureCode = (
         "signing_key_unpublished",
         "signing_key_unanchored",
         "unsupported_algorithm",
+        "signing_key_distrusted",
     ]
     | str
 )
@@ -1617,6 +1630,7 @@ VaultScanBreakReason = (
         "checkpoint_claim_mismatch",
         "schema_chain_missing_for_subjects",
         "verification_error",
+        "signing_key_distrusted",
     ]
     | str
 )
@@ -1627,10 +1641,16 @@ meanings match :data:`AuditChainIntegrityReasonCode`;
 code a newer Server adds still type-checks."""
 
 VaultScanFirstFindingReason = Literal[
-    "key_expired", "key_not_yet_active", "unsupported_algorithm"
+    "key_expired", "key_not_yet_active", "unsupported_algorithm", "signing_key_distrusted"
 ]
 """The reason on a :class:`VaultScanFirstFinding`: a key-window or
-unsupported-algorithm entry, which does not withhold a checkpoint on its own."""
+unsupported-algorithm entry, or one a ``VAULT_DISTRUSTED_KEYS`` key signed that
+its distrust entry accounts for (``signing_key_distrusted``). None of these
+withholds a checkpoint on its own."""
+
+VaultScanWaitingReason = Literal["no_worker_connected", "worker_not_consuming", "worker_stalled"]
+"""Why a scan that has not started is not being taken: the ``reason`` on
+:class:`VaultScanWaitingOn`."""
 
 OrgReadsBreakReason = (
     Literal[
@@ -1663,7 +1683,8 @@ class VaultScanFirstFinding(TypedDict):
     """An earlier finding in a chain the scan reports broken further on. The
     ``reason`` and ``brokenAt`` beside it name the break that withholds the
     chain's checkpoint; this names the first entry before it that was outside
-    its key's window or under an algorithm the Server cannot verify."""
+    its key's window, under an algorithm the Server cannot verify, or signed by
+    a distrusted key its distrust entry accounts for."""
 
     brokenAt: int
     reason: VaultScanFirstFindingReason
@@ -1679,8 +1700,8 @@ class VaultScanBrokenRecord(TypedDict):
     """Set when the reason is checkpoint-related: the chain length the latest
     checkpoint anchors."""
     firstFinding: NotRequired[VaultScanFirstFinding]
-    """An earlier key-window or unsupported-algorithm entry in the same chain,
-    when there was one."""
+    """An earlier key-window, unsupported-algorithm or accounted-for
+    distrusted entry in the same chain, when there was one."""
 
 
 class VaultScanBrokenChain(TypedDict):
@@ -1695,8 +1716,8 @@ class VaultScanBrokenChain(TypedDict):
     brokenAt: int
     reason: VaultScanBreakReason
     firstFinding: NotRequired[VaultScanFirstFinding]
-    """An earlier key-window or unsupported-algorithm entry in the same chain,
-    when there was one."""
+    """An earlier key-window, unsupported-algorithm or accounted-for
+    distrusted entry in the same chain, when there was one."""
 
 
 class VaultScanGlobalChains(TypedDict):
@@ -1715,6 +1736,10 @@ class VaultScanGlobalChains(TypedDict):
     brokenChains: list[VaultScanBrokenChain]
     """Capped at 100 entries; ``brokenChainsTruncated`` means more broke."""
     brokenChainsTruncated: bool
+    distrustedSigned: NotRequired[int]
+    """Record-less chains whose only findings are entries a distrusted key
+    signed that its distrust entry accounts for. Not in ``verified`` or
+    ``broken``; each entry is in the top-level ``distrustedEntries``."""
 
 
 class VaultScanBrokenOrg(TypedDict):
@@ -1771,10 +1796,15 @@ VaultScanKeyRegistryFinding = TypedDict(
 )
 """One finding of the key-trust walk. ``class`` is ``key_statement_invalid`` (a
 statement that does not verify or touches no anchored key),
-``key_closure_invalid`` (a retired key with no signed retirement, or a closure
-by an unanchored key) or ``key_window_drift`` (a registry column that differs
-from the value signed for it). Declared functionally because ``class`` is a
-Python keyword."""
+``key_closure_invalid`` (a retired key with no signed retirement, a closure by
+an unanchored key, or a ``VAULT_DISTRUSTED_KEYS`` key no trusted key has
+retired) or ``key_window_drift`` (a registry column that differs from the value
+signed for it). A finding about the published key material (a counting
+closure, or a trusted key's admission, signed by a key no key surface
+publishes) makes every audit export answer ``chainIntegrityReason:
+signing_key_material_invalid``; its ``detail`` names the ``VAULT_TRUST_ANCHORS``
+pin or ``VAULT_DISTRUSTED_KEYS`` entry that clears it. Declared functionally
+because ``class`` is a Python keyword."""
 
 
 class VaultScanKeyRegistry(TypedDict, total=False):
@@ -1790,6 +1820,34 @@ class VaultScanKeyRegistry(TypedDict, total=False):
     """Rows nothing anchors. Not a finding by itself; every entry signed under
     one is a ``signing_key_unanchored`` break."""
     findings: list[VaultScanKeyRegistryFinding]
+    distrustedStatements: list[VaultScanKeyRegistryFinding]
+    """Statements a ``VAULT_DISTRUSTED_KEYS`` key signed that count for
+    nothing and were stored before a key this Server trusts retired it.
+    Evidence, not findings, and not folded into ``healthy``; one the key stored
+    after that retirement is a finding. Capped at 100."""
+
+
+class VaultScanDistrustedEntry(TypedDict, total=False):
+    """A chain entry a distrusted key signed before a trusted key retired it,
+    listed by a vault scan as accounted for rather than broken."""
+
+    chain: VaultCheckpointChain
+    recordId: str | None
+    orgId: str | None
+    position: int
+    keyId: str
+
+
+class VaultScanWaitingOn(TypedDict):
+    """Why a scan that has not started is not being taken, read as ``GET
+    /status`` reads its Workers component. ``workerHolds`` names each connected
+    worker's reason to hold (``key_unanchored``, ``key_retired``,
+    ``key_unregistered``, ``signer_unreachable``) under
+    ``worker_not_consuming``, and is empty otherwise. ``nextSteps[0]`` names the
+    remedy."""
+
+    reason: VaultScanWaitingReason
+    workerHolds: list[str]
 
 
 class VaultScanResult(TypedDict):
@@ -1805,14 +1863,29 @@ class VaultScanResult(TypedDict):
     ``brokenRecords`` with reason ``unsupported_algorithm``."""
     healthy: bool
     """The single field to branch on: true iff nothing broke across record
-    chains, record-less chains, chain-less records and the read log. It does
-    not fold in ``unsupportedAlgorithm``."""
+    chains, record-less chains, chain-less records and the read log, and the
+    key-trust walk has no finding. It does not fold in ``unsupportedAlgorithm``,
+    nor ``distrustedEntries`` and ``keyRegistry.distrustedStatements`` (what a
+    leaked key signed before a trusted key retired it, which the operator's
+    ``VAULT_DISTRUSTED_KEYS`` entry accounts for)."""
     recordsMissingChain: int
     missingChainRecords: list[str]
     """Ids behind ``recordsMissingChain``, newest first, capped at 100."""
     brokenRecords: list[VaultScanBrokenRecord]
     """Capped at 100 entries; ``brokenRecordsTruncated`` means more broke."""
     brokenRecordsTruncated: bool
+    distrustedSigned: NotRequired[int]
+    """Record chains whose only findings are entries a
+    ``VAULT_DISTRUSTED_KEYS`` key signed before a key this Server trusts
+    retired it (``signing_key_distrusted``). Accounted for, never verified: not
+    in ``verified``, ``broken`` or ``healthy``. A chain that also carries any
+    other break is in ``broken``."""
+    distrustedEntries: NotRequired[list[VaultScanDistrustedEntry]]
+    """Every chain entry the scan passed that such a key signed before that
+    retirement, capped at 100; ``distrustedEntriesTotal`` is the full count. An
+    export of a chain carrying one answers ``chainIntegrity: false`` with
+    ``signing_key_distrusted``."""
+    distrustedEntriesTotal: NotRequired[int]
     globalChains: NotRequired[VaultScanGlobalChains]
     """Present on a full scan; absent on a ``record_ids``-scoped scan."""
     orgAdminReads: NotRequired[VaultScanOrgAdminReads | None]
@@ -1834,6 +1907,10 @@ class VaultScanJob(TypedDict):
     completedAt: NotRequired[str | None]
     result: NotRequired[VaultScanResult | None]
     """None until ``state == "completed"``."""
+    waitingOn: NotRequired[VaultScanWaitingOn | None]
+    """Non-null while the scan has not started (``created`` or ``retry``) and
+    the attached workers will not take it. None once a worker takes it, while
+    one is consuming, or when the attached workers cannot be read."""
     nextSteps: NotRequired[list[dict[str, Any]]]
 
 
@@ -2164,6 +2241,29 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
+StatusComponentReason = (
+    Literal[
+        "unreachable",
+        "saturated",
+        "no_connection",
+        "pool_exhausted",
+        "shutting_down",
+        "error",
+        "chain_rewind_detected",
+        "database_unavailable",
+        "signing_key_unusable",
+        "privilege_missing",
+        "no_worker_connected",
+        "worker_not_consuming",
+        "worker_stalled",
+        "not_checked",
+    ]
+    | str
+)
+"""Why a ``GET /status`` component is not operational: ``StatusComponent.reason``.
+Open with ``| str`` because it is read off a response."""
+
+
 class StatusComponent(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -2172,24 +2272,7 @@ class StatusComponent(BaseModel):
     name: str
     status: str
     latency_ms: float | None = Field(None, alias="latencyMs")
-    reason: (
-        Literal[
-            "unreachable",
-            "saturated",
-            "no_connection",
-            "pool_exhausted",
-            "shutting_down",
-            "error",
-            "chain_rewind_detected",
-            "database_unavailable",
-            "signing_key_unusable",
-            "no_worker_connected",
-            "worker_not_consuming",
-            "not_checked",
-        ]
-        | str
-        | None
-    ) = None
+    reason: StatusComponentReason | None = None
     """Why a component is not operational. On the database component at
     ``outage`` it names why the probe did not answer (``pool_exhausted`` is this
     Server's own pool fully taken, ``unreachable`` the database not answering,
@@ -2202,8 +2285,15 @@ class StatusComponent(BaseModel):
     every chain write answers 503). On the workers component it is
     ``database_unavailable`` at ``outage``, and at ``degraded``
     ``no_worker_connected`` (no worker is attached), ``worker_not_consuming``
-    (one is attached but has stopped taking jobs), ``not_checked`` (the database
-    could not be asked) or ``error``. None when the component is healthy."""
+    (one is attached but has stopped taking jobs), ``worker_stalled`` (one is
+    attached and publishes no reason to hold, yet has run nothing from a queue
+    holding a ready job for over 180s; restart it), ``not_checked`` (the
+    database could not be asked) or ``error``. ``privilege_missing``: on the
+    database component at ``degraded``, the role this Server connects as lacks
+    a privilege the engine writes with, so every request needing it answers
+    500; on chain writes at ``outage``, the missing privilege is on
+    ``audit_vault``. ``admin.get_system_health()`` names each missing privilege
+    and the GRANT that restores it. None when the component is healthy."""
 
 
 class StatusResponse(BaseModel):
