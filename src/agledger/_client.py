@@ -181,7 +181,7 @@ class AsyncAgledgerClient:
     Supports async context manager::
 
         async with AsyncAgledgerClient(api_key="agl_agt_...") as client:
-            record = await client.records.get("rec-123")
+            record = await client.records.get(record_id)
 
     ``bearer_token`` takes the same three forms as on :class:`AgledgerClient`,
     except that the function may be async and a credential's ``get_token`` is a
