@@ -83,7 +83,12 @@ class SchemasResource:
         return self._http.get("/v1/schemas/_blank")
 
     def preview(self, schema_input: dict[str, Any]) -> dict[str, Any]:
-        """Preview a schema before registration."""
+        """Preview a schema before registration.
+
+        The result is the Server's body verbatim. ``unchanged`` is ``True`` when
+        the input repeats the latest version: ``schemas.register`` would then
+        answer with that version and register nothing, and
+        ``compiled.compatibilityCheck`` is ``None``."""
         return self._http.post("/v1/schemas/preview", json=schema_input)
 
     def diff(

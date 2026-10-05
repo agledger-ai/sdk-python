@@ -181,3 +181,52 @@ def test_retry_after_header_wins_over_the_body():
     with pytest.raises(RateLimitError) as excinfo:
         client.records.get("rec-123")
     assert excinfo.value.retry_after == 3.0
+
+
+def test_backoff_waits_out_a_retry_after_longer_than_the_cap():
+    """retry-after 60 was clamped to MAX_BACKOFF (30 s), so the retry drew another
+    429. The wait is the larger of the step and retry-after, plus up to 25% jitter."""
+    from agledger._http import MAX_BACKOFF, _backoff
+
+    for _ in range(50):
+        assert 60.0 <= _backoff(0, 60.0) <= 75.0
+    for _ in range(50):
+        assert MAX_BACKOFF <= _backoff(10, 5.0) <= MAX_BACKOFF * 1.25  # step wins when larger
+
+
+@respx.mock
+def test_retry_sleeps_for_the_full_retry_after(monkeypatch: pytest.MonkeyPatch):
+    sleeps: list[float] = []
+    monkeypatch.setattr("agledger._http.time.sleep", sleeps.append)
+    route = respx.get("https://agledger.example.com/v1/records/rec-123")
+    route.side_effect = [
+        httpx.Response(429, json={"detail": "Rate limited"}, headers={"retry-after": "60"}),
+        httpx.Response(200, json=RECORD_JSON),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
+    client.records.get("rec-123")
+    assert len(sleeps) == 1 and 60.0 <= sleeps[0] <= 75.0
+
+
+@respx.mock
+def test_timeout_error_carries_the_idempotency_key_every_attempt_sent():
+    route = respx.post("https://agledger.example.com/v1/records").mock(
+        side_effect=httpx.ReadTimeout("Read timed out")
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
+    with pytest.raises(APITimeoutError) as excinfo:
+        client.records.create(type="notarize-generic-v1", criteria={})
+    sent = {call.request.headers["idempotency-key"] for call in route.calls}
+    assert len(route.calls) == 2 and len(sent) == 1
+    assert excinfo.value.idempotency_key == sent.pop()
+
+
+@respx.mock
+def test_connection_error_on_a_read_carries_no_key():
+    respx.get("https://agledger.example.com/v1/records/rec-123").mock(
+        side_effect=httpx.ConnectError("refused")
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
+    with pytest.raises(APIConnectionError) as excinfo:
+        client.records.get("rec-123")
+    assert excinfo.value.idempotency_key is None

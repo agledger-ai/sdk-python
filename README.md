@@ -68,7 +68,7 @@ print(verdict.record_status)  # FULFILLED
 client = AgledgerClient(
     api_key="agl_agt_...",                              # or set AGLEDGER_API_KEY env var
     base_url="https://agledger.internal.example.com",   # your instance URL. Required.
-    max_retries=3,                                      # default: 3
+    max_retries=3,                                      # default: 3. A 429's retry-after is waited out in full
     timeout=30.0,                                       # default: 30s
     idempotency_key_prefix="my-app-",                   # default: ""
 )
@@ -152,14 +152,26 @@ Work done for a person or another party rather than for the agent itself takes
 ## Async Support
 
 ```python
+import asyncio
 import os
+
 from agledger import AsyncAgledgerClient
 
-async with AsyncAgledgerClient(
-    api_key=os.environ["AGLEDGER_API_KEY"],
-    base_url=os.environ["AGLEDGER_EXTERNAL_URL"],
-) as client:
-    record = await client.records.get(record_id)
+
+async def main() -> None:
+    async with AsyncAgledgerClient(
+        api_key=os.environ["AGLEDGER_API_KEY"],
+        base_url=os.environ["AGLEDGER_EXTERNAL_URL"],
+    ) as client:
+        record = await client.records.create(
+            type="notarize-generic-v1",
+            criteria={"summary": "Async hello"},
+        )
+        fetched = await client.records.get(record.id)
+        print(fetched.id, fetched.status)
+
+
+asyncio.run(main())
 ```
 
 ## Resources
@@ -569,7 +581,8 @@ entry is unsigned history from before the install began signing) reads
 `[VERIFIED, NOT ANCHORED]` too, saying so. A failure is `[FAIL]`.
 
 The exit code is `0` for a pass, anchored or not, `1` for a failed
-verification and `2` when no verdict was reached: an unknown flag, a flag
+verification, `3` when the `[verify]` extra is not installed (the command prints
+one line naming `pip install 'agledger[verify]'`), and `2` when no verdict was reached: an unknown flag, a flag
 missing its value, a malformed pin or distrusted key, a key named twice,
 `--distrusted-key` without `--trust-anchor`, a key given to both with no instant, a key-policy flag on a dump
 directory, a target that does not exist, or a file that cannot be read or does

@@ -1394,8 +1394,10 @@ class AuditExportMetadata(BaseModel):
     signing_key_windows: dict[str, dict[str, Any]] | None = Field(
         None, alias="signingKeyWindows"
     )
-    """keyId to ``{activatedAt, retiredAt}``: the input for the offline
-    verifier's temporal key-validity check."""
+    """keyId to ``{activatedAt, retiredAt}``, plus ``distrustedFrom`` on a key the
+    operator distrusted: the input for the offline verifier's temporal
+    key-validity check. Entries stay plain dicts, so a window is read with
+    ``window.get("distrustedFrom")``."""
     signing_key_statements: dict[str, list[KeyStatement]] | None = Field(
         None, alias="signingKeyStatements"
     )
@@ -2635,6 +2637,11 @@ class VerificationKey(BaseModel):
     """May be a full ISO timestamp (engine ≥ v0.26.x) or a bare date string
     (older builds). Optional so the model parses either way."""
     retired_at: str | None = Field(None, alias="retiredAt")
+    distrusted_from: str | None = Field(None, alias="distrustedFrom")
+    """ISO instant from which the operator no longer vouches for what this key
+    signs, present only on a key that was distrusted (a compromise cut). A
+    verifier treats entries the key signed from this instant as unaccounted
+    for, not as proof of tampering."""
     cose_algorithm: int | None = Field(None, alias="coseAlgorithm")
     """The COSE ``alg`` this key signs under (``-8`` EdDSA, ``-7`` ES256)."""
     min_verifier_version: str | None = Field(None, alias="minVerifierVersion")

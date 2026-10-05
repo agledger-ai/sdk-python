@@ -66,7 +66,9 @@ dev = [
 [project.scripts]
 # Turnkey offline verifier CLI. Auto-detects a dump directory vs an
 # /audit-export JSON file. Needs the [verify] extra (cbor2 + cryptography).
-agledger-verify = "agledger.verify.cli:main"
+# Routed through a shim that turns a missing extra into a one-line message and
+# exit 3, since a console script cannot be conditional on an extra.
+agledger-verify = "agledger._verify_entry:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agledger"]
