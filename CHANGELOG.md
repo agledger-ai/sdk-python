@@ -95,7 +95,8 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 
 ### Fixed
 
-- **A copied key-statement row is a no-op.** A statement repeating an earlier one's signed payload counts once, at its first write, as the engine reads it, so a `vault_key_statements` row copied under a new id and time no longer reads as a second admission or as a statement stored after a closure, and no longer fails every dump.
+- **A copied key-statement row is a no-op.** A dump row repeating an earlier row's signed payload counts once, at its first write, as the engine reads it, so a `vault_key_statements` row copied under a new id and time no longer reads as a second admission or as a statement stored after a closure, and no longer fails every dump. On a key document a copy stays a second statement, since its `createdAt` is the holder's word.
+- Two readings are narrower than the engine's, where its reading would account for what should fail: only a retirement signed by a key the walk trusts bounds what a distrust entry accounts for, and a later admission of a trusted key that the key itself signed is always a finding, never accounted for.
 - The admission of a trusted key signed by a distrusted key from its cutoff on is no finding when it is that key's first admission, and no remedy names a distrusted key as a pin: a closure that still counts suggests a dated `distrusted_keys` entry, its instant defaulting to the signer's earliest counting retirement capped at its write time.
 
 - **The README Quick Start runs.** It submitted the completion with the principal's key, which the Server refuses with 403 (`SUBMIT_COMPLETION` requires the performer); it now runs a principal and a performer client, and the disputes and vault-checkpoint examples name the key each call takes. The Quick Start, disputes, audit-export verification, predicate, attestation, vault-checkpoint and async examples were run against an API 2.0 Server.

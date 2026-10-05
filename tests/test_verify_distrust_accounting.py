@@ -303,3 +303,61 @@ def test_a_dump_statement_input_is_a_dump_row() -> None:
     st = key_statement_from_dump_row({"id": "x", "kind": "genesis", "subject_key_id": "a", "endorser_key_id": None, "statement": [], "created_at": T0})
     assert isinstance(st, KeyStatementInput) and st.source == "dump"
     assert trust_key_from_dump_row({"key_id": "a", "public_key": "", "status": "active"}).source == "dump"
+
+
+# --- narrower than the engine where its reading accounts for what should fail ---
+
+
+def test_a_key_document_copy_dated_earlier_does_not_push_the_published_statement_aside() -> None:
+    e, n, k = make_key(), make_key(), make_key()
+
+    def doc(s: Stored, row_id: str, created_at: str) -> KeyStatementInput:
+        return KeyStatementInput(id=row_id, kind=s.kind, subject_key_id=s.subject_key_id, source="document", cose=s.cose, created_at=created_at)
+
+    supplied = [
+        doc(statement("genesis", e, signers=[e], activated_at=T0), "supplied:1", _at(0)),
+        doc(statement("genesis", n, signers=[n], activated_at=_at(1)), "supplied:2", _at(1)),
+        doc(statement("closure", e, endorser=n, signers=[n], retired_at=_at(2)), "supplied:3", _at(2)),
+    ]
+    s_k = statement("succession", k, endorser=e, signers=[e, k], activated_at=_at(5))
+    keys = [TrustKeyInput(key_id=x.kid, public_key=x.public_key) for x in (e, n, k)]
+    honest = _walk(keys, [*supplied, doc(s_k, "supplied:4", _at(5))], [e, n])
+    copied = _walk(keys, [doc(s_k, "copy:1", "2026-09-02T00:01:30.000000Z"), *supplied, doc(s_k, "supplied:4", _at(5))], [e, n])
+    assert [f.code for f in honest.findings] == ["KEY_STATEMENT_INVALID"]
+    assert copied.findings
+
+
+def test_only_a_retirement_a_key_the_walk_trusts_signed_bounds_what_a_distrust_entry_accounts_for() -> None:
+    f, m, m2, n = make_key(), make_key(), make_key(), make_key()
+    statements = [
+        statement("genesis", f, signers=[f], activated_at=T0, created_at=T0),
+        statement("succession", m, endorser=f, signers=[f, m], activated_at=_at(1), created_at=_at(1)),
+        statement("succession", m2, endorser=f, signers=[f, m2], activated_at=_at(1), created_at=_at(2)),
+        statement("genesis", n, signers=[n], activated_at=_at(3), created_at=_at(3)),
+        statement("closure", f, endorser=n, signers=[n], retired_at=_at(3), forced=True, created_at=_at(4)),
+        statement("closure", m, endorser=m2, signers=[m2], retired_at=_at(50), created_at=_at(50)),
+    ]
+    trust = _walk(
+        [row(f, T0, _at(3)), row(m, _at(1)), row(m2, _at(1)), row(n, _at(3))], statements, [f, n], [DistrustedKey(m.digest, None)]
+    )
+    assert trust.distrust_spans[m.digest].retired_at is None
+    assert [x.code for x in trust.findings if x.statement_id is None and x.key_id == m.kid] == ["KEY_CLOSURE_INVALID"]
+
+
+def test_a_later_admission_of_a_trusted_key_that_the_key_signed_is_a_finding_whichever_distrusted_key_co_signed_it() -> None:
+    a, leaked, x = make_key(), make_key(), make_key()
+    later = statement("succession", x, endorser=leaked, signers=[leaked, x], activated_at=_at(4), created_at=_at(4))
+    trust = _walk(
+        [row(a, T0), row(leaked, _at(1), _at(10)), row(x, _at(2))],
+        [
+            statement("genesis", a, signers=[a], activated_at=T0, created_at=T0),
+            statement("succession", leaked, endorser=a, signers=[a, leaked], activated_at=_at(1), created_at=_at(1)),
+            statement("succession", x, endorser=a, signers=[a, x], activated_at=_at(2), created_at=_at(2)),
+            later,
+            statement("closure", leaked, endorser=a, signers=[a], retired_at=_at(10), forced=True, created_at=_at(10)),
+        ],
+        [a],
+        [DistrustedKey(leaked.digest, _at(3))],
+    )
+    assert trust.accounted == []
+    assert "signed after it was already admitted" in next(f for f in trust.findings if f.statement_id == later.id).detail

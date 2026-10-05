@@ -1353,16 +1353,19 @@ def compute_key_trust(
         return a[2] - b[2]
 
     keyed = sorted(placed, key=cmp_to_key(compare))
-    # A statement whose signed payload an earlier one already carries says
+    # A dump row whose signed payload an earlier row already carries says
     # nothing new: a copy of a row (anything with write access to the database
     # can write one), or the same payload signed again. Only the first, in
     # write order, takes part, as the engine reads it; the database stamps the
-    # write time, so a copy always lands after what it copies.
+    # write time, so a copy always lands after what it copies. A key document's
+    # write time is its holder's word, so there a copy dated earlier would push
+    # the published statement aside: on a document a copy stays a second
+    # statement, which only ever narrows trust, and the Server publishes none.
     seen_payload: set[str] = set()
     kept: list[tuple[tuple[float | str, bool], int, int, _Checked]] = []
     for item in keyed:
         c = item[3]
-        if c.verdict != "invalid" and c.payload is not None and c.digest is not None:
+        if c.verdict != "invalid" and c.payload is not None and c.digest is not None and c.input.source == "dump":
             if c.digest in seen_payload:
                 continue
             seen_payload.add(c.digest)
@@ -1511,6 +1514,33 @@ def compute_key_trust(
     untrusted = [d for d, c in cutoffs.items() if c is None]
     for d in untrusted:
         trusted.discard(d)
+    # What a distrust entry accounts for is bounded only by a retirement a key
+    # the walk trusts signed. The engine bounds it by any key reached without a
+    # distrusted key, a forced closure's cut-off keys included, so a key cut
+    # off from a leaked one could retire a distrusted key it also holds and
+    # have what that key forged read as accounted for. Only a signer the walk
+    # trusts and reaches without a distrusted key bounds it here: narrower than
+    # the engine, never wider; the cutoff a bound gives an undated entry is the
+    # engine's. Mirrors verify-core.
+    if distrust_spans:
+        clear_of_distrust = _reach(anchors, [e for e in edges if e.from_ not in distrust])
+        for d, span in list(distrust_spans.items()):
+            bound: str | None = None
+            for s in valid:
+                if (
+                    s.subject != d
+                    or s.payload.typ != "closure"
+                    or s.endorser is None
+                    or s.endorser in distrust
+                    or s.endorser not in clear_of_distrust
+                    or s.endorser not in trusted
+                    or s.payload.subject.retired_at is None
+                ):
+                    continue
+                capped = _not_after_write(s.payload.subject.retired_at, s)
+                if bound is None or capped < bound:
+                    bound = capped
+            distrust_spans[d] = DistrustSpan(cutoff=span.cutoff, retired_at=bound)
 
     # Keys this host cannot decide: reached only through a statement signed
     # under an algorithm it cannot compute, and of such an algorithm themselves.
@@ -1670,7 +1700,26 @@ def compute_key_trust(
                 # A dump row: held to when the Server stored it.
                 span = distrust_spans.get(e)
                 retired_by = span.retired_at if span is not None else None
-                if reopened == "" and accounted_for(s, e):
+                # A later admission of a trusted key that the key itself signed
+                # is the record of its own half leaking, whoever co-signed it:
+                # never accounted for. Narrower than the engine, never wider.
+                leaked_subject = (
+                    s.payload.typ != "closure"
+                    and admissions.get(s.subject) is not s
+                    and s.check.subject_signed
+                    and s.subject in trusted
+                )
+                if leaked_subject:
+                    kid = s.payload.subject.kid
+                    finding(
+                        code,
+                        s,
+                        f"{what} It is also a {s.payload.typ} {kid} signed after it was already admitted: {kid}'s "
+                        f"private half in other hands, which no distrust entry for {by} accounts for. Move every Server "
+                        f"process off {kid}, retire it with force from the key they hold, and give distrustedKeys "
+                        f"sha256:{s.subject}@<the instant it leaked> (VAULT_DISTRUSTED_KEYS on every Server process).",
+                    )
+                elif reopened == "" and accounted_for(s, e):
                     accounted.append(
                         KeyTrustNote(
                             s.payload.subject.kid,

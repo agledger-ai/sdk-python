@@ -314,6 +314,46 @@ def _at_milliseconds(v: dict[str, Any]) -> dict[str, Any]:
     return {**v, "windows": pair(v["windows"]), "spans": pair(v["spans"])}
 
 
+def _narrower_only(got: dict[str, Any], want: dict[str, Any]) -> str:
+    """Where the walk may read a registry more narrowly than the engine, and
+    only so: what a distrust entry accounts for is bounded here only by a
+    retirement a key the walk trusts signed, and a later admission of a trusted
+    key that the key itself signed is never accounted for. ``""`` when ``got``
+    is ``want`` or narrower only in those two ways. Mirrors verify-core's
+    ``narrowerOnly``."""
+    if got == want:
+        return ""
+    if (got["trusted"], got["windows"]) != (want["trusted"], want["windows"]):
+        return "trusted keys or windows differ"
+    narrowed: set[str] = set()
+    for k in set(got["spans"]) | set(want["spans"]):
+        gc, gr = got["spans"].get(k, [None, None])
+        wc, wr = want["spans"].get(k, [None, None])
+        if gc != wc:
+            return f"cutoff of {k} differs"
+        if gr == wr:
+            continue
+        if gr is not None and (wr is None or gr < wr):
+            return f"bound of {k} is wider"
+        narrowed.add(k)
+    missing = [f for f in want["findings"] if f not in got["findings"]]
+    if missing:
+        return f"engine findings missing: {missing}"
+    extra = [a for a in got["accounted"] if a not in want["accounted"]]
+    if extra:
+        return f"accounted beyond the engine: {extra}"
+    for f in got["findings"]:
+        if f in want["findings"]:
+            continue
+        code, statement_id, key = f.split("|")
+        if statement_id == "" and code == "KEY_CLOSURE_INVALID" and key in narrowed:
+            continue
+        if statement_id != "" and f"{statement_id}|{key}" in want["accounted"]:
+            continue
+        return f"unexplained finding {f}"
+    return ""
+
+
 def _retired_at_of(st: dict[str, Any]) -> str | None:
     """The ``retiredAt`` a closure signs."""
     if st["kind"] != "closure":
@@ -327,6 +367,7 @@ def test_the_walk_trusts_signs_and_finds_what_the_engine_recorded_on_every_regis
     verdicts: dict[str, Any] = _RECORDED["verdicts"]
     assert len(verdicts) >= 1000
     diverged: list[str] = []
+    narrowed = 0
     for seed, recorded in verdicts.items():
         sc = _scenario(int(seed))
         got = _at_milliseconds(_verdict(_walk(sc)))
@@ -344,8 +385,12 @@ def test_the_walk_trusts_signs_and_finds_what_the_engine_recorded_on_every_regis
             if not (f.startswith("KEY_CLOSURE_INVALID|") and f.split("|")[1] in hidden and f not in got["findings"])
         ]
         if got != want:
-            diverged.append(f"seed {seed}: engine {want}, walk {got}")
+            narrowed += 1
+        if why := _narrower_only(got, want):
+            diverged.append(f"seed {seed}: {why}: engine {want}, walk {got}")
     assert diverged[:5] == []
+    # The narrowing is rare; a jump means the walk moved, not the scenarios.
+    assert narrowed < 60
 
 
 def test_the_walk_takes_the_write_order_from_created_at_and_id_whatever_order_the_statements_arrive_in() -> None:
@@ -354,8 +399,8 @@ def test_the_walk_takes_the_write_order_from_created_at_and_id_whatever_order_th
         r = _prng(int(seed) ^ 0x5EED)
         sc = _scenario(int(seed))
         shuffled = [x for _k, x in sorted(((r(), x) for x in sc.statements), key=lambda p: p[0])]
-        if _verdict(_walk(sc, shuffled, micro=True)) != want:
-            diverged.append(f"seed {seed}")
+        if why := _narrower_only(_verdict(_walk(sc, shuffled, micro=True)), want):
+            diverged.append(f"seed {seed}: {why}")
     assert diverged[:5] == []
 
 

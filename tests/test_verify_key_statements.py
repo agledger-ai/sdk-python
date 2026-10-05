@@ -828,15 +828,19 @@ def test_a_later_admission_a_document_publishes_dates_the_window_and_cuts_the_ed
     assert from_doc.by_digest[n.digest].activated_at == dump.by_digest[n.digest].activated_at == T2
 
 
-def test_a_published_row_listed_twice_is_one_row_and_so_is_a_copy_under_another_id_and_a_later_time() -> None:
+def test_a_published_row_listed_twice_is_one_row_a_document_copy_under_another_id_is_a_second_and_a_dump_copy_is_none() -> None:
     c, n = make_key(), make_key()
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
     keys = [TrustKeyInput(key_id=c.kid, public_key=c.public_key)]
     twice = as_published([succ])
     twice[n.kid] = twice[n.kid] * 2
     assert anchored_kids(walk(keys, key_statements_from_export(twice), [n.digest])) == sorted([c.kid, n.kid])
+    # On a key document a copy under another id stays a second statement: its
+    # createdAt is the holder's word, so it cannot be told from the original.
     copied = _published([succ, replace(succ, id=next_id(), created_at="2026-09-04T00:00:00.000000Z")])
-    trust = walk(keys, copied, [n.digest])
+    assert anchored_kids(walk(keys, copied, [n.digest])) == [n.kid]
+    # As dump rows, the copy is a no-op.
+    trust = walk(keys, [succ, replace(succ, id=next_id(), created_at="2026-09-04T00:00:00.000Z")], [n.digest])
     assert anchored_kids(trust) == sorted([c.kid, n.kid])
     assert trust.findings == []
 
@@ -1072,11 +1076,14 @@ def _sim_walk(
 
 def _reference(statements: list[Stored], anchors: set[str]) -> tuple[set[str], dict[str, tuple[str | None, str | None]]]:
     """The model, restated from its definition over statements whose signatures all verify."""
-    # A statement repeating an earlier one's signed payload says nothing new.
+    # A dump row repeating an earlier one's signed payload says nothing new.
     seen: set[bytes] = set()
     order: list[Stored] = []
     for st in _in_write_order(statements):
         payload = encode_payload(st.payload)
+        if st.source != "dump":
+            order.append(st)
+            continue
         if payload in seen:
             continue
         seen.add(payload)
