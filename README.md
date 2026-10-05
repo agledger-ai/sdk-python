@@ -382,7 +382,7 @@ A pinned key distrusted with no instant raises `TypeError`, as the Server
 refuses to start with that pair. A pin beside a dated entry
 (`sha256:<hex>@<instant>`) is taken: the pin vouches for what the key stored
 before the instant, and the entry withdraws what it stored from then on. A
-statement repeating an earlier one's signed payload counts once, so a row
+dump row repeating an earlier row's signed payload counts once, so a row
 copied in the database under a new id and time says nothing new.
 
 On a dump, a distrusted key that a key the walk trusts has retired (with force,
