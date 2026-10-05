@@ -190,6 +190,20 @@ def test_check_compatibility():
 
 
 @respx.mock
+def test_check_compatibility_within_a_publisher():
+    route = respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/check-compatibility").mock(
+        return_value=httpx.Response(200, json=COMPAT_JSON)
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
+    client.schemas.check_compatibility(
+        "notarize-generic-v1", {"recordSchema": {}, "completionSchema": {}}, publisher="acme-corp"
+    )
+    request = route.calls.last.request
+    assert request.url.params["publisher"] == "acme-corp"
+    assert json.loads(request.content) == {"recordSchema": {}, "completionSchema": {}}
+
+
+@respx.mock
 def test_update_version():
     respx.patch(f"{BASE}/v1/schemas/notarize-generic-v1/versions/1").mock(return_value=httpx.Response(200, json=VERSION_JSON))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")

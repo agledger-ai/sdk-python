@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-02T15:06:55.919Z",
+  "generatedAt": "2026-10-05T01:15:50.002Z",
   "sourceKind": "local",
   "apiVersion": "2.0.0",
   "count": 195,
@@ -4168,6 +4168,7 @@
       "bodyFields": [
         "checks",
         "completionId",
+        "message",
         "notes",
         "reason",
         "verdict"
@@ -4471,7 +4472,9 @@
         "completionSchema",
         "recordSchema"
       ],
-      "queryFields": [],
+      "queryFields": [
+        "publisher"
+      ],
       "pathParams": [
         "type"
       ],

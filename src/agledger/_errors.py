@@ -50,6 +50,8 @@ class APIError(AgledgerError):
     - ``recovery_hint``: machine-readable recovery guidance (e.g. on 422 INVALID_ACTION)
     - ``reason`` / ``current_state`` / ``allowed_actions``: the refusal's reason code, the
       state it found, and what is allowed now
+    - ``valid_transitions``: targets reachable now, on a 422 refusal (a Record's
+      display states, or a dispute's statuses)
     - ``existing_id``: the row a 409 collided with (e.g. TRUSTED_ISSUER_EXISTS)
     - ``refresh_url``: concrete GET URL to re-fetch state (e.g. on 422 INVALID_ACTION)
     """
@@ -101,6 +103,10 @@ class APIError(AgledgerError):
     allowed_actions: list[str] | None
     """Actions the resource accepts right now, forwarded from the body. Ground
     truth for the next call."""
+    valid_transitions: list[str] | None
+    """Targets reachable now, forwarded from the body on a 422 refusal: the
+    display states a Record can reach on a refusal about a Record, or the
+    dispute's own target statuses on a refused dispute move."""
     existing_id: str | None
     """ID of the row already holding the unique key this request collided
     with. Present on 409 ``TRUSTED_ISSUER_EXISTS``: read or PATCH that row
@@ -130,6 +136,7 @@ class APIError(AgledgerError):
         reason: str | None = None,
         current_state: str | None = None,
         allowed_actions: list[str] | None = None,
+        valid_transitions: list[str] | None = None,
         existing_id: str | None = None,
         type: str | None = None,
         publishers: list[str] | None = None,
@@ -153,6 +160,7 @@ class APIError(AgledgerError):
         self.reason = reason
         self.current_state = current_state
         self.allowed_actions = allowed_actions
+        self.valid_transitions = valid_transitions
         self.existing_id = existing_id
         self.refresh_url = refresh_url
         self.deadline = deadline

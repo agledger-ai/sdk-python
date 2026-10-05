@@ -255,6 +255,7 @@ class _CertState:
                 reason=source.reason,
                 current_state=source.current_state,
                 allowed_actions=source.allowed_actions,
+                valid_transitions=source.valid_transitions,
                 existing_id=source.existing_id,
             )
         try:

@@ -172,9 +172,19 @@ class SchemasResource:
             f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
         )
 
-    def check_compatibility(self, type: str, schemas: dict[str, Any]) -> dict[str, Any]:
-        """Check compatibility of new record/completion schemas against an existing Type."""
-        return self._http.post(f"/v1/schemas/{type}/check-compatibility", json=schemas)
+    def check_compatibility(
+        self, type: str, schemas: dict[str, Any], *, publisher: str | None = None
+    ) -> dict[str, Any]:
+        """Dry-run the compatibility check :meth:`register` runs, without registering.
+
+        The check is against the latest ACTIVE version of ``publisher`` in your
+        org, or the engine-wide one when your org has none. ``publisher``
+        defaults to ``local`` on the Server, as ``register``'s ``publisher``
+        field does; a publisher with no version of the type here answers
+        compatible."""
+        return self._http.post(
+            f"/v1/schemas/{type}/check-compatibility", json=schemas, params=_scope(publisher)
+        )
 
     def update_version(
         self, type: str, version: int, params: SchemaVersionUpdate, *, publisher: str | None = None
@@ -299,8 +309,12 @@ class AsyncSchemasResource:
             f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
         )
 
-    async def check_compatibility(self, type: str, schemas: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.post(f"/v1/schemas/{type}/check-compatibility", json=schemas)
+    async def check_compatibility(
+        self, type: str, schemas: dict[str, Any], *, publisher: str | None = None
+    ) -> dict[str, Any]:
+        return await self._http.post(
+            f"/v1/schemas/{type}/check-compatibility", json=schemas, params=_scope(publisher)
+        )
 
     async def update_version(
         self, type: str, version: int, params: SchemaVersionUpdate, *, publisher: str | None = None

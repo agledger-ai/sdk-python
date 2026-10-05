@@ -178,6 +178,7 @@ def build_error(response: httpx.Response) -> APIError:
         "reason": _str_or_none(body.get("reason")),
         "current_state": _str_or_none(body.get("currentState")),
         "allowed_actions": _str_list_or_none(body.get("allowedActions")),
+        "valid_transitions": _str_list_or_none(body.get("validTransitions")),
         "existing_id": _str_or_none(body.get("existingId")),
     }
 

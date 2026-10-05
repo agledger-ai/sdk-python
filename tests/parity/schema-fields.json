@@ -429,7 +429,7 @@
       "url"
     ]
   },
-  "enumCount": 48,
+  "enumCount": 50,
   "enums": {
     "AgentClass": {
       "values": [
@@ -460,6 +460,7 @@
         "previous_hash_mismatch",
         "signature_invalid",
         "signature_missing",
+        "signing_key_distrusted",
         "signing_key_drift",
         "signing_key_unanchored",
         "signing_key_unknown",
@@ -493,7 +494,9 @@
         "payload_drift",
         "signature_invalid",
         "signature_missing",
+        "signing_key_distrusted",
         "signing_key_drift",
+        "signing_key_material_invalid",
         "signing_key_unanchored",
         "signing_key_unknown",
         "signing_key_unpublished",
@@ -957,6 +960,27 @@
         "components/schemas/Completion/properties/settlementSignal/properties/recommendation"
       ]
     },
+    "StatusComponentReason": {
+      "values": [
+        "chain_rewind_detected",
+        "database_unavailable",
+        "error",
+        "no_connection",
+        "no_worker_connected",
+        "not_checked",
+        "pool_exhausted",
+        "privilege_missing",
+        "saturated",
+        "shutting_down",
+        "signing_key_unusable",
+        "unreachable",
+        "worker_not_consuming",
+        "worker_stalled"
+      ],
+      "specSites": [
+        "paths//status/get/responses/200/content/application/json/schema/properties/components/items/properties/reason"
+      ]
+    },
     "StructuralValidation": {
       "values": [
         "ACCEPTED",
@@ -1004,7 +1028,8 @@
         "schema"
       ],
       "specSites": [
-        "paths//v1/audit-vault/checkpoints/get/responses/200/content/application/json/schema/properties/data/items/properties/chain"
+        "paths//v1/audit-vault/checkpoints/get/responses/200/content/application/json/schema/properties/data/items/properties/chain",
+        "paths//v1/admin/vault/scan/{jobId}/get/responses/200/content/application/json/schema/properties/result/properties/distrustedEntries/items/properties/chain"
       ]
     },
     "VaultScanBreakReason": {
@@ -1029,6 +1054,7 @@
         "schema_chain_missing_for_subjects",
         "signature_invalid",
         "signature_missing",
+        "signing_key_distrusted",
         "signing_key_drift",
         "signing_key_unanchored",
         "signing_key_unknown",
@@ -1045,6 +1071,7 @@
       "values": [
         "key_expired",
         "key_not_yet_active",
+        "signing_key_distrusted",
         "unsupported_algorithm"
       ],
       "specSites": [
@@ -1063,6 +1090,17 @@
       ],
       "specSites": [
         "paths//v1/admin/vault/scan/{jobId}/get/responses/200/content/application/json/schema/properties/state"
+      ]
+    },
+    "VaultScanWaitingReason": {
+      "values": [
+        "no_worker_connected",
+        "worker_not_consuming",
+        "worker_stalled"
+      ],
+      "specSites": [
+        "paths//v1/admin/vault/scan/post/responses/202/content/application/json/schema/properties/waitingOn/properties/reason",
+        "paths//v1/admin/vault/scan/{jobId}/get/responses/200/content/application/json/schema/properties/waitingOn/properties/reason"
       ]
     },
     "Verdict": {
