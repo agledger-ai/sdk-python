@@ -159,7 +159,7 @@ async with AsyncAgledgerClient(
     api_key=os.environ["AGLEDGER_API_KEY"],
     base_url=os.environ["AGLEDGER_EXTERNAL_URL"],
 ) as client:
-    record = await client.records.get("rec-123")
+    record = await client.records.get(record_id)
 ```
 
 ## Resources
@@ -295,7 +295,7 @@ Verify a Record's hash-chained, signed audit export without calling the API:
 ```python
 from agledger.verify import verify_export
 
-export_data = client.records.get_audit_export("rec-123")
+export_data = client.records.get_audit_export(record.id)
 result = verify_export(export_data.model_dump(by_alias=True))
 
 if result.verdict == "failed":
@@ -315,7 +315,7 @@ left unchecked:
 ```python
 from agledger.verify import verify_export
 
-export_data = client.records.get_audit_export("rec-123")
+export_data = client.records.get_audit_export(record.id)
 result = verify_export(
     export_data.model_dump(by_alias=True),
     agent_keys=[credential.public_key_jwk],  # the JWK sent at cert exchange
