@@ -119,7 +119,11 @@ def test_nulling_every_vault_write_time_does_not_pass_a_distrusted_key() -> None
     cutoff_ms = cast("int", instant_ms(entry["created_at"])) - 1
     at = datetime.fromtimestamp(cutoff_ms / 1000, tz=UTC)
     distrust = [f"sha256:{spki_sha256(previous['public_key'])}@{at.strftime('%Y-%m-%dT%H:%M:%S')}.{cutoff_ms % 1000:03d}Z"]
-    assert "CHAIN_KEY_EXPIRED" in _dump_codes(verify_dump(d, trust_anchors=[pin], distrusted_keys=distrust))
+    # The current key retired the previous one after that entry, so the
+    # distrust entry accounts for it: listed, not failed.
+    accounted = verify_dump(d, trust_anchors=[pin], distrusted_keys=distrust)
+    assert accounted.verdict == "trusted"
+    assert [(a.code, a.key_id) for a in accounted.vault.accounted] == [("CHAIN_SIGNED_BY_DISTRUSTED_KEY", previous["key_id"])]
     for e in d.vault_entries:
         e["created_at"] = None
     report = verify_dump(d, trust_anchors=[pin], distrusted_keys=distrust)

@@ -92,7 +92,7 @@ def test_after_a_routine_closure_both_pins_reach_both_keys_and_the_closed_key_ca
     c, n = make_key(), make_key()
     genesis = statement("genesis", c, signers=[c])
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
-    closure = statement("closure", c, endorser=n, signers=[n], retired_at=T2)
+    closure = statement("closure", c, endorser=n, signers=[n], retired_at=T2, created_at=T2)
     for anchor in (c, n):
         trust = walk([row(c, T0, T2), row(n, T1)], [genesis, succ, closure], [anchor.digest])
         assert anchored_kids(trust) == sorted([c.kid, n.kid])
@@ -163,8 +163,8 @@ def test_a_closure_by_an_unanchored_key_closes_nothing_and_counting_closures_end
     genesis = statement("genesis", c, signers=[c])
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
     by_stranger = statement("closure", c, endorser=x, signers=[x], retired_at=T0, forced=True)
-    later = statement("closure", c, endorser=n, signers=[n], retired_at=T3)
-    earlier = statement("closure", c, endorser=n, signers=[n], retired_at=T2)
+    later = statement("closure", c, endorser=n, signers=[n], retired_at=T3, created_at=T3)
+    earlier = statement("closure", c, endorser=n, signers=[n], retired_at=T2, created_at=T3)
     trust = walk([row(x, T0)], [genesis, succ, by_stranger, later, earlier], [c.digest])
     assert anchored_kids(trust) == sorted([c.kid, n.kid])
     assert trust.by_digest[c.digest].retired_at == T2
@@ -337,7 +337,7 @@ _C = "2026-09-02T18:00:00.000000Z"
         ),
     ],
 )
-def test_a_closure_by_a_key_reached_but_not_anchored_is_a_finding_only_where_the_published_closures_differ(
+def test_a_counting_closure_by_a_key_reached_but_not_anchored_is_a_finding_and_says_when_it_moves_the_window(
     by_n: list[dict[str, Any]], by_x: dict[str, Any], expected: bool
 ) -> None:
     c, n, genesis, succ = _history()
@@ -351,11 +351,33 @@ def test_a_closure_by_a_key_reached_but_not_anchored_is_a_finding_only_where_the
     trust = walk([], [genesis, succ, *from_n, leak, from_x], [n.digest])
     assert c.digest in trust.trusted and x.digest not in trust.trusted
     on_x = [f for f in trust.findings if f.statement_id == from_x.id]
-    assert [f.code for f in on_x] == (["KEY_CLOSURE_INVALID"] if expected else [])
-    if expected:
-        assert "reached but not anchored" in on_x[0].detail
-        assert f"pin sha256:{x.digest} in trustAnchors" in on_x[0].detail
-        assert f"distrustedKeys sha256:{x.digest}@{from_x.created_at}" in on_x[0].detail
+    assert [f.code for f in on_x] == ["KEY_CLOSURE_INVALID"]
+    assert "reached but not anchored" in on_x[0].detail
+    assert f"pin sha256:{x.digest} in trustAnchors" in on_x[0].detail
+    assert f"distrustedKeys sha256:{x.digest}@{from_x.created_at}" in on_x[0].detail
+    moved = "earlier than any closure a published key signs" in on_x[0].detail or (
+        "which no closure a published key signs does" in on_x[0].detail
+    )
+    assert moved == expected
+
+
+def test_the_published_admission_of_a_trusted_key_whose_endorser_a_forced_closure_cut_off_is_a_finding_until_pinned() -> None:
+    a, b, d = make_key(), make_key(), make_key()
+    genesis = statement("genesis", a, signers=[a], created_at=T0)
+    admit_b = statement("succession", b, endorser=a, signers=[a, b], activated_at=T1, created_at=T1)
+    admit_d = statement("succession", d, endorser=b, signers=[b, d], activated_at=T2, created_at=T2)
+    forced = statement("closure", b, endorser=d, signers=[d], retired_at=T3, forced=True, created_at=T3)
+    statements = [genesis, admit_b, admit_d, forced]
+    trust = walk([], statements, [d.digest])
+    assert anchored_kids(trust) == sorted([b.kid, d.kid])
+    on_admission = [f for f in trust.findings if f.statement_id == admit_b.id]
+    assert [f.code for f in on_admission] == ["KEY_STATEMENT_INVALID"]
+    assert f"pin sha256:{a.digest} in trustAnchors" in on_admission[0].detail
+    assert [f for f in walk([], statements, [d.digest, a.digest]).findings if f.statement_id == admit_b.id] == []
+    # A distrusted endorser is never offered as a pin.
+    distrusted = walk([], statements, [d.digest], [DistrustedKey(a.digest, T3)])
+    assert [f.code for f in distrusted.findings if f.statement_id == admit_b.id] == ["KEY_STATEMENT_INVALID"]
+    assert all(f"pin sha256:{a.digest}" not in f.detail for f in distrusted.findings)
 
 
 def test_leaked_cannot_admit_a_key_by_signing_it_in_as_its_own_predecessor_retired_or_not() -> None:
@@ -508,7 +530,12 @@ def test_distrusted_with_an_instant_ends_its_window_there_and_with_none_trusts_i
     applied = apply_key_trust(KeyCache({n.kid: RegisteredKey(n.public_key, "embedded")}), cut).entry(n.kid)
     assert applied is not None
     assert (applied.trust, applied.activated_at, applied.retired_at, applied.distrust_cutoff) == ("anchored", T0, None, T1)
-    assert codes(cut) == [("KEY_STATEMENT_INVALID", succ_m.id)]
+    # With no retirement by a trusted key, nothing bounds what the entry
+    # accounts for: the succession n stored after its cutoff stays a finding,
+    # and so does n's registry row.
+    assert codes(cut) == [("KEY_STATEMENT_INVALID", succ_m.id), ("KEY_CLOSURE_INVALID", None)]
+    assert f"POST /v1/admin/vault/signing-keys/{n.kid}/retire" in cut.findings[1].detail
+    assert cut.accounted == []
     assert anchored_kids(walk([], statements, [c.digest], [DistrustedKey(n.digest, None)])) == [c.kid]
 
 
@@ -675,14 +702,15 @@ def test_a_document_walk_orders_a_closure_after_a_succession_that_signs_the_same
         assert c.digest not in walk([], as_document(order), [p.digest]).trusted
 
 
-def test_a_document_walk_counts_a_statement_listed_twice_once() -> None:
+def test_a_walk_counts_a_statement_listed_twice_once_a_dump_row_copied_under_another_id_included() -> None:
     c, n = make_key(), make_key()
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1)
-    # As a dump row copied, a second admission cuts the edge back; as a document
-    # listing, with no row to tell them apart, it is the same statement.
+    # A copy repeats the signed payload, so it says nothing new, as the engine reads it.
     keys = [TrustKeyInput(key_id=c.kid, public_key=c.public_key)]
-    assert anchored_kids(walk(keys, [succ, replace(succ, id=next_id())], [n.digest])) == [n.kid]
-    assert anchored_kids(walk(keys, as_document([succ, succ]), [n.digest])) == sorted([c.kid, n.kid])
+    for statements in ([succ, replace(succ, id=next_id())], as_document([succ, succ])):
+        trust = walk(keys, statements, [n.digest])
+        assert anchored_kids(trust) == sorted([c.kid, n.kid])
+        assert trust.findings == []
 
 
 def test_a_walk_refuses_statements_that_mix_a_write_time_with_none() -> None:
@@ -800,15 +828,17 @@ def test_a_later_admission_a_document_publishes_dates_the_window_and_cuts_the_ed
     assert from_doc.by_digest[n.digest].activated_at == dump.by_digest[n.digest].activated_at == T2
 
 
-def test_a_published_row_listed_twice_is_one_row_and_a_copy_under_another_id_is_a_second() -> None:
+def test_a_published_row_listed_twice_is_one_row_and_so_is_a_copy_under_another_id_and_a_later_time() -> None:
     c, n = make_key(), make_key()
     succ = statement("succession", n, endorser=c, signers=[c, n], activated_at=T1, created_at=T1)
     keys = [TrustKeyInput(key_id=c.kid, public_key=c.public_key)]
     twice = as_published([succ])
     twice[n.kid] = twice[n.kid] * 2
     assert anchored_kids(walk(keys, key_statements_from_export(twice), [n.digest])) == sorted([c.kid, n.kid])
-    copied = _published([succ, replace(succ, id=next_id())])
-    assert anchored_kids(walk(keys, copied, [n.digest])) == [n.kid]
+    copied = _published([succ, replace(succ, id=next_id(), created_at="2026-09-04T00:00:00.000000Z")])
+    trust = walk(keys, copied, [n.digest])
+    assert anchored_kids(trust) == sorted([c.kid, n.kid])
+    assert trust.findings == []
 
 
 def test_one_published_row_spelled_two_ways_is_one_row() -> None:
@@ -842,12 +872,18 @@ def test_a_key_listed_retired_before_the_distrust_cutoff_the_walk_ends_it_at_is_
     c = make_key()
     g = statement("genesis", c, signers=[c], activated_at=T0, created_at=T0)
     cutoff = [DistrustedKey(c.digest, T2)]
-    early = walk([row(c, T0, T1)], [g], [c.digest], cutoff)
+
+    # As a key document lists it: a dump's row would also be the unbounded
+    # distrusted key's own finding.
+    def listed(*window: str) -> TrustKeyInput:
+        return replace(row(c, *window), source=None)
+
+    early = walk([listed(T0, T1)], [g], [c.digest], cutoff)
     assert early.by_digest[c.digest].distrust_cutoff == T2
     assert codes(early) == [("CHAIN_KEY_WINDOW_DRIFT", None)]
     # Listed active, or retired at or after the cutoff, is no drift: the cutoff is no retirement.
-    assert codes(walk([row(c, T0)], [g], [c.digest], cutoff)) == []
-    assert codes(walk([row(c, T0, T3)], [g], [c.digest], cutoff)) == []
+    assert codes(walk([listed(T0)], [g], [c.digest], cutoff)) == []
+    assert codes(walk([listed(T0, T3)], [g], [c.digest], cutoff)) == []
 
 
 # --- distrusted keys over a key document (no write order) ---
@@ -1036,7 +1072,15 @@ def _sim_walk(
 
 def _reference(statements: list[Stored], anchors: set[str]) -> tuple[set[str], dict[str, tuple[str | None, str | None]]]:
     """The model, restated from its definition over statements whose signatures all verify."""
-    order = _in_write_order(statements)
+    # A statement repeating an earlier one's signed payload says nothing new.
+    seen: set[bytes] = set()
+    order: list[Stored] = []
+    for st in _in_write_order(statements):
+        payload = encode_payload(st.payload)
+        if payload in seen:
+            continue
+        seen.add(payload)
+        order.append(st)
 
     def subject_of(s: Stored) -> str:
         return s.payload["subject"]["spkiSha256"]

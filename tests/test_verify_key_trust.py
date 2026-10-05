@@ -202,11 +202,17 @@ def test_a_statement_the_export_and_a_supplied_key_document_both_carry_is_walked
     assert r.key_trust.findings == []
 
 
-def test_refuses_a_key_both_pinned_and_distrusted_as_the_server_refuses_to_start_with_it() -> None:
+def test_refuses_a_key_pinned_and_distrusted_with_no_instant_and_takes_one_distrusted_from_an_instant() -> None:
     exp = _load("valid.json")
-    for distrust in (_pin_of(exp), f"{_pin_of(exp)}@2026-09-01T00:00:00Z"):
-        with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
-            verify_export(exp, trust_anchors=[_pin_of(exp)], distrusted_keys=[distrust])
+    for distrust in (_pin_of(exp), _pin_of(exp).upper().replace("SHA256", "sha256")):
+        with pytest.raises(TypeError, match="a trust anchor and a distrusted key with no instant"):
+            verify_export(copy.deepcopy(exp), trust_anchors=[_pin_of(exp)], distrusted_keys=[distrust])
+    # Beside a pin, a dated entry vouches for what the key stored before the
+    # instant and withdraws what it stored from then on.
+    before = verify_export(copy.deepcopy(exp), trust_anchors=[_pin_of(exp)], distrusted_keys=[f"{_pin_of(exp)}@2099-01-01T00:00:00Z"])
+    assert before.verdict == "trusted"
+    after = verify_export(copy.deepcopy(exp), trust_anchors=[_pin_of(exp)], distrusted_keys=[f"{_pin_of(exp)}@2026-01-01T00:00:00Z"])
+    assert after.broken_at is not None and after.broken_at.code == "CHAIN_KEY_EXPIRED"
 
 
 def test_a_distrusted_key_with_no_instant_and_no_retirement_is_trusted_for_nothing_though_its_root_is_pinned() -> None:

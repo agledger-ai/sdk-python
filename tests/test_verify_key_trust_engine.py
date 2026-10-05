@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import cbor2
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -247,6 +248,7 @@ def _walk(sc: _Scenario, statements: list[dict[str, Any]] | None = None, *, micr
                 status=k["status"],
                 activated_at=_to_ms(k["activated_at"]),
                 retired_at=_to_ms(k["retired_at"]) if k["status"] == "retired" else None,
+                source="dump",
             )
             for k in sc.rows
         ],
@@ -285,17 +287,64 @@ def _verdict(trust: KeyTrust) -> dict[str, Any]:
         for f in trust.findings
         if f.code != "CHAIN_KEY_WINDOW_DRIFT"
     )
-    return {"trusted": trusted, "windows": windows, "findings": findings}
+    accounted = sorted(
+        f"{n.statement_id or ''}|{'' if n.key_id is None else _INDEX_OF_KID.get(n.key_id, n.key_id)}"
+        for n in trust.accounted
+    )
+    spans = {
+        str(_INDEX_OF_DIGEST[d]): [span.cutoff, span.retired_at]
+        for d, span in sorted(trust.distrust_spans.items(), key=lambda item: _INDEX_OF_DIGEST[item[0]])
+    }
+    return {"trusted": trusted, "windows": windows, "findings": findings, "accounted": accounted, "spans": spans}
+
+
+def _at_milliseconds(v: dict[str, Any]) -> dict[str, Any]:
+    """A verdict at the millisecond precision a dump's write times carry. A
+    retirement bound is capped at its closure's write time, which a dump gives
+    in milliseconds and the engine holds in microseconds; every entry and
+    statement is graded against it in milliseconds, so that is where the two
+    must agree."""
+
+    def ms(x: str | None) -> str | None:
+        return None if x is None else f"{x[:23]}Z"
+
+    def pair(r: dict[str, list[str | None]]) -> dict[str, list[str | None]]:
+        return {k: [ms(a), ms(b)] for k, (a, b) in r.items()}
+
+    return {**v, "windows": pair(v["windows"]), "spans": pair(v["spans"])}
+
+
+def _retired_at_of(st: dict[str, Any]) -> str | None:
+    """The ``retiredAt`` a closure signs."""
+    if st["kind"] != "closure":
+        return None
+    envelope = cbor2.loads(st["cose"][0])
+    payload = cbor2.loads(envelope.value[2])
+    return payload["subject"].get("retiredAt")
 
 
 def test_the_walk_trusts_signs_and_finds_what_the_engine_recorded_on_every_registry() -> None:
     verdicts: dict[str, Any] = _RECORDED["verdicts"]
     assert len(verdicts) >= 1000
-    diverged = [
-        f"seed {seed}: engine {want}, walk {got}"
-        for seed, want in verdicts.items()
-        if (got := _verdict(_walk(_scenario(int(seed))))) != want
-    ]
+    diverged: list[str] = []
+    for seed, recorded in verdicts.items():
+        sc = _scenario(int(seed))
+        got = _at_milliseconds(_verdict(_walk(sc)))
+        want = _at_milliseconds(recorded)
+        # A closure dated after its write time within the same millisecond:
+        # the engine sees it in microseconds, a dump's write time cannot show it.
+        hidden = {
+            st["id"]
+            for st in sc.statements
+            if (r := _retired_at_of(st)) is not None and r > st["created_us"] and r[:23] == st["created_us"][:23]
+        }
+        want["findings"] = [
+            f
+            for f in want["findings"]
+            if not (f.startswith("KEY_CLOSURE_INVALID|") and f.split("|")[1] in hidden and f not in got["findings"])
+        ]
+        if got != want:
+            diverged.append(f"seed {seed}: engine {want}, walk {got}")
     assert diverged[:5] == []
 
 
@@ -349,6 +398,15 @@ def _walk_document(sc: _Scenario, published: list[dict[str, Any]]) -> KeyTrust:
         trust_anchors=[f"sha256:{POOL[k].digest}" for k in sc.anchors],
         distrusted_keys=[DistrustedKey(POOL[k].digest, cutoff) for k, cutoff in sc.distrusted],
     )
+
+
+def test_a_document_walk_agrees_with_the_engine_s_own_walk_over_that_document() -> None:
+    diverged = [
+        f"seed {seed}: engine {want}, walk {got}"
+        for seed, want in _RECORDED["documents"].items()
+        if (got := _verdict(_walk_document(_scenario(int(seed)), _RECORDED["published"][seed]))) != want
+    ]
+    assert diverged[:5] == []
 
 
 def test_a_document_walk_never_trusts_a_key_the_engine_does_not_and_flags_any_window_it_grades_more_loosely() -> None:

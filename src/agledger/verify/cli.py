@@ -44,7 +44,7 @@ from agledger.verify.key_statements import (
     parse_trust_anchors,
 )
 from agledger.verify.loader import DumpLoadError, load_dump
-from agledger.verify.types import VerifyReport
+from agledger.verify.types import AccountedEntry, VerifyReport
 from agledger.verify.verify_dump import verify_dump
 from agledger.verify.verify_export import (
     AgentSignatureCounts,
@@ -467,11 +467,20 @@ def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
         lines.append(f"    [{f.code}] key {f.key_id or '-'}: {f.detail}")
         lines.append(f"      -> {suggestion(f.code)}")
     lines.extend(f"    note: key {n.key_id or '-'}: {n.detail}" for n in key_trust.notes)
+    lines.extend(f"    accounted for: key {n.key_id or '-'}: {n.detail}" for n in key_trust.accounted)
     return lines
 
 
 def _looks_like_audit_export(value: Any) -> bool:
     return isinstance(value, dict) and "exportMetadata" in value and "entries" in value
+
+
+def _chain_name(a: AccountedEntry) -> str:
+    if a.chain == "record":
+        return f"Record {a.record_id}"
+    if a.chain == "admin":
+        return "Chain admin"
+    return f"Chain schema:{a.org_id or '__platform__'}"
 
 
 def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
@@ -492,6 +501,14 @@ def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
     for f in report.vault.failures:
         lines.append(f"    [{f.code}] {f.message}")
         lines.append(f"      -> {suggestion(f.code)}")
+    if report.vault.accounted:
+        # Signed by a key the operator distrusts, before a key the walk trusts
+        # retired it: the distrust entry accounts for them. Not verified, and
+        # not failures; listed so nobody reads them as vouched for.
+        lines.append(f"  accounted for: {len(report.vault.accounted)} (signed by a distrusted key before its retirement; not verified)")
+        lines.extend(
+            f"    [{a.code}] {_chain_name(a)} pos {a.position} key {a.key_id}: {a.detail}" for a in report.vault.accounted
+        )
     lines.append("")
     lines.append("org_admin_reads chain")
     lines.append(f"  orgs             : {report.org_admin_reads.org_count}")
@@ -535,6 +552,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "present": result.agent_signatures.present,
             "verified": result.agent_signatures.verified,
         },
+        "unsignedProjectionFields": list(result.unsigned_projection_fields),
     }
     if result.broken_at is not None:
         out["brokenAt"] = {
@@ -584,6 +602,31 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
             f"{result.broken_at.detail or ''}"
         )
         lines.append(f"      -> {suggestion(result.broken_at.code)}")
+    # A PASS must not be read as vouching for unsigned display projections
+    # (e.g. actorDisplayName). The attribution the export's guide points at
+    # instead, actorOwnerId/actorId, IS signature-covered, so say whether this
+    # run checked it. ``applied`` says the check ran, not that it passed, so a
+    # failed run is not told its attribution agrees. As @agledger/verify says it.
+    fields = result.unsigned_projection_fields
+    if fields:
+        if result.optional_checks.get("actor_attribution") != "applied":
+            attribution = (
+                "Attribution (actorId/actorOwnerId) carries no signed actor claim in this export, so it was NOT "
+                "cross-checked."
+            )
+        elif result.valid:
+            attribution = (
+                "Attribution (actorId/actorOwnerId/actorRole) was cross-checked against the signed actor claim and agrees."
+            )
+        else:
+            attribution = (
+                "Attribution (actorId/actorOwnerId/actorRole) is cross-checked against the signed actor claim, and "
+                "this run did not verify, so nothing above is vouched for."
+            )
+        lines.append(
+            f"  note              : {len(fields)} unsigned display projection field(s) ({', '.join(fields)}) are NOT "
+            f"signature-covered. {attribution}"
+        )
     return "\n".join(lines)
 
 
@@ -597,8 +640,8 @@ def _flag_message(message: str) -> str:
         if message.startswith(prefix):
             return flag + message[len(prefix) :]
     return re.sub(
-        r"^(sha256:[0-9a-f]{64}) is both a trust anchor and a distrusted key\.",
-        r"\1 is both a --trust-anchor and a --distrusted-key.",
+        r"^(sha256:[0-9a-f]{64}) is a trust anchor and a distrusted key with no instant,",
+        r"\1 is a --trust-anchor and a --distrusted-key with no instant,",
         message,
     )
 

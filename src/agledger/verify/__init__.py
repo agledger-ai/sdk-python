@@ -39,6 +39,7 @@ from agledger.verify.failures import FailureCode, suggestion
 from agledger.verify.key_statements import (
     KEY_STATEMENT_CTY,
     DistrustedKey,
+    DistrustSpan,
     KeyRegistryFinding,
     KeyStatementInput,
     KeyTrust,
@@ -62,15 +63,18 @@ from agledger.verify.key_statements import (
 )
 from agledger.verify.loader import DumpLoadError, load_dump
 from agledger.verify.types import (
+    AccountedEntry,
     Dump,
     Failure,
     TenantAdminReadsReport,
     VaultChainsReport,
     Verdict,
     VerifyReport,
+    chain_of_scope,
 )
-from agledger.verify.verify_dump import verify_dump
+from agledger.verify.verify_dump import verify_dump, verify_dump_dir
 from agledger.verify.verify_export import (
+    ACCOUNTED_ENTRY_CODE,
     AGENT_SIGNATURE_CONTEXT,
     AgentSignatureCounts,
     BrokenAt,
@@ -89,10 +93,13 @@ from agledger.verify.verify_export import (
 )
 
 __all__ = [
+    "ACCOUNTED_ENTRY_CODE",
     "AGENT_SIGNATURE_CONTEXT",
     "KEY_STATEMENT_CTY",
+    "AccountedEntry",
     "AgentSignatureCounts",
     "BrokenAt",
+    "DistrustSpan",
     "DistrustedKey",
     "Dump",
     "DumpLoadError",
@@ -117,6 +124,7 @@ __all__ = [
     "VerifyExportResult",
     "VerifyReport",
     "assert_not_pinned_and_distrusted",
+    "chain_of_scope",
     "compute_key_trust",
     "earliest_key_activation",
     "ed25519_jwk_thumbprint",
@@ -134,6 +142,7 @@ __all__ = [
     "suggestion",
     "trust_key_from_dump_row",
     "verify_dump",
+    "verify_dump_dir",
     "verify_export",
     "verify_org_read_inclusion",
     "written_while_signing",

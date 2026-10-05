@@ -194,6 +194,12 @@ class TrustKeyInput:
     status: Literal["active", "retired"] | None = None
     activated_at: Any = None
     retired_at: Any = None
+    source: Literal["dump", "document"] | None = None
+    """Where the key was read from. ``"dump"``: a row of a dump's
+    ``vault_signing_keys.ndjson`` (:func:`trust_key_from_dump_row` sets it), a
+    registry fact the walk holds a distrusted key to: one no trusted key has
+    retired is KEY_CLOSURE_INVALID. Anything else, ``None`` included, is a key
+    document's listing."""
 
 
 @dataclass(frozen=True)
@@ -274,6 +280,23 @@ class KeyStatementCounts:
     unverifiable: int
 
 
+@dataclass(frozen=True)
+class DistrustSpan:
+    """What a ``distrusted_keys`` entry covers for one key, as the engine's
+    ``distrustSpans`` gives it. ``cutoff``: the instant from which what the key
+    signs counts for nothing (the entry's own, else ``retired_at``; ``None``:
+    trusted for nothing). ``retired_at``: the earliest retirement of the key
+    that a key which is not distrusted signs, reached from the anchors without
+    passing through a distrusted key, each closure's signed ``retiredAt``
+    capped at its own write time (``None``: none). On a dump, what the key
+    signed before ``retired_at`` and outside its trust is accounted for, and
+    listed rather than failed; what it signed after is not. Mirrors
+    verify-core ``DistrustSpan``."""
+
+    cutoff: str | None
+    retired_at: str | None
+
+
 @dataclass
 class KeyTrust:
     """The walk's result. See :func:`compute_key_trust`."""
@@ -294,6 +317,20 @@ class KeyTrust:
     statements: KeyStatementCounts
     notes: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
     """Non-fatal: see :class:`KeyTrustNote`."""
+    accounted: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
+    """Non-fatal: statements of a dump that a ``distrusted_keys`` key signed,
+    that count for nothing, and that were stored before a key the walk trusts
+    retired it (its :class:`DistrustSpan` ``retired_at``). The distrust entry
+    and that retirement account for them: evidence of what the key signed,
+    listed and never a finding. One stored after that retirement, or whose
+    dropping reopens a key, stays a finding. Empty for a key document."""
+    distrust_spans: dict[str, DistrustSpan] = field(default_factory=dict[str, DistrustSpan])
+    """Each ``distrusted_keys`` key, by full SPKI SHA-256 (hex): see :class:`DistrustSpan`."""
+    source: Literal["dump", "document"] = "document"
+    """``dump`` when every statement is a dump row (and there is at least
+    one), else ``document``. Only a dump's write times are the Server's word,
+    so only a walk over a dump marks the keys :func:`apply_key_trust` lets a
+    chain entry be accounted for under."""
 
 
 _NO_ANCHOR_DETAIL = (
@@ -345,6 +382,10 @@ class KeyTrustReport:
     findings: list[KeyRegistryFinding] = field(default_factory=list[KeyRegistryFinding])
     notes: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
     """Non-fatal notes from the walk (see :class:`KeyTrustNote`); they never fail a verdict."""
+    accounted: list[KeyTrustNote] = field(default_factory=list[KeyTrustNote])
+    """Non-fatal: the statements of a dump a ``distrusted_keys`` key signed that
+    its entry and a trusted key's retirement of it account for (see
+    :attr:`KeyTrust.accounted`). Listed, never a finding."""
 
     def to_json(self) -> dict[str, Any]:
         """camelCase dict, the shape ``@agledger/verify-core``'s ``KeyTrustReport`` serializes to."""
@@ -360,6 +401,7 @@ class KeyTrustReport:
             "undecidedKeyIds": list(self.undecided_key_ids),
             "findings": [f.to_json() for f in self.findings],
             "notes": [n.to_json() for n in self.notes],
+            "accounted": [n.to_json() for n in self.accounted],
         }
 
 
@@ -407,6 +449,7 @@ def report_key_trust(
         undecided_key_ids=ids("undecided"),
         findings=list(trust.findings),
         notes=list(trust.notes),
+        accounted=list(trust.accounted),
     )
 
 
@@ -628,22 +671,29 @@ def assert_not_pinned_and_distrusted(
     trust_anchors: str | Sequence[str] | None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None,
 ) -> None:
-    """Raise ``TypeError`` when a key is both pinned and distrusted, as the
-    Server refuses to boot on the same pair (``VaultKeyDistrustedError``): a key
-    is the root the walk trusts or one it must not, never both.
-    :func:`compute_key_trust` itself walks such a pair as the engine's walk
-    does; a verifier calls this on what its caller passed before it walks."""
+    """Raise ``TypeError`` when a key is pinned and distrusted with no instant,
+    as the Server refuses to boot on that pair (``VaultKeyDistrustedError``):
+    an undated entry withdraws the key from before anything it signed, which
+    leaves a pin nothing to vouch for. A pin beside a dated entry
+    (``sha256:<hex>@<instant>``) is how a leaked key whose history is still
+    needed is kept from signing anything new: the pin vouches for what it
+    stored before the instant. :func:`compute_key_trust` itself walks any pair
+    as the engine's walk does; a verifier calls this on what its caller passed
+    before it walks. Mirrors verify-core ``assertNotPinnedAndDistrusted``."""
     if trust_anchors is None or distrusted_keys is None:
         return
     anchors = set(parse_trust_anchors(trust_anchors))
-    both = next((d for d in _normalize_distrusted(distrusted_keys) if d.spki_sha256 in anchors), None)
+    both = next(
+        (d for d in _normalize_distrusted(distrusted_keys) if d.cutoff is None and d.spki_sha256 in anchors), None
+    )
     if both is None:
         return
     raise TypeError(
-        f"sha256:{both.spki_sha256} is both a trust anchor and a distrusted key. Pin a key you trust and "
-        "distrust one that leaked, never the same key: pin its successor and keep the distrust entry, or drop "
-        "the distrust entry. The Server refuses to start with the same pair in VAULT_TRUST_ANCHORS and "
-        "VAULT_DISTRUSTED_KEYS."
+        f"sha256:{both.spki_sha256} is a trust anchor and a distrusted key with no instant, which leaves the pin "
+        "nothing to vouch for. Give the distrust entry the instant the key leaked (sha256:<hex>@<RFC 3339 "
+        "instant>, no later than its retirement) and keep the pin, which then vouches for what it signed before "
+        "that instant only; or, if you vouch for nothing it signed, keep the entry without an instant and drop the "
+        "pin. The Server refuses to start with the same pair in VAULT_TRUST_ANCHORS and VAULT_DISTRUSTED_KEYS."
     )
 
 
@@ -982,6 +1032,12 @@ class _Checked:
     verdict: Literal["valid", "invalid", "unverifiable"]
     detail: str | None
     payload: _Payload | None
+    digest: str | None = None
+    """SHA-256 of the signed payload bytes, once they decode as a statement."""
+    subject_signed: bool = False
+    """The subject's own signature verified here (a genesis, or a succession's second half)."""
+    endorser_signed: bool = False
+    """The endorser's signature verified here."""
 
 
 def _cose_list(st: KeyStatementInput) -> list[object]:
@@ -992,8 +1048,10 @@ def _cose_list(st: KeyStatementInput) -> list[object]:
 
 
 def _check_statement(st: KeyStatementInput, key_by_digest: Mapping[str, tuple[str, str | None]]) -> _Checked:
+    digest: str | None = None
+
     def invalid(detail: str, payload: _Payload | None = None) -> _Checked:
-        return _Checked(st, st.id, "invalid", detail, payload)
+        return _Checked(st, st.id, "invalid", detail, payload, None if payload is None else digest)
 
     sigs = [_decode_sign1(b) for b in _cose_list(st)]
     if not sigs or any(s is None for s in sigs):
@@ -1005,6 +1063,7 @@ def _check_statement(st: KeyStatementInput, key_by_digest: Mapping[str, tuple[st
     payload = _decode_payload(first.payload_bstr)
     if payload is None:
         return invalid("the payload does not decode as a key statement")
+    digest = hashlib.sha256(first.payload_bstr).hexdigest()
     if (
         payload.typ != st.kind
         or (st.subject_key_id is not None and payload.subject.kid != st.subject_key_id)
@@ -1046,13 +1105,22 @@ def _check_statement(st: KeyStatementInput, key_by_digest: Mapping[str, tuple[st
     if len(parts) != len(expected):
         return invalid(f"a {payload.typ} carries {len(expected)} signature(s), this one carries {len(parts)}", payload)
     unsupported = False
+    subject_signed = False
+    endorser_signed = False
     for i, (material, kid) in enumerate(expected):
         outcome = _check_signature(parts[i], material, kid)
         if outcome == "bad":
             return invalid(f"signature {i + 1} does not verify under the key it names", payload)
         if outcome == "unsupported":
             unsupported = True
-    return _Checked(st, st.id, "unverifiable" if unsupported else "valid", None, payload)
+        by_subject = payload.typ == "genesis" or (payload.typ == "succession" and i == 1)
+        if outcome == "ok" and by_subject:
+            subject_signed = True
+        if outcome == "ok" and not by_subject:
+            endorser_signed = True
+    return _Checked(
+        st, st.id, "unverifiable" if unsupported else "valid", None, payload, digest, subject_signed, endorser_signed
+    )
 
 
 # --- The walk ---
@@ -1070,6 +1138,10 @@ class _Statement:
     """Position in write order (total: ties keep input order)."""
     stored_ms: int | None
     """When it was stored, in ms: ``created_at``, or under the signed order the instant it signs."""
+    written: tuple[int, bool] | None = None
+    """Under the write order, ``created_at`` in microseconds and whether it
+    carried them (a key document) or only milliseconds (a dump); ``None``
+    under the signed order, where nothing says when a statement was stored."""
 
 
 @dataclass(frozen=True, eq=False)
@@ -1093,6 +1165,37 @@ def _reach(anchors: set[str], edges: Sequence[_Edge]) -> set[str]:
                 out.add(e.to)
                 grew = True
     return out
+
+
+def _instant_of_us(us: int) -> str:
+    """A microsecond count as the RFC 3339 UTC instant the statements sign."""
+    ms = us // 1000
+    stamp = datetime.fromtimestamp(ms // 1000, UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    return f"{stamp}.{ms % 1000:03d}{us - ms * 1000:03d}Z"
+
+
+def _signed_after_write(signed: str, s: _Statement) -> bool:
+    """Whether an instant a statement signs is later than when it was stored,
+    at the precision its write time carries: a dump's millisecond
+    ``created_at`` hides the microseconds, so an instant in the same
+    millisecond is not later. False under the signed order, where nothing says
+    when it was stored. Mirrors verify-core ``signedAfterWrite``."""
+    if s.written is None:
+        return False
+    at = _instant_us(signed)[0]
+    if at != at:
+        return False
+    us, micro = s.written
+    return at > us if micro else int(at) // 1000 > (s.stored_ms if s.stored_ms is not None else us // 1000)
+
+
+def _not_after_write(signed: str, s: _Statement) -> str:
+    """The earlier of an instant a statement signs and its write time (see
+    :func:`_signed_after_write`). Mirrors verify-core ``notAfterWrite``."""
+    if not _signed_after_write(signed, s) or s.written is None:
+        return signed
+    us, micro = s.written
+    return _instant_of_us(us if micro else (s.stored_ms if s.stored_ms is not None else us // 1000) * 1000)
 
 
 def _signed_instant_of(c: _Checked) -> str | None:
@@ -1250,8 +1353,22 @@ def compute_key_trust(
         return a[2] - b[2]
 
     keyed = sorted(placed, key=cmp_to_key(compare))
+    # A statement whose signed payload an earlier one already carries says
+    # nothing new: a copy of a row (anything with write access to the database
+    # can write one), or the same payload signed again. Only the first, in
+    # write order, takes part, as the engine reads it; the database stamps the
+    # write time, so a copy always lands after what it copies.
+    seen_payload: set[str] = set()
+    kept: list[tuple[tuple[float | str, bool], int, int, _Checked]] = []
+    for item in keyed:
+        c = item[3]
+        if c.verdict != "invalid" and c.payload is not None and c.digest is not None:
+            if c.digest in seen_payload:
+                continue
+            seen_payload.add(c.digest)
+        kept.append(item)
     in_write_order: list[_Statement] = []
-    for at, ((k, _m), _r, _i, c) in enumerate(keyed):
+    for at, ((k, micro), _r, _i, c) in enumerate(kept):
         if c.verdict == "invalid" or c.payload is None:
             continue
         in_write_order.append(
@@ -1262,6 +1379,7 @@ def compute_key_trust(
                 endorser=c.payload.endorser.spki_sha256 if c.payload.endorser else None,
                 at=at,
                 stored_ms=rfc3339_ms(c.input.created_at) if order == "written" else instant_ms(k),
+                written=(int(cast("float", k)), micro) if order == "written" else None,
             )
         )
     valid = [s for s in in_write_order if s.check.verdict == "valid"]
@@ -1299,21 +1417,41 @@ def compute_key_trust(
     # Distrusted keys and the instant each one's statements stop counting from.
     distrust = {d.spki_sha256 for d in distrusted_list}
     cutoffs: dict[str, tuple[int, str] | None] = {}
+    distrust_spans: dict[str, DistrustSpan] = {}
     if distrust:
         clear = _reach(anchors, [e for e in edges if e.from_ not in distrust])
         for d in distrusted_list:
-            instant = d.cutoff
-            if instant is None:
-                for s in valid:
-                    if s.subject != d.spki_sha256 or s.payload.typ != "closure":
-                        continue
-                    by = s.endorser
-                    retired = s.payload.subject.retired_at
-                    if by is None or by in distrust or by not in clear or retired is None:
-                        continue
-                    if instant is None or retired < instant:
-                        instant = retired
+            # The retirement a key the walk still trusts signed for it, no
+            # later than that closure's own write time: a retirement dated
+            # ahead must not stretch what the entry accounts for.
+            retired_by: str | None = None
+            for s in valid:
+                if s.subject != d.spki_sha256 or s.payload.typ != "closure":
+                    continue
+                by = s.endorser
+                signed_retired = s.payload.subject.retired_at
+                if by is None or by in distrust or by not in clear or signed_retired is None:
+                    continue
+                retired = _not_after_write(signed_retired, s)
+                if retired_by is None or retired < retired_by:
+                    retired_by = retired
+            instant = d.cutoff if d.cutoff is not None else retired_by
             cutoffs[d.spki_sha256] = None if instant is None else (cast("int", instant_ms(instant)), instant)
+            distrust_spans[d.spki_sha256] = DistrustSpan(cutoff=instant, retired_at=retired_by)
+
+    def accounted_for(s: _Statement, signer: str) -> bool:
+        """A dump statement a distrusted key signed and stored before a key the
+        walk still trusts retired it: the distrust entry and that retirement
+        account for it."""
+        span = distrust_spans.get(signer)
+        bound = None if span is None or span.retired_at is None else instant_ms(span.retired_at)
+        return (
+            bound is not None
+            and s.check.input.source == "dump"
+            and s.written is not None
+            and s.stored_ms is not None
+            and s.stored_ms < bound
+        )
 
     def distrusted(s: _Statement, signer: str | None) -> bool:
         """Signed by a distrusted key at or after its cutoff: counts for nothing.
@@ -1340,6 +1478,7 @@ def compute_key_trust(
         return cutoff is None or (order == "written" and s.stored_ms is not None and s.stored_ms >= cutoff[0])
 
     notes: list[KeyTrustNote] = []
+    accounted: list[KeyTrustNote] = []
 
     # Pass 1, then the closures it lets count.
     pass1 = _reach(anchors, [e for e in edges if not distrusted(e.via, e.from_)])
@@ -1351,7 +1490,9 @@ def compute_key_trust(
     closed_at: dict[str, int] = {}
     closed_window: dict[str, str] = {}
     forced: set[str] = set()
+    closures_of: dict[str, list[_Statement]] = {}
     for c in counting:
+        closures_of.setdefault(c.subject, []).append(c)
         closed_at.setdefault(c.subject, c.at)
         retired = c.payload.subject.retired_at
         if retired is not None and closed_window.get(c.subject, retired) >= retired:
@@ -1377,18 +1518,31 @@ def compute_key_trust(
     # reached through bytes anyone with database access writes as easily as the
     # Server: it is unanchored.
     undecided: set[str] = set()
+    # The undecided keys one step from the trusted set, through the half of the
+    # statement this host verified. Past that step every signature on the path
+    # is one anything with database access could have written, so nothing
+    # further is vouched for. The Server publishes these with their admission.
+    vouched: set[str] = set()
     unverifiable = [s for s in in_write_order if s.check.verdict == "unverifiable"]
     if unverifiable:
         every = [e for e in [*edges, *(x for s in unverifiable for x in edges_of(s))] if not voided(e)]
         for d in _reach(anchors, every):
             if d not in trusted:
                 undecided.add(d)
+        for edge in (x for s in unverifiable for x in edges_of(s)):
+            if edge.from_ not in trusted or voided(edge) or edge.to in trusted:
+                continue
+            forward = edge.from_ == edge.via.endorser
+            if edge.via.check.endorser_signed if forward else edge.via.check.subject_signed:
+                vouched.add(edge.to)
+        undecided |= vouched
         for d in untrusted:
             undecided.discard(d)
         for d in list(undecided):
             known = key_by_digest.get(d)
             if known is None or _material_for(known[0], known[1])[1] != "unsupported":
                 undecided.discard(d)
+                vouched.discard(d)
 
     # Each trusted key's window. It opens at the latest ``activatedAt`` its
     # verified admissions sign, so a statement added later only narrows it.
@@ -1445,10 +1599,33 @@ def compute_key_trust(
         start = s.payload.subject.activated_at
         if first_activation.get(s.subject, start) >= start:
             first_activation[s.subject] = start
+    def pin_remedy(e: str, by: str) -> str:
+        """Pin it if honest, never once it is distrusted."""
+        if e in cutoffs:
+            return ""
+        return f" If {by} is honest, pin sha256:{e} in trustAnchors (VAULT_TRUST_ANCHORS on the Server, which publishes it)."
+
     for s in valid:
         e = s.endorser
         by = s.payload.endorser.kid if s.payload.endorser else ""
-        if e is not None and distrusted(s, e) and not voided_by_stored_time(s, e):
+        voided_here = e is not None and distrusted(s, e)
+        # The admission of a key the walk trusts by another path (its own pin,
+        # as when a fresh key was staged with the leaked one as its predecessor
+        # after the leak), signed by a distrusted key from its cutoff on: the
+        # voided endorsement takes nothing away and grants nothing, so it is no
+        # finding. Only the key's first admission: a later one is a second
+        # admission, which cuts the key's edge back and redates it, and stays a
+        # finding.
+        if (
+            e is not None
+            and voided_here
+            and voided_by_stored_time(s, e)
+            and s.payload.typ != "closure"
+            and s.subject in trusted
+            and admissions.get(s.subject) is s
+        ):
+            continue
+        if e is not None and voided_here and not voided_by_stored_time(s, e):
             # Voided only because a key document's time is not held against the
             # cutoff: it admits nothing, but a statement the engine would count
             # is no finding. It still dates windows and cuts edges back, so it
@@ -1465,7 +1642,7 @@ def compute_key_trust(
                     "the cutoff. A dump taken from the Server holds it to the time it was stored.",
                 )
             )
-        elif e is not None and distrusted(s, e):
+        elif e is not None and voided_here:
             cutoff = cutoffs.get(e)
             closed = s.payload.subject.retired_at
             now = by_digest.get(s.subject)
@@ -1482,21 +1659,69 @@ def compute_key_trust(
                 and (ends is None or ends > closed)
                 else ""
             )
-            finding(
-                "KEY_CLOSURE_INVALID" if s.payload.typ == "closure" else "KEY_STATEMENT_INVALID",
-                s,
+            code: KeyRegistryFindingCode = "KEY_CLOSURE_INVALID" if s.payload.typ == "closure" else "KEY_STATEMENT_INVALID"
+            what = (
                 f"a {s.payload.typ} by {by}, which distrustedKeys distrusts "
-                f"{f'from {cutoff[1]}' if cutoff else 'entirely'}; it counts for nothing.{reopened}",
+                f"{f'from {cutoff[1]}' if cutoff else 'entirely'}; it counts for nothing."
             )
+            if s.check.input.source != "dump" or s.written is None:
+                finding(code, s, f"{what}{reopened}")
+            else:
+                # A dump row: held to when the Server stored it.
+                span = distrust_spans.get(e)
+                retired_by = span.retired_at if span is not None else None
+                if reopened == "" and accounted_for(s, e):
+                    accounted.append(
+                        KeyTrustNote(
+                            s.payload.subject.kid,
+                            s.check.id,
+                            f"{what} Stored before {retired_by or ''}, when a key the walk trusts retired {by}, so "
+                            f"the distrust entry accounts for it: evidence of what {by} signed, not a finding.",
+                        )
+                    )
+                else:
+                    after = (
+                        f" No closure a key the walk trusts signs retires {by}, so nothing bounds what the distrust "
+                        f"entry accounts for: retire {by} with force on the Server from a process on a key you hold."
+                        if retired_by is None
+                        else f" It was stored after {retired_by}, when a key the walk trusts retired {by}: {by}'s "
+                        "private half is still in use by someone with write access to the Server's database."
+                        if not accounted_for(s, e)
+                        else ""
+                    )
+                    finding(code, s, f"{what}{reopened}{after}")
             continue
         if s.payload.typ == "closure":
             retired = s.payload.subject.retired_at or ""
             subject_entry = by_digest.get(s.subject)
             activated = first_activation.get(s.subject) if subject_entry is not None and subject_entry.trusted else None
             signer_closed = None if e is None else closed_at.get(e)
+            before = len(findings)
+            # The instant to suggest when nothing earlier is known: the
+            # signer's own retirement, each closure's signed instant capped at
+            # its write time (a closure dated ahead voids nothing), or else
+            # this closure's write time. A pin on the signer stays, since the
+            # entry is dated.
+            own = [] if e is None else closures_of.get(e, [])
+            until: str | None = None
+            if s.written is not None:
+                w_us, w_micro = s.written
+                until = _instant_of_us(w_us if w_micro else (s.stored_ms if s.stored_ms is not None else w_us // 1000) * 1000)
+            for c in own:
+                capped = _not_after_write(c.payload.subject.retired_at or "", c)
+                if capped != "" and (until is None or capped < until):
+                    until = capped
+            known = (
+                ""
+                if until is None
+                else f"; if nothing earlier is known, {until}, {'its retirement' if own else 'when this closure was stored'}"
+            )
             distrust_hint = (
-                f"If {by} leaked or was retired, distrustedKeys sha256:{e or ''} (VAULT_DISTRUSTED_KEYS on the "
-                "Server) makes what it signed from its retirement on count for nothing."
+                f"If {by} leaked, give distrustedKeys sha256:{e or ''}@<instant> (VAULT_DISTRUSTED_KEYS on every "
+                f"Server process), the instant being the earliest time {by} may have leaked{known}. What it signed "
+                f"from that instant on, this closure included, counts for nothing. Keep a trustAnchors pin on {by} if "
+                f"it has one, and date the entry no later than the leak: beside a pin, everything {by} stored before "
+                "the instant still counts."
             )
             if e is None or e not in pass1:
                 finding("KEY_CLOSURE_INVALID", s, "the closure is signed by a key that is not anchored")
@@ -1514,42 +1739,60 @@ def compute_key_trust(
                     f"the closure retires {s.payload.subject.kid} at {retired}, before the {activated} it was "
                     f"activated, and still counts. {distrust_hint}",
                 )
-            elif e not in trusted and (s.subject in trusted or s.subject in undecided):
-                # The engine publishes only trusted keys and the undecided ones
-                # one step from them, so a walk over the subject's key document
-                # cannot verify this closure. It reads differently from the
-                # engine only where no closure a published key signed dates the
-                # window as early, or forces it too.
-                published = [c for c in counting if c.subject == s.subject and (c.endorser or "") in trusted]
+            elif e not in trusted and (s.subject in trusted or s.subject in vouched):
+                # The Server publishes only trusted and vouched keys, and every
+                # counting closure of a published key with it, so a walk over
+                # the subject's key document cannot verify this one: every
+                # document and every audit export carrying it fails offline,
+                # whether or not a published closure dates the window as early.
+                published = [c for c in closures_of.get(s.subject, []) if (c.endorser or "") in trusted]
                 earlier = all(retired < (c.payload.subject.retired_at or "") for c in published)
                 forced_alone = s.payload.forced is True and not any(c.payload.forced is True for c in published)
-                if earlier or forced_alone:
-                    effect = (
-                        f"ends {s.payload.subject.kid}'s window at {retired}"
-                        if earlier
-                        else f"retires {s.payload.subject.kid} with force"
+                effect = (
+                    f": it ends {s.payload.subject.kid}'s window at {retired}, earlier than any closure a published "
+                    "key signs"
+                    if earlier
+                    else f": it retires {s.payload.subject.kid} with force, which no closure a published key signs does"
+                    if forced_alone
+                    else ""
+                )
+                written = s.check.input.created_at
+                at = f"@{written}" if isinstance(written, str) else ""
+                # A distrusted signer is never named as a pin. Its closure
+                # counts here only where it was stored before the cutoff, or is
+                # in a key document, where a closure only narrows trust.
+                if e in cutoffs:
+                    why = (
+                        f"it was stored before the cutoff, so if {by} leaked earlier, date its entry no later than "
+                        f"{written or ''}"
+                        if s.check.input.source == "dump" and s.written is not None
+                        else "a closure it signed in a key document still counts here, since a closure only narrows "
+                        "trust; the Server counts it for nothing only when it was stored at or after the cutoff"
                     )
-                    written = s.check.input.created_at
-                    at = f"@{written}" if isinstance(written, str) else ""
-                    # A distrusted signer cannot be pinned; on a key document its
-                    # closure still counts, since a closure only narrows trust.
+                    remedy = f" {by} is in distrustedKeys, and this closure still counts: {why}."
+                else:
                     remedy = (
-                        f"{by} is in distrustedKeys, and a closure it signed in a key document still counts here, "
-                        "since a closure only narrows trust; the Server counts it for nothing only when it was "
-                        "stored at or after the cutoff."
-                        if e in cutoffs
-                        else f"If {by} is honest, pin sha256:{e} in trustAnchors (VAULT_TRUST_ANCHORS on the Server, "
-                        f"which publishes it); if it leaked, distrustedKeys sha256:{e}{at} (VAULT_DISTRUSTED_KEYS on "
+                        f"{pin_remedy(e, by)} If it leaked, distrustedKeys sha256:{e}{at} (VAULT_DISTRUSTED_KEYS on "
                         f"the Server) makes this closure, and what {by} signed after it, count for nothing."
                     )
-                    finding(
-                        "KEY_CLOSURE_INVALID",
-                        s,
-                        f"the closure is signed by {by}, which is reached but not anchored, and still counts: it "
-                        f"{effect}, and no key surface publishes {by}, so an offline walk over the published "
-                        f"statements cannot verify it and reads {s.payload.subject.kid} as the engine does not. "
-                        f"{remedy}",
-                    )
+                finding(
+                    "KEY_CLOSURE_INVALID",
+                    s,
+                    f"the closure is signed by {by}, which is reached but not anchored, and still counts{effect}. No "
+                    f"key surface publishes {by}, so an offline walk over the published statements cannot verify it, "
+                    f"and every audit export carrying them fails offline verification.{remedy}",
+                )
+            # A retirement dated ahead of when it was stored: the Server never
+            # signs one, and it keeps its subject open until then.
+            if e is not None and e in pass1 and _signed_after_write(retired, s) and len(findings) == before:
+                finding(
+                    "KEY_CLOSURE_INVALID",
+                    s,
+                    f"the closure dates {s.payload.subject.kid}'s retirement at {retired}, after "
+                    f"{s.check.input.created_at or ''} when it was stored, and still counts: {s.payload.subject.kid}'s "
+                    f"window ends then. The Server never signs a retirement ahead of the call; if {by} did not sign "
+                    f"this, {distrust_hint}",
+                )
             continue
         closed_subject = closed_at.get(s.subject)
         if s.subject not in trusted and (e is None or e not in trusted):
@@ -1557,11 +1800,54 @@ def compute_key_trust(
         elif closed_subject is not None and s.at > closed_subject:
             finding("KEY_STATEMENT_INVALID", s, f"a {s.payload.typ} of a key stored after its closure; it admits nothing")
         elif admissions.get(s.subject) is not s:
-            finding("KEY_STATEMENT_INVALID", s, f"a {s.payload.typ} its subject signed after it was already admitted")
+            # A key is admitted once. What it signs itself in with later is a
+            # leaked key naming a predecessor or redating itself.
+            kid = s.payload.subject.kid
+            finding(
+                "KEY_STATEMENT_INVALID",
+                s,
+                f"a {s.payload.typ} its subject signed after it was already admitted: {kid}'s private half in other "
+                f"hands. It is the record of the leak, and no setting clears it: move every Server process off {kid}, "
+                f"retire it with force from the key they hold, and give distrustedKeys sha256:{s.subject}@<the "
+                "instant it leaked> (VAULT_DISTRUSTED_KEYS on every Server process), which stops what its leaked half "
+                "signs from then on counting.",
+            )
+        elif e is not None and s.subject in trusted and e not in trusted and e not in vouched:
+            # The admission of a key trusted by another path (a pin, or the
+            # edge back from a key it admitted) whose endorser the walk does
+            # not trust: history a forced closure cut off. The Server publishes
+            # it with the key and does not publish its endorser, so no offline
+            # walk verifies it.
+            finding(
+                "KEY_STATEMENT_INVALID",
+                s,
+                f"{s.payload.subject.kid} is trusted, and its admission is a {s.payload.typ} signed by {by}, which the "
+                "walk does not trust (a forced closure cut it off, or it was never linked). No key surface publishes "
+                f"{by}, so an offline walk over the published statements cannot verify it, and every audit export "
+                f"carrying them fails offline verification.{pin_remedy(e, by)}",
+            )
         elif e is not None and e in trusted:
             closed = closed_at.get(e)
             if closed is not None and s.at > closed:
                 finding("KEY_STATEMENT_INVALID", s, f"a {s.payload.typ} by {by} stored after its closure")
+
+    # A vouched key is published with its admission, which this host cannot
+    # check. Where that admission's endorser is not published either, no
+    # verifier off-host can check it from what is published.
+    for d in vouched:
+        adm = admissions.get(d)
+        endorser = adm.endorser if adm is not None else None
+        if adm is None or endorser is None or endorser in trusted or endorser in vouched:
+            continue
+        by = adm.payload.endorser.kid if adm.payload.endorser else ""
+        finding(
+            "KEY_STATEMENT_INVALID",
+            adm,
+            f"{adm.payload.subject.kid} is reached through a trusted key's signature, and its admission is a "
+            f"{adm.payload.typ} signed by {by}, which no key surface publishes, so an offline walk over the published "
+            f"statements cannot verify it, and every audit export carrying them fails offline verification."
+            f"{pin_remedy(endorser, by)}",
+        )
 
     # Keys an admission names that this walk could not verify. A key document
     # carries a key's admissions but not every endorser, so the walk can date a
@@ -1656,6 +1942,28 @@ def compute_key_trust(
                 )
             )
 
+    # A distrusted key the dump's registry lists that no key the walk trusts
+    # has retired: nothing bounds what its entry accounts for, so what it
+    # signed stays unaccounted until a retirement does. A registry fact, so a
+    # key document's listing leaves it out.
+    for key in listed_keys:
+        digest = spki_sha256(key.public_key)
+        span = distrust_spans.get(digest)
+        if key.source != "dump" or span is None or span.retired_at is not None or key.key_id != digest[:16]:
+            continue
+        findings.append(
+            KeyRegistryFinding(
+                "KEY_CLOSURE_INVALID",
+                key.key_id,
+                None,
+                f"distrustedKeys names {key.key_id} and no closure signed by a key the walk trusts retires it, so "
+                f"nothing bounds what the entry accounts for: chain entries {key.key_id} signed fail until a "
+                f"retirement does. Retire it with force on the Server (POST /v1/admin/vault/signing-keys/{key.key_id}"
+                '/retire with {"force": true}) from a process on a key you hold; what it signed before that retirement '
+                "is then accounted for and listed, and anything it signs after it is reported.",
+            )
+        )
+
     return KeyTrust(
         order=order,
         anchors=[f"sha256:{d}" for d in anchor_digests],
@@ -1664,6 +1972,9 @@ def compute_key_trust(
         undecided=undecided,
         findings=findings,
         notes=notes,
+        accounted=accounted,
+        distrust_spans=distrust_spans,
+        source="dump" if inputs and all(st.source == "dump" for st in inputs) else "document",
         statements=KeyStatementCounts(
             total=len(checked),
             valid=sum(1 for c in checked if c.verdict == "valid"),
@@ -1717,6 +2028,7 @@ def trust_key_from_dump_row(row: Mapping[str, Any]) -> TrustKeyInput:
         status=_status_of(row.get("status")),
         activated_at=row.get("activated_at"),
         retired_at=row.get("retired_at"),
+        source="dump",
     )
 
 

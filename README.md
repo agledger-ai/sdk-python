@@ -369,17 +369,34 @@ statements sign. The statements walked are the export's own
 as `public_keys` (`client.verification_keys.list()` carries them; pass its
 result, its `.data` list, or the `GET /v1/verification-keys` body as served). Findings about the statements themselves make the result invalid, at
 position 0: `KEY_STATEMENT_INVALID` (a statement that does not verify, disagrees
-with what it is filed under, touches no anchored key, or was signed after a
-closure or a second admission), `KEY_CLOSURE_INVALID` (a retired key with no
-closure that counts for it, or a closure that should not count, including one
-by a key the walk reaches but does not anchor that retires an anchored key
-earlier, or with force, than any closure a published key signed, as the
-engine's scan grades it), and
+with what it is filed under, touches no anchored key, was signed after a
+closure or a second admission, or admits a trusted key under an endorser the
+walk does not trust), `KEY_CLOSURE_INVALID` (a retired key with no closure that
+counts for it, a closure that should not count, any counting closure of a
+published key by a key the walk reaches but does not anchor, or a closure dated
+after the time it was stored, as the engine's scan grades them), and
 `CHAIN_KEY_WINDOW_DRIFT` (a listed window or status that differs from the
 signed value).
 
-A key in both `trust_anchors` and `distrusted_keys` raises `TypeError`, as the
-Server refuses to start with that pair: pin the successor of a key that leaked.
+A pinned key distrusted with no instant raises `TypeError`, as the Server
+refuses to start with that pair. A pin beside a dated entry
+(`sha256:<hex>@<instant>`) is taken: the pin vouches for what the key stored
+before the instant, and the entry withdraws what it stored from then on. A
+statement repeating an earlier one's signed payload counts once, so a row
+copied in the database under a new id and time says nothing new.
+
+On a dump, a distrusted key that a key the walk trusts has retired (with force,
+as the key-compromise runbook does) is bounded by that retirement, and what it
+signed before then is accounted for rather than failed, as the engine's scan
+lists it: a statement it signed is listed in `key_trust.accounted`, and a chain
+entry whose signature verifies under it, outside what the key is trusted for,
+is listed in `vault.accounted` as `CHAIN_SIGNED_BY_DISTRUSTED_KEY` (each an
+`AccountedEntry` naming its chain, record or org, position and key). Neither
+fails the dump, and `agledger-verify` prints both. What the key signed after
+that retirement fails as before, and a distrusted key the dump's registry lists
+that no trusted key has retired is `KEY_CLOSURE_INVALID`, naming the forced
+retire call that bounds it. `verify_dump_dir(path, ...)` loads and verifies a
+dump directory, refusing its key options before it reads anything.
 
 `distrusted_keys` on an export is stricter than on a dump. A dump's
 `vault_key_statements` rows date what a distrusted key stored before its cutoff,
@@ -554,7 +571,7 @@ entry is unsigned history from before the install began signing) reads
 The exit code is `0` for a pass, anchored or not, `1` for a failed
 verification and `2` when no verdict was reached: an unknown flag, a flag
 missing its value, a malformed pin or distrusted key, a key named twice,
-`--distrusted-key` without `--trust-anchor`, a key given to both, a key-policy flag on a dump
+`--distrusted-key` without `--trust-anchor`, a key given to both with no instant, a key-policy flag on a dump
 directory, a target that does not exist, or a file that cannot be read or does
 not parse. The flags, these refusals and their messages, `--help`, the
 headlines and the exit codes are the same as `@agledger/verify`'s
