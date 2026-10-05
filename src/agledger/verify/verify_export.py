@@ -58,6 +58,7 @@ from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 from agledger.verify.failures import FailureCode
 from agledger.verify.key_statements import (
     DistrustedKey,
+    DistrustSpan,
     KeyStatementInput,
     KeyTrust,
     KeyTrustReport,
@@ -67,6 +68,7 @@ from agledger.verify.key_statements import (
     _statements_from_map,  # pyright: ignore[reportPrivateUsage]
     assert_not_pinned_and_distrusted,
     compute_key_trust,
+    instant_ms,
     key_statements_from_export,
     no_anchor_report,
     report_key_trust,
@@ -126,8 +128,13 @@ except ImportError as _err:  # pragma: no cover
 # unsupported: the trusted key commits to an algorithm this build cannot
 # compute (CHAIN_UNSUPPORTED_ALGORITHM); a failure state, never a benign skip.
 SignatureOutcome = Literal[
-    "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail", "unsupported"
+    "ok", "invalid", "unsigned", "skipped", "not-checked", "decode-fail", "unsupported", "accounted"
 ]
+
+#: The code an accounted-for entry carries (see :class:`EntryVerificationResult`
+#: ``accounted``). Not a :data:`FailureCode`: it never fails a verdict. Mirrors
+#: verify-core ``ACCOUNTED_ENTRY_CODE``.
+ACCOUNTED_ENTRY_CODE: Literal["CHAIN_SIGNED_BY_DISTRUSTED_KEY"] = "CHAIN_SIGNED_BY_DISTRUSTED_KEY"
 
 #: Where a verification key came from: ``supplied`` (the caller passed it, from
 #: ``GET /v1/verification-keys``, ``/.well-known/scitt-keys`` or its own
@@ -319,6 +326,10 @@ class EntryVerificationResult:
     signature: SignatureOutcome | None = "not-checked"
     #: Provenance of the key the signature was checked against (``ok``/``invalid``).
     key_source: KeySource | None = None
+    #: Set, with ``valid`` True and signature ``accounted``, on a dump entry a
+    #: distrusted key signed that its entry and a trusted key's retirement of
+    #: it account for: the detail of its ``CHAIN_SIGNED_BY_DISTRUSTED_KEY``.
+    accounted: str | None = None
 
 
 @dataclass
@@ -422,6 +433,12 @@ class VerifyExportResult:
     #: KEY_CLOSURE_INVALID, CHAIN_KEY_WINDOW_DRIFT) are listed here and make
     #: ``valid`` false. Mirrors ``keyTrust`` in ``@agledger/verify-core``.
     key_trust: KeyTrustReport = field(default_factory=no_anchor_report)
+    #: Row fields the export's ``verificationGuide.unsignedFields`` names as
+    #: unsigned display projections (``actorDisplayName``, ``actorOwnerType``,
+    #: ``humanReadableLabel``): a PASS does not vouch for them. Empty when the
+    #: export carries no such guide. Mirrors ``unsignedProjectionFields`` in
+    #: ``@agledger/verify-core``.
+    unsigned_projection_fields: list[str] = field(default_factory=list[str])
 
     @property
     def verdict(self) -> Literal["trusted", "unanchored", "failed"]:
@@ -585,6 +602,7 @@ def verify_export(
             signature_coverage=coverage,
             optional_checks=optional_checks_report(set(), walked=trust is not None),
             key_trust=settle_key_trust(walk_report, 0),
+            unsigned_projection_fields=_unsigned_projection_fields(export_data),
         )
 
     # Sort by chain position before the walk so a reordered export array still
@@ -663,7 +681,15 @@ def verify_export(
             walked=trust is not None,
         ),
         key_trust=key_trust,
+        unsigned_projection_fields=_unsigned_projection_fields(export_data),
     )
+
+
+def _unsigned_projection_fields(export: Mapping[str, Any]) -> list[str]:
+    """The export's ``verificationGuide.unsignedFields``, as verify-core reads it."""
+    guide: object = export.get("verificationGuide")
+    fields: object = cast("Mapping[str, object]", guide).get("unsignedFields") if isinstance(guide, Mapping) else None
+    return [str(f) for f in cast("list[object]", fields)] if isinstance(fields, list) else []
 
 
 def _early_failure(
@@ -716,6 +742,13 @@ class RegisteredKey:
     #: ``None`` when no walk ran (no ``trust_anchors``), and the result then
     #: reports ``optional_checks["key_anchoring"] == "skipped_no_input"``.
     trust: KeyTrustState | None = None
+    #: Set by :func:`apply_key_trust` on a walk over a dump, for a key
+    #: ``distrusted_keys`` names (see :class:`DistrustSpan`). An entry it signed
+    #: outside its trust (unanchored, or written at or after the cutoff),
+    #: written before the span's retirement and whose signature verifies under
+    #: it, is accounted for: ``CHAIN_SIGNED_BY_DISTRUSTED_KEY``, never a failure.
+    #: Mirrors verify-core ``VerificationKey.distrustSpan``.
+    distrust_span: DistrustSpan | None = None
 
 
 @dataclass(frozen=True)
@@ -1161,16 +1194,18 @@ def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
             "anchored" if anchored else "undecided" if bound and digest in trust.undecided else "unanchored"
         )
         signed = trust.by_digest.get(digest)
+        span = trust.distrust_spans.get(digest) if bound and trust.source == "dump" else None
+        marked = replace(key, distrust_span=span) if span is not None else key
         if anchored and signed is not None:
             out[key_id] = replace(
-                key,
+                marked,
                 trust=state,
                 activated_at=signed.activated_at,
                 retired_at=signed.retired_at,
                 distrust_cutoff=signed.distrust_cutoff,
             )
         else:
-            out[key_id] = replace(key, trust=state)
+            out[key_id] = replace(marked, trust=state)
     return KeyCache(out, signing_since=keys.signing_since, walked=True)
 
 
@@ -1558,6 +1593,28 @@ def verify_entry(
         if applied_checks is not None:
             applied_checks.add("key_anchoring")
         if registered.trust == "unanchored":
+            # A key the auditor distrusts, retired by a key the walk trusts: an
+            # entry it signed before that retirement is accounted for, never
+            # verified. Only one whose signature verifies under the key, and
+            # whose key material the registry does not lie about: anything else
+            # under its id is bytes the database's writer wrote.
+            span = registered.distrust_span
+            bound = instant_ms(span.retired_at) if span is not None and span.retired_at is not None else None
+            written_ms = rfc3339_ms(created_at) if isinstance(created_at, str) else None
+            if (
+                bound is not None
+                and written_ms is not None
+                and written_ms < bound
+                and not _declared_algorithm_lies(registered)
+                and _verify_cose_signature(parts, registered, keys, signing_key_id) == "ok"
+            ):
+                return _accounted_result(
+                    position,
+                    f"Entry written {created_at} is signed by key {signing_key_id}, which distrustedKeys names and no "
+                    f"signed key statement links to a pinned trust anchor, before {cast('DistrustSpan', span).retired_at}, "
+                    "when a key the walk trusts retired it: the distrust entry accounts for it. Not verified, and not a "
+                    "failure.",
+                )
             return EntryVerificationResult(
                 position=position,
                 valid=False,
@@ -1584,12 +1641,9 @@ def verify_entry(
     # key (vault_signing_keys.algorithm), it must agree with what the SPKI key
     # material commits to. A registry row that lies about its own key is the
     # signature of a mis-registered key or a rewritten registry.
-    if registered.algorithm is not None:
+    if _declared_algorithm_lies(registered):
         key_alg = _resolve_key_algorithm(registered.spki_base64)
-        if (
-            isinstance(key_alg, KeyAlgorithm)
-            and key_alg.name.lower() != registered.algorithm.lower()
-        ):
+        if isinstance(key_alg, KeyAlgorithm) and registered.algorithm is not None:
             return EntryVerificationResult(
                 position=position,
                 valid=False,
@@ -1605,6 +1659,7 @@ def verify_entry(
     # times every entry, so an entry with no time the walk can read cannot be
     # placed inside the window, and fails closed rather than skipping it.
     # Mirrors verify-core chain.ts temporalKeyFailure.
+    accounted_past_cutoff: str | None = None
     activated_at, retired_at = keys.window(signing_key_id)
     registered_key = keys.entry(signing_key_id)
     distrust_cutoff = registered_key.distrust_cutoff if registered_key is not None else None
@@ -1643,12 +1698,33 @@ def verify_entry(
         )
         if temporal is not None:
             temporal_code, temporal_detail = temporal
-            return EntryVerificationResult(
-                position=position,
-                valid=False,
-                code=temporal_code,
-                detail=temporal_detail,
-            )
+            # Past the instant the auditor's distrust entry gives, and before a
+            # key the walk trusts retired the key: accounted for, never
+            # verified. The signature below still has to verify.
+            span = registered.distrust_span
+            written = rfc3339_ms(created_at)
+            cutoff_ms = instant_ms(span.cutoff) if span is not None and span.cutoff is not None else None
+            bound_ms = instant_ms(span.retired_at) if span is not None and span.retired_at is not None else None
+            if (
+                temporal_code == "CHAIN_KEY_EXPIRED"
+                and span is not None
+                and written is not None
+                and cutoff_ms is not None
+                and bound_ms is not None
+                and cutoff_ms <= written < bound_ms
+            ):
+                accounted_past_cutoff = (
+                    f"Entry written {created_at} is signed by key {signing_key_id} at or after {span.cutoff}, the "
+                    f"instant distrustedKeys gives for it, and before {span.retired_at}, when a key the walk trusts "
+                    "retired it: the distrust entry accounts for it. Not verified, and not a failure."
+                )
+            else:
+                return EntryVerificationResult(
+                    position=position,
+                    valid=False,
+                    code=temporal_code,
+                    detail=temporal_detail,
+                )
 
     outcome = _verify_cose_signature(parts, registered, keys, signing_key_id)
     if outcome == "unsigned":
@@ -1665,6 +1741,8 @@ def verify_entry(
             signature="invalid",
         )
     if outcome == "ok":
+        if accounted_past_cutoff is not None:
+            return _accounted_result(position, accounted_past_cutoff)
         return EntryVerificationResult(
             position=position, valid=True, signature="ok", key_source=key_source
         )
@@ -2489,6 +2567,18 @@ def written_while_signing(written_at: object, signing_since: object) -> bool:
     if written is None:
         return True
     return written >= since
+
+
+def _accounted_result(position: int, detail: str) -> EntryVerificationResult:
+    return EntryVerificationResult(position=position, valid=True, signature="accounted", accounted=detail)
+
+
+def _declared_algorithm_lies(key: RegisteredKey) -> bool:
+    """The registry declares an algorithm for the key that its key material does not commit to."""
+    if key.algorithm is None:
+        return False
+    key_alg = _resolve_key_algorithm(key.spki_base64)
+    return isinstance(key_alg, KeyAlgorithm) and key_alg.name.lower() != key.algorithm.lower()
 
 
 def _temporal_key_failure(

@@ -67,6 +67,51 @@ class Failure:
 #: carries the true total.
 MAX_REPORTED_FAILURES = 1000
 
+_PLATFORM_OPS_RECORD_ID = "00000000-0000-0000-0000-000000000000"
+
+
+def chain_of_scope(scope_id: str) -> tuple[Literal["record", "admin", "schema"], str | None, str | None]:
+    """Name a chain scope (a record id or a dump ``chain_key``) as the engine
+    does: ``(chain, record_id, org_id)``. Mirrors verify-core ``chainOfScope``."""
+    if scope_id.startswith("schema:"):
+        org = scope_id[len("schema:") :]
+        return ("schema", None, None if org == "__platform__" else org)
+    if scope_id.lower() == _PLATFORM_OPS_RECORD_ID:
+        return ("admin", None, None)
+    return ("record", scope_id, None)
+
+
+@dataclass
+class AccountedEntry:
+    """A dump entry whose signature verifies under a key ``distrusted_keys``
+    names, that falls outside what the key is trusted for (the key is
+    unanchored, or the entry was written at or after its cutoff), and that was
+    written before a key the walk trusts retired it. The distrust entry and
+    that retirement account for it, as the engine's scan lists it in
+    ``distrustedEntries``: listed, not verified, and it fails nothing. Mirrors
+    verify-core ``AccountedEntry``, field for field."""
+
+    chain: Literal["record", "admin", "schema"]
+    record_id: str | None
+    org_id: str | None
+    scope_id: str
+    position: int
+    key_id: str
+    detail: str
+    code: Literal["CHAIN_SIGNED_BY_DISTRUSTED_KEY"] = "CHAIN_SIGNED_BY_DISTRUSTED_KEY"
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "chain": self.chain,
+            "recordId": self.record_id,
+            "orgId": self.org_id,
+            "scopeId": self.scope_id,
+            "position": self.position,
+            "keyId": self.key_id,
+            "detail": self.detail,
+        }
+
 
 @dataclass
 class VaultChainsReport:
@@ -74,6 +119,11 @@ class VaultChainsReport:
     entry_count: int = 0
     checkpoint_count: int = 0
     failures: list[Failure] = field(default_factory=list[Failure])
+    accounted: list[AccountedEntry] = field(default_factory=list[AccountedEntry])
+    """Entries a distrusted key signed that its entry and a trusted key's
+    retirement of it account for (see :class:`AccountedEntry`). They fail
+    nothing, and a report should list them. The JSON caps them as it caps
+    ``failures``; ``accountedCount`` carries the true total."""
     agent_signatures_present: int = 0
     """Entries that passed every other check and whose signed payload carries
     ``predicate.on_behalf_of.agent_signature``, across every chain."""
@@ -118,6 +168,8 @@ class VaultChainsReport:
             "checkpointCount": self.checkpoint_count,
             "failures": [f.to_json() for f in self.failures[:MAX_REPORTED_FAILURES]],
             "failureCount": len(self.failures),
+            "accounted": [a.to_json() for a in self.accounted[:MAX_REPORTED_FAILURES]],
+            "accountedCount": len(self.accounted),
             "optionalChecks": dict(self.optional_checks),
             "agentSignatures": {
                 "present": self.agent_signatures_present,

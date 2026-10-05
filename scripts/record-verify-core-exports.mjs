@@ -37,6 +37,7 @@ function project(r) {
     keyProvenance: r.keyProvenance,
     optionalChecks: r.optionalChecks,
     agentSignatures: r.agentSignatures,
+    unsignedProjectionFields: r.unsignedProjectionFields,
     keyTrust: {
       status: r.keyTrust.status,
       detail: r.keyTrust.detail,
@@ -49,6 +50,7 @@ function project(r) {
       undecidedKeyIds: r.keyTrust.undecidedKeyIds,
       findings: r.keyTrust.findings.map((f) => ({ code: f.code, keyId: f.keyId, statementId: f.statementId, detail: f.detail })),
       notes: (r.keyTrust.notes ?? []).map((n) => ({ keyId: n.keyId, statementId: n.statementId, detail: n.detail })),
+      accounted: r.keyTrust.accounted.map((n) => ({ keyId: n.keyId, statementId: n.statementId, detail: n.detail })),
     },
   };
 }

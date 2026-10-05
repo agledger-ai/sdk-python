@@ -223,6 +223,12 @@ def test_a_window_the_export_embeds_that_is_not_rfc3339_fails_its_entries_malfor
             )
 
 
-def test_pinned_only_on_the_distrusted_predecessor_is_refused() -> None:
-    with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
-        _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"], pin_current=False)
+def test_pinned_only_on_the_distrusted_predecessor_with_no_instant_is_refused_and_with_one_does_not_reach_its_successor() -> None:
+    with pytest.raises(TypeError, match="a trust anchor and a distrusted key with no instant"):
+        _honest_rotation(["sha256:{C}"], pin_current=False)
+    # Dated, the pin vouches for what C stored before the instant, but the
+    # document cannot date the rotation it signed: pin the successor.
+    r = _honest_rotation(["sha256:{C}@2026-09-05T00:00:00Z"], pin_current=False)
+    assert r.broken_at is not None and r.broken_at.code == "CHAIN_SIGNING_KEY_UNANCHORED"
+    assert len(r.key_trust.anchored_key_ids) == 1
+    assert len(r.key_trust.notes) == 1

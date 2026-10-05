@@ -131,6 +131,7 @@ def row(k: TestKey, activated: str, retired: str | None = None) -> TrustKeyInput
         status="retired" if retired else "active",
         activated_at=ms(activated),
         retired_at=ms(retired) if retired else None,
+        source="dump",
     )
 
 

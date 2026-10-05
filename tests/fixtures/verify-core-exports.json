@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.0.0 @ c203f57b",
+ "verifyCore": "2.0.0 @ b17a3de6",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
@@ -57,6 +57,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -68,7 +73,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -130,6 +136,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -145,7 +156,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -207,6 +219,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -218,7 +235,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -282,6 +300,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -297,7 +320,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -359,6 +383,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -370,7 +399,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -434,6 +464,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -449,7 +484,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -464,7 +500,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -478,7 +514,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -511,6 +547,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -522,7 +563,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -539,7 +581,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -553,7 +595,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -586,6 +628,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -601,7 +648,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -616,7 +664,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -630,14 +678,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -663,6 +711,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -674,7 +727,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -691,7 +745,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -705,14 +759,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 16ba37e947987f80... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -738,6 +792,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -753,7 +812,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -815,6 +875,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -826,7 +891,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -890,6 +956,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -905,7 +976,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -941,7 +1013,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -967,6 +1039,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -978,7 +1055,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1016,7 +1094,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -1042,6 +1120,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -1057,7 +1140,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1072,7 +1156,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2)."
     },
     "entries": [
      {
@@ -1086,7 +1170,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2).",
       "signature": "not-checked"
      },
      {
@@ -1119,6 +1203,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1130,7 +1219,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1147,7 +1237,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2)."
     },
     "entries": [
      {
@@ -1161,7 +1251,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=3b086527a927a33b1acfc0612ed3487ce84500e11492928ef07ad9b15d1f0022).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2).",
       "signature": "not-checked"
      },
      {
@@ -1194,6 +1284,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -1209,7 +1304,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1247,7 +1343,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=ef52f53a82c64607f20e615d4ad47688228cda3e58d4f6cde41aa6e067ce9297).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=f46037fb36ea4179f7321309ef0e21b0ad2db034ff247483851e9d8a5e05797d).",
       "signature": "not-checked"
      }
     ],
@@ -1273,6 +1369,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1284,7 +1385,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1324,7 +1426,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=16ba37e947987f80bf1eacf72c9135216eeec97ddd170a87e2d51cf7f2e40765) diverges from row columns (position=3, prev=ef52f53a82c64607f20e615d4ad47688228cda3e58d4f6cde41aa6e067ce9297).",
+      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=f46037fb36ea4179f7321309ef0e21b0ad2db034ff247483851e9d8a5e05797d).",
       "signature": "not-checked"
      }
     ],
@@ -1350,6 +1452,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -1365,7 +1472,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1427,6 +1535,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1438,7 +1551,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1502,6 +1616,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -1517,7 +1636,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1565,6 +1685,7 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1576,7 +1697,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1626,6 +1748,7 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1637,7 +1760,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1685,6 +1809,7 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1696,7 +1821,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1746,6 +1872,7 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1757,7 +1884,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1797,6 +1925,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1808,7 +1941,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1850,6 +1984,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchored_signature",
      "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
@@ -1865,7 +2004,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -1930,6 +2070,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -1941,7 +2086,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2008,6 +2154,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchored_signature",
      "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
@@ -2023,7 +2174,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2081,6 +2233,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2092,7 +2249,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2156,6 +2314,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
@@ -2173,7 +2336,8 @@
      ],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2238,6 +2402,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2249,7 +2418,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2316,6 +2486,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
@@ -2333,7 +2508,8 @@
      ],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2395,6 +2571,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2406,7 +2587,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2470,6 +2652,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Keys a77acce4feedface are not linked by any signed key statement to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e; entries they signed fail CHAIN_SIGNING_KEY_UNANCHORED.",
@@ -2487,7 +2674,8 @@
      ],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2551,6 +2739,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2562,7 +2755,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2628,6 +2822,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -2643,7 +2842,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2660,7 +2860,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb)."
     },
     "entries": [
      {
@@ -2674,7 +2874,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb).",
       "signature": "not-checked"
      },
      {
@@ -2707,6 +2907,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2718,7 +2923,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2737,7 +2943,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb)."
     },
     "entries": [
      {
@@ -2751,7 +2957,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 37f04cce-fe20-421a-9952-5606dfeea5d5).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb).",
       "signature": "not-checked"
      },
      {
@@ -2784,6 +2990,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -2799,7 +3010,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2852,6 +3064,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -2863,7 +3080,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2918,6 +3136,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -2933,7 +3156,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -2993,6 +3217,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3004,7 +3233,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3066,6 +3296,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3081,7 +3316,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3145,6 +3381,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3156,7 +3397,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3222,6 +3464,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3237,7 +3484,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3284,6 +3532,11 @@
      "present": 1,
      "verified": 1
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3295,7 +3548,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3344,6 +3598,11 @@
      "present": 1,
      "verified": 1
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3359,7 +3618,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3377,14 +3637,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -3410,6 +3670,11 @@
      "present": 1,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3421,7 +3686,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3441,14 +3707,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert 3a03f197-12a3-4fa4-8a78-575082a8db6b does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -3474,6 +3740,11 @@
      "present": 1,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3489,7 +3760,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3539,6 +3811,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3550,7 +3827,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3602,6 +3880,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchored_signature",
      "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
@@ -3617,7 +3900,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3663,6 +3947,11 @@
      "present": 1,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3674,7 +3963,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3722,6 +4012,11 @@
      "present": 1,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3737,7 +4032,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3783,6 +4079,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3794,7 +4095,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3842,6 +4144,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -3857,7 +4164,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3907,6 +4215,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -3918,7 +4231,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -3970,6 +4284,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchored_signature",
      "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
@@ -3985,7 +4304,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4045,6 +4365,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4056,7 +4381,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4116,6 +4442,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4127,7 +4458,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4189,6 +4521,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -4204,7 +4541,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4268,6 +4606,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4279,7 +4622,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4345,6 +4689,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e.",
@@ -4360,7 +4709,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4375,21 +4725,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z."
+     "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.883Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.740Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
       "signature": "not-checked"
      }
     ],
@@ -4415,6 +4765,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4426,7 +4781,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4443,21 +4799,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z."
+     "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.876Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-02T15:03:54.883Z, at or after the earliest signing key activation 2026-10-02T15:03:52.081Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.740Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
       "signature": "not-checked"
      }
     ],
@@ -4483,6 +4839,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchored_signature",
      "detail": "The key statements were walked from sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e, but no signature here verified under a key they anchor, so this is not a trusted verdict: an entry written before the install began signing carries no signature, and proves nothing about who wrote it.",
@@ -4498,7 +4859,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4558,6 +4920,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4569,7 +4936,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4631,6 +4999,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
@@ -4648,7 +5021,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4686,7 +5060,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=64d1dc4de9582747e7e088d19442374d155a755fd01a7cf324b76f4ed7dca005) diverges from row columns (position=3, prev=f595658e41f36284f31f68370157a0159f52aa9eb8292658e7369092c1422aa0).",
+      "detail": "Signed protected-header chain claim (position=3, prev=c9d981bc6508183f8ecde27aa35c2ee88aa0b4526ad7ac54c2af0feb0fbe11da) diverges from row columns (position=3, prev=9edee428916bc881e4a8ee2a0ddce840581a1ead4f4a8e8b3c36221341da55ef).",
       "signature": "not-checked"
      }
     ],
@@ -4712,6 +5086,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4723,7 +5102,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4763,7 +5143,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=64d1dc4de9582747e7e088d19442374d155a755fd01a7cf324b76f4ed7dca005) diverges from row columns (position=3, prev=f595658e41f36284f31f68370157a0159f52aa9eb8292658e7369092c1422aa0).",
+      "detail": "Signed protected-header chain claim (position=3, prev=c9d981bc6508183f8ecde27aa35c2ee88aa0b4526ad7ac54c2af0feb0fbe11da) diverges from row columns (position=3, prev=9edee428916bc881e4a8ee2a0ddce840581a1ead4f4a8e8b3c36221341da55ef).",
       "signature": "not-checked"
      }
     ],
@@ -4789,6 +5169,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
@@ -4806,7 +5191,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4870,6 +5256,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "no_anchor",
      "detail": "No trustAnchors were given, so no key was anchored and this is not a trusted verdict: every key was taken on the word of whoever embedded or supplied it, and a key written into the Server's database alone would verify. Pin the SPKI digest of a vault key you hold or took out of band (sha256:<hex>) as trustAnchors.",
@@ -4881,7 +5272,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   },
@@ -4947,6 +5339,11 @@
      "present": 0,
      "verified": 0
     },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
     "keyTrust": {
      "status": "walked",
      "detail": "Every key is linked by signed key statements to sha256:9158bd72882ef02d0f32c5f62e40a4c08128db70ecaa1b71a2a9f598a45e418a.",
@@ -4964,7 +5361,8 @@
      "unanchoredKeyIds": [],
      "undecidedKeyIds": [],
      "findings": [],
-     "notes": []
+     "notes": [],
+     "accounted": []
     }
    }
   }

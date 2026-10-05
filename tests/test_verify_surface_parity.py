@@ -13,7 +13,14 @@ from typing import Any
 import pytest
 
 from agledger.types import VerificationKeysResponse
-from agledger.verify import load_dump, spki_sha256, verify_dump, verify_export
+from agledger.verify import (
+    DumpLoadError,
+    load_dump,
+    spki_sha256,
+    verify_dump,
+    verify_dump_dir,
+    verify_export,
+)
 from agledger.verify.cli import run_cli
 
 _CORPUS = Path(__file__).resolve().parents[1] / "testdata" / "conformance"
@@ -54,14 +61,19 @@ def test_public_keys_takes_the_verification_keys_body_as_served_and_as_the_typed
         assert (r.verdict, r.key_provenance.supplied) == (plain.verdict, plain.key_provenance.supplied)
 
 
-def test_a_key_both_pinned_and_distrusted_is_refused_on_both_paths() -> None:
+def test_a_key_pinned_and_distrusted_with_no_instant_is_refused_on_both_paths_and_a_dated_one_is_taken() -> None:
     pin = _pin("valid.json")
-    with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
+    with pytest.raises(TypeError, match="a trust anchor and a distrusted key with no instant"):
         verify_export(_export("valid.json"), trust_anchors=[pin], distrusted_keys=[pin])
     dump = load_dump(_CORPUS / "dump" / "valid")
     dpin = f"sha256:{spki_sha256(dump.signing_keys[0]['public_key'])}"
-    with pytest.raises(TypeError, match="both a trust anchor and a distrusted key"):
-        verify_dump(dump, trust_anchors=[dpin], distrusted_keys=[f"{dpin}@2026-09-01T00:00:00Z"])
+    with pytest.raises(TypeError, match="a trust anchor and a distrusted key with no instant"):
+        verify_dump(dump, trust_anchors=[dpin], distrusted_keys=[dpin])
+    # Taken, and graded as the engine grades it: a distrusted key no trusted
+    # key has retired leaves nothing bounding what its entry accounts for.
+    dated = verify_dump(dump, trust_anchors=[dpin], distrusted_keys=[f"{dpin}@2099-01-01T00:00:00Z"])
+    assert [f.code for f in dated.key_trust.findings] == ["KEY_CLOSURE_INVALID"]
+    assert "with force" in dated.key_trust.findings[0].detail
 
 
 def test_pinned_on_the_genesis_key_the_closure_its_unanchored_successor_signed_is_key_closure_invalid() -> None:
@@ -97,3 +109,34 @@ def test_json_on_a_dump_carries_failure_counts(capsys: pytest.CaptureFixture[str
     assert run_cli([str(_CORPUS / "dump" / "checkpoint-hash-mismatch"), "-f", "json"]) == 1
     failed = json.loads(capsys.readouterr().out)
     assert failed["vault"]["failureCount"] == len(failed["vault"]["failures"]) > 0
+
+
+def test_the_unsigned_display_projections_are_named_in_the_result_the_json_and_the_text(capsys: pytest.CaptureFixture[str]) -> None:
+    exp = _export("valid.json")
+    fields = exp["verificationGuide"]["unsignedFields"]
+    assert fields == ["actorDisplayName", "actorOwnerType", "humanReadableLabel"]
+    assert verify_export(exp).unsigned_projection_fields == fields
+    path = str(_CORPUS / "export" / "valid.json")
+    run_cli([path, "-f", "json"])
+    assert json.loads(capsys.readouterr().out)["unsignedProjectionFields"] == fields
+    run_cli([path, "--trust-anchor", _pin("valid.json")])
+    out = capsys.readouterr().out
+    assert "3 unsigned display projection field(s) (actorDisplayName, actorOwnerType, humanReadableLabel) are NOT signature-covered." in out
+    assert "was cross-checked against the signed actor claim and agrees." in out
+    stripped = _export("valid.json")
+    del stripped["verificationGuide"]
+    assert verify_export(stripped).unsigned_projection_fields == []
+
+
+def test_verify_dump_dir_refuses_its_key_options_before_reading_the_directory() -> None:
+    pin = f"sha256:{'a' * 64}"
+    with pytest.raises(TypeError, match="a trust anchor and a distrusted key with no instant"):
+        verify_dump_dir("/nonexistent", trust_anchors=[pin], distrusted_keys=[pin])
+    with pytest.raises(TypeError, match="act only inside the key-statement walk"):
+        verify_dump_dir("/nonexistent", distrusted_keys=[pin])
+    with pytest.raises(TypeError, match="is not sha256:<64 hex>"):
+        verify_dump_dir("/nonexistent", trust_anchors=["abc"])
+    with pytest.raises(DumpLoadError):
+        verify_dump_dir("/nonexistent", trust_anchors=[pin], distrusted_keys=[f"{pin}@2026-09-01T00:00:00Z"])
+    dump_dir = str(_CORPUS / "dump" / "valid")
+    assert verify_dump_dir(dump_dir).to_json() == verify_dump(load_dump(dump_dir)).to_json()

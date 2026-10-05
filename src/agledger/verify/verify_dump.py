@@ -51,11 +51,14 @@ from agledger.verify.key_statements import (
     cbor_plain,
     compute_key_trust,
     key_statement_from_dump_row,
+    parse_trust_anchors,
     report_key_trust,
     settle_key_trust,
     trust_key_from_dump_row,
 )
+from agledger.verify.loader import load_dump
 from agledger.verify.types import (
+    AccountedEntry,
     Dump,
     DumpRow,
     Failure,
@@ -63,6 +66,7 @@ from agledger.verify.types import (
     VaultChainsReport,
     VerifyReport,
     WitnessCosignedCheckpoint,
+    chain_of_scope,
 )
 
 # The shared verification core lives in verify_export: the per-entry chain walk
@@ -434,6 +438,7 @@ def _collect_chain_failures(
     agent_counts: AgentSignatureCounts | None = None,
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,
+    accounted: list[AccountedEntry] | None = None,
 ) -> list[EntryVerificationResult]:
     """Walk one chain group via the shared per-entry body, flatten any invalid
     entry into a Failure, and return each entry's result in chain order.
@@ -452,8 +457,21 @@ def _collect_chain_failures(
         row = chain_row(entry)
         if row.signing_key_id is not None:
             signed_before = True
-        if result.valid and agent_counts is not None and agent_check is not None:
+        if result.valid and result.accounted is None and agent_counts is not None and agent_check is not None:
             result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
+        if result.accounted is not None and accounted is not None:
+            chain, record_id, org_id = chain_of_scope(scope_id)
+            accounted.append(
+                AccountedEntry(
+                    chain=chain,
+                    record_id=record_id,
+                    org_id=org_id,
+                    scope_id=scope_id,
+                    position=result.position,
+                    key_id=js_text(row.signing_key_id) if row.signing_key_id is not None else "",
+                    detail=result.accounted,
+                )
+            )
         if not result.valid and result.code is not None:
             failures.append(
                 Failure(
@@ -670,6 +688,7 @@ def verify_vault_chains(
     chain walk re-verifies the sealed agent signatures whose cert thumbprint
     matches one. Anything that is not an Ed25519 JWK raises ``TypeError``."""
     failures: list[Failure] = []
+    accounted: list[AccountedEntry] = []
     # Caller keys first, then the cert keys each clean chain signs. A chain can
     # only use keys harvested from chains closed before it; the producer sorts
     # the platform-ops chain (the all-zero record id) first, so on a dump in
@@ -714,6 +733,7 @@ def verify_vault_chains(
             entry_count=entry_count,
             checkpoint_count=len(checkpoints),
             failures=failures,
+            accounted=accounted,
             agent_signatures_present=agent_counts.present,
             agent_signatures_verified=agent_counts.verified,
             cert_keys_from_chain=cert_keys_from_chain,
@@ -744,7 +764,7 @@ def verify_vault_chains(
         failures_before = len(failures)
         normalized = [_normalize_entry(e) for e in rows]
         results = _collect_chain_failures(
-            chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied
+            chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied, accounted
         )
         signed_entries += sum(1 for r in results if r.signature == "ok")
         _verify_vault_checkpoints({chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures)
@@ -1204,10 +1224,10 @@ def walk_dump_keys(
     ``trust_anchors``, on a key both pinned and distrusted (the Server refuses
     to start with that pair), and on a statement file the walk cannot order (rows with
     and without ``created_at``)."""
+    check_key_options(trust_anchors, distrusted_keys)
     keys = _build_vault_key_registry(signing_keys)
     trust: KeyTrust | None = None
     if trust_anchors is not None and len(trust_anchors) > 0:
-        assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
         trust = compute_key_trust(
             keys=[trust_key_from_dump_row(k) for k in signing_keys],
             statements=[key_statement_from_dump_row(r) for r in key_statements],
@@ -1226,12 +1246,46 @@ def walk_dump_keys(
             signing_since=earliest_key_activation([{"activatedAt": keys.signing_since}, *signed]),
             walked=True,
         )
-    elif distrusted_keys is not None and len(distrusted_keys) > 0:
-        raise TypeError(
-            "distrusted_keys act only inside the key-statement walk, which runs from "
-            "trust_anchors; pass trust_anchors as well."
-        )
     return keys, report_key_trust(keys.trust_states(), trust, None)
+
+
+def check_key_options(
+    trust_anchors: str | Sequence[str] | None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None,
+) -> None:
+    """Refuse key options the walk cannot apply, before anything is read:
+    a malformed anchor or distrusted key, ``distrusted_keys`` without
+    ``trust_anchors``, and a pinned key distrusted with no instant (the Server
+    refuses to start with that pair). Raises ``TypeError``."""
+    has_anchors = trust_anchors is not None and len(trust_anchors) > 0
+    if has_anchors:
+        parse_trust_anchors(cast("str | Sequence[str]", trust_anchors))
+    if distrusted_keys is not None and len(distrusted_keys) > 0:
+        if not has_anchors:
+            raise TypeError(
+                "distrusted_keys act only inside the key-statement walk, which runs from "
+                "trust_anchors; pass trust_anchors as well."
+            )
+        assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
+
+
+def verify_dump_dir(
+    dump_dir: str,
+    *,
+    agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    trust_anchors: str | Sequence[str] | None = None,
+    distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+) -> VerifyReport:
+    """Load the dump in ``dump_dir`` and verify it, as :func:`verify_dump`
+    does. The key options are checked before the directory is read, so a
+    refused pin or distrust entry raises ``TypeError`` whether or not the
+    directory exists, as ``agledger-verify`` and ``@agledger/verify``'s
+    ``verifyDumpStreaming`` refuse it. Raises ``DumpLoadError`` when the
+    directory cannot be read."""
+    check_key_options(trust_anchors, distrusted_keys)
+    return verify_dump(
+        load_dump(dump_dir), agent_keys=agent_keys, trust_anchors=trust_anchors, distrusted_keys=distrusted_keys
+    )
 
 
 def verify_dump(

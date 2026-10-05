@@ -51,6 +51,7 @@ def _project(r: VerifyExportResult) -> dict[str, Any]:
         "keyProvenance": {"supplied": r.key_provenance.supplied, "embedded": r.key_provenance.embedded},
         "optionalChecks": dict(r.optional_checks),
         "agentSignatures": {"present": r.agent_signatures.present, "verified": r.agent_signatures.verified},
+        "unsignedProjectionFields": r.unsigned_projection_fields,
         "keyTrust": trust,
     }
 
