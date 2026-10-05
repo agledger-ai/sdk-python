@@ -263,4 +263,4 @@ def test_a_key_note_is_listed_when_an_honest_rotation_off_a_key_distrusted_after
     out = capsys.readouterr().out
     assert out.startswith("[PASS]")
     assert "note: key " in out
-    assert "which distrustedKeys distrusts" in out
+    assert "which --distrusted-key distrusts" in out

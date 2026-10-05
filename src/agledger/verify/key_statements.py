@@ -200,6 +200,18 @@ class TrustKeyInput:
     registry fact the walk holds a distrusted key to: one no trusted key has
     retired is KEY_CLOSURE_INVALID. Anything else, ``None`` included, is a key
     document's listing."""
+    distrusted_from: str | None = None
+    """The instant from which the Server's own ``VAULT_DISTRUSTED_KEYS`` entry
+    makes what the key signs count for nothing, as a key document or an
+    export's ``signingKeyWindows`` publishes it (``distrustedFrom``, RFC 3339
+    UTC, microsecond precision). It is the source's word and only ever changes
+    how a finding on the listed window is worded: a listed ``retired_at`` that
+    equals it, where the walk signs a later retirement or none, names the
+    distrust entry the walk was not given (or says the one it was given
+    disagrees) instead of reading as a rewritten column. It never ends, opens
+    or widens a window, and never clears a finding; only ``distrusted_keys``
+    does what an entry does. Mirrors verify-core ``TrustKeyInput.distrustedFrom``."""
+
 
 
 @dataclass(frozen=True)
@@ -227,6 +239,12 @@ class KeyRegistryFinding:
     key_id: str | None
     statement_id: str | None
     detail: str
+    distrusted_from: str | None = None
+    """The listed key's ``distrusted_from`` when ``detail`` reads the listed
+    retirement as the Server's distrust entry (the listing's unsigned word,
+    to confirm with the Server's operator), else ``None``. Not serialized:
+    verify-core carries the same reading in ``detail`` alone, and
+    ``agledger-verify`` reads it to leave the tamper advice off that finding."""
 
     def to_json(self) -> dict[str, Any]:
         return {"code": self.code, "keyId": self.key_id, "statementId": self.statement_id, "detail": self.detail}
@@ -239,7 +257,9 @@ class KeyTrustNote:
     nothing here because the document's write time is the holder's word and is
     never held against the key's cutoff, though the engine, holding it to the
     time it was stored, counts it. It still dates windows and cuts edges back.
-    Mirrors verify-core ``KeyTrustNote``."""
+    Also a listed key whose ``distrusted_from`` differs from the instant the
+    caller's ``distrusted_keys`` entry gives it, where no finding on its window
+    already says so. Mirrors verify-core ``KeyTrustNote``."""
 
     key_id: str | None
     statement_id: str | None
@@ -1907,10 +1927,80 @@ def compute_key_trust(
         if c.verdict == "invalid" and c.payload is not None and c.payload.typ != "closure"
     }
 
+    # A listed retirement the walk does not sign, read against the Server's own
+    # distrust instant (``distrusted_from``): where the listing was cut at that
+    # instant and the walk signs a later retirement or none, the column is the
+    # Server's distrust entry, which the caller either was not given or gave
+    # another instant. Only the wording of a finding the check below makes
+    # anyway, never whether it makes one: ``distrusted_from`` is the source's word.
+    given_cutoff = {d.spki_sha256: d.cutoff for d in distrusted_list}
+
+    def same_instant(a: str, b: str) -> bool:
+        return _instant_us(a)[0] == _instant_us(b)[0]
+
+    def cut_by_server(key: TrustKeyInput, entry: KeyTrustEntry) -> str | None:
+        frm = key.distrusted_from
+        if not isinstance(frm, str) or not isinstance(key.retired_at, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+            return None
+        from_ms = instant_ms(frm)
+        if from_ms is None or instant_ms(key.retired_at) != from_ms:
+            return None
+        if entry.retired_at is not None:
+            signed_ms = instant_ms(entry.retired_at)
+            if not (signed_ms is not None and signed_ms > from_ms):
+                return None
+        signed = (
+            "no closure this walk could verify retires it"
+            if entry.retired_at is None
+            else f"the retirement its closures sign is {entry.retired_at}"
+        )
+        lead = (
+            f"retiredAt {key.retired_at} is listed as the Server's distrust cutoff for {key.key_id} "
+            f"(distrustedFrom {frm}), and {signed}"
+        )
+        caution = (
+            "The listing's instant is its unsigned word, so until the Server's operator confirms the entry, read the "
+            f"listed retirement as unexplained. Off a dump the entry also voids every admission {key.key_id} signed, "
+            "so a key it admitted that nothing else reaches is no longer trusted and its window no longer graded."
+        )
+        if entry.spki_sha256 not in given_cutoff:
+            return (
+                f"{lead}: the listing says the Server distrusts the key from that instant (VAULT_DISTRUSTED_KEYS), "
+                "and this walk was given no distrust entry for it. If the operator confirms it, give distrustedKeys "
+                f"sha256:{entry.spki_sha256}@{frm}. {caution}"
+            )
+        given = given_cutoff[entry.spki_sha256]
+        if given is not None and same_instant(given, frm):
+            return None
+        return (
+            f"{lead}: the distrust entry given for it ({'with no instant' if given is None else f'from {given}'}) "
+            f"and the one the listing says the Server applies (VAULT_DISTRUSTED_KEYS, from {frm}) disagree. "
+            f"Confirm the instant with the Server's operator. {caution}"
+        )
+
+    def window_finding(
+        code: KeyRegistryFindingCode,
+        key: TrustKeyInput,
+        entry: KeyTrustEntry,
+        detail: str,
+    ) -> None:
+        """A finding on the listed retirement, worded as the Server's distrust
+        entry where :func:`cut_by_server` reads it so."""
+        cut = cut_by_server(key, entry)
+        if cut is None:
+            findings.append(KeyRegistryFinding(code, key.key_id, None, detail))
+        else:
+            findings.append(
+                KeyRegistryFinding(
+                    code, key.key_id, None, cut, distrusted_from=key.distrusted_from
+                )
+            )
+
     # Findings on listed keys: their columns against the signed values, compared
     # at millisecond precision, the precision a dump or key document carries.
     for key in listed_keys:
         entry = entry_for(spki_sha256(key.public_key))
+        findings_before = len(findings)
         if not entry.trusted or key.key_id != entry.key_id:
             continue
         if (
@@ -1951,35 +2041,28 @@ def compute_key_trust(
             if isinstance(key.retired_at, str) and not (
                 listed_retired is not None and cutoff_ms is not None and listed_retired >= cutoff_ms
             ):
-                findings.append(
-                    KeyRegistryFinding(
-                        "CHAIN_KEY_WINDOW_DRIFT",
-                        key.key_id,
-                        None,
-                        f"retiredAt {key.retired_at} is earlier than {entry.distrust_cutoff}, the distrust "
-                        "cutoff this walk ends the key at, and no closure it could verify signs it",
-                    )
+                window_finding(
+                    "CHAIN_KEY_WINDOW_DRIFT",
+                    key,
+                    entry,
+                    f"retiredAt {key.retired_at} is earlier than {entry.distrust_cutoff}, the distrust "
+                    "cutoff this walk ends the key at, and no closure it could verify signs it",
                 )
-            continue
-        if key.status == "retired":
+        elif key.status == "retired":
             if entry.retired_at is None:
-                findings.append(
-                    KeyRegistryFinding(
-                        "KEY_CLOSURE_INVALID",
-                        key.key_id,
-                        None,
-                        "the key is listed as retired and no counting closure signs its retirement",
-                    )
+                window_finding(
+                    "KEY_CLOSURE_INVALID",
+                    key,
+                    entry,
+                    "the key is listed as retired and no counting closure signs its retirement",
                 )
             elif not isinstance(key.retired_at, str) or instant_ms(key.retired_at) != instant_ms(entry.retired_at):
                 listed = key.retired_at if isinstance(key.retired_at, str) else "null"
-                findings.append(
-                    KeyRegistryFinding(
-                        "CHAIN_KEY_WINDOW_DRIFT",
-                        key.key_id,
-                        None,
-                        f"retiredAt {listed} differs from the signed {entry.retired_at}",
-                    )
+                window_finding(
+                    "CHAIN_KEY_WINDOW_DRIFT",
+                    key,
+                    entry,
+                    f"retiredAt {listed} differs from the signed {entry.retired_at}",
                 )
         elif key.status == "active" and entry.retired_at is not None:
             findings.append(
@@ -1988,6 +2071,29 @@ def compute_key_trust(
                     key.key_id,
                     None,
                     f"the key is listed as active but a counting statement signs its retirement at {entry.retired_at}",
+                )
+            )
+        # An entry given for the key at another instant than the Server's, which
+        # no finding above names: the walk ends the key earlier than the Server
+        # does (or the listing is cut elsewhere), so it fails what the Server
+        # still counts. Said, never graded.
+        frm = key.distrusted_from
+        given = given_cutoff.get(entry.spki_sha256)
+        if (
+            len(findings) == findings_before
+            and isinstance(frm, str)
+            and given is not None
+            and instant_ms(frm) is not None
+            and not same_instant(given, frm)
+        ):
+            notes.append(
+                KeyTrustNote(
+                    key.key_id,
+                    None,
+                    f"distrustedKeys gives {key.key_id} the instant {given}, and the listing says the Server distrusts "
+                    f"it from {frm} (distrustedFrom, VAULT_DISTRUSTED_KEYS): the auditor's entry and the one the "
+                    "listing gives disagree, so what the key signed between the two instants is graded differently "
+                    "here than on the Server. Confirm the instant with the Server's operator.",
                 )
             )
 
@@ -2166,6 +2272,7 @@ def key_statements_from_verification_keys(
         k: Mapping[str, object] = cast("Mapping[str, object]", item) if isinstance(item, Mapping) else {}
         status = k.get("status")
         algorithm = k.get("algorithm")
+        since = k.get("distrustedFrom")
         keys.append(
             TrustKeyInput(
                 key_id=str(k.get("keyId")),
@@ -2174,6 +2281,7 @@ def key_statements_from_verification_keys(
                 status=_status_of(status),
                 activated_at=k.get("activatedAt"),
                 retired_at=k.get("retiredAt"),
+                distrusted_from=since if isinstance(since, str) else None,
             )
         )
         by_key.append((str(k.get("keyId")), k.get("statements")))

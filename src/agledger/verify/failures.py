@@ -234,7 +234,11 @@ _SUGGESTIONS: dict[str, str] = {
         "document) differs from the value its signed key statements carry. The signed "
         "value is the one entries are graded against; the column was rewritten, or the "
         "retirement was written without its closure statement. Treat the registry as "
-        "tampered and compare it with the Server's own scan (key_window_drift)."
+        "tampered and compare it with the Server's own scan (key_window_drift). Where the "
+        "detail names a distrust entry the listing says the Server applies (distrustedFrom, "
+        "VAULT_DISTRUSTED_KEYS), the listed retirement may be that entry's cut, which the "
+        "verifier was not given or was given at another instant; the listing's word is "
+        "unsigned, so it stays tampering until the Server's operator confirms the entry."
     ),
     "CHECKPOINT_ROW_MISSING": (
         "A signed checkpoint anchors a position that has no matching chain row. The chain"

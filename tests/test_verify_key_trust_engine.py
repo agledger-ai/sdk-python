@@ -3,7 +3,7 @@ statements of every kind in any signer order, write times and signed instants
 that tie, duplicated rows, and distrusted keys with and without a cutoff. The
 verdicts in ``fixtures/key-trust-engine.json`` were recorded from the engine's
 ``computeKeyTrust`` by verify-core's ``scripts/record-key-trust-engine.mts``,
-and verify-core holds its walk to the same file. The scenarios are regenerated
+and verify-core holds its walk to the same file, exactly. The scenarios are regenerated
 here from the seed exactly as verify-core's ``key-trust-fuzz.ts`` generates
 them, so a divergence in either the generator or the walk fails this test."""
 
@@ -314,46 +314,6 @@ def _at_milliseconds(v: dict[str, Any]) -> dict[str, Any]:
     return {**v, "windows": pair(v["windows"]), "spans": pair(v["spans"])}
 
 
-def _narrower_only(got: dict[str, Any], want: dict[str, Any]) -> str:
-    """Where the walk may read a registry more narrowly than the engine, and
-    only so: what a distrust entry accounts for is bounded here only by a
-    retirement a key the walk trusts signed, and a later admission of a trusted
-    key that the key itself signed is never accounted for. ``""`` when ``got``
-    is ``want`` or narrower only in those two ways. Mirrors verify-core's
-    ``narrowerOnly``."""
-    if got == want:
-        return ""
-    if (got["trusted"], got["windows"]) != (want["trusted"], want["windows"]):
-        return "trusted keys or windows differ"
-    narrowed: set[str] = set()
-    for k in set(got["spans"]) | set(want["spans"]):
-        gc, gr = got["spans"].get(k, [None, None])
-        wc, wr = want["spans"].get(k, [None, None])
-        if gc != wc:
-            return f"cutoff of {k} differs"
-        if gr == wr:
-            continue
-        if gr is not None and (wr is None or gr < wr):
-            return f"bound of {k} is wider"
-        narrowed.add(k)
-    missing = [f for f in want["findings"] if f not in got["findings"]]
-    if missing:
-        return f"engine findings missing: {missing}"
-    extra = [a for a in got["accounted"] if a not in want["accounted"]]
-    if extra:
-        return f"accounted beyond the engine: {extra}"
-    for f in got["findings"]:
-        if f in want["findings"]:
-            continue
-        code, statement_id, key = f.split("|")
-        if statement_id == "" and code == "KEY_CLOSURE_INVALID" and key in narrowed:
-            continue
-        if statement_id != "" and f"{statement_id}|{key}" in want["accounted"]:
-            continue
-        return f"unexplained finding {f}"
-    return ""
-
-
 def _retired_at_of(st: dict[str, Any]) -> str | None:
     """The ``retiredAt`` a closure signs."""
     if st["kind"] != "closure":
@@ -367,7 +327,6 @@ def test_the_walk_trusts_signs_and_finds_what_the_engine_recorded_on_every_regis
     verdicts: dict[str, Any] = _RECORDED["verdicts"]
     assert len(verdicts) >= 1000
     diverged: list[str] = []
-    narrowed = 0
     for seed, recorded in verdicts.items():
         sc = _scenario(int(seed))
         got = _at_milliseconds(_verdict(_walk(sc)))
@@ -385,12 +344,8 @@ def test_the_walk_trusts_signs_and_finds_what_the_engine_recorded_on_every_regis
             if not (f.startswith("KEY_CLOSURE_INVALID|") and f.split("|")[1] in hidden and f not in got["findings"])
         ]
         if got != want:
-            narrowed += 1
-        if why := _narrower_only(got, want):
-            diverged.append(f"seed {seed}: {why}: engine {want}, walk {got}")
+            diverged.append(f"seed {seed}: engine {want}, walk {got}")
     assert diverged[:5] == []
-    # The narrowing is rare; a jump means the walk moved, not the scenarios.
-    assert narrowed < 60
 
 
 def test_the_walk_takes_the_write_order_from_created_at_and_id_whatever_order_the_statements_arrive_in() -> None:
@@ -399,8 +354,8 @@ def test_the_walk_takes_the_write_order_from_created_at_and_id_whatever_order_th
         r = _prng(int(seed) ^ 0x5EED)
         sc = _scenario(int(seed))
         shuffled = [x for _k, x in sorted(((r(), x) for x in sc.statements), key=lambda p: p[0])]
-        if why := _narrower_only(_verdict(_walk(sc, shuffled, micro=True)), want):
-            diverged.append(f"seed {seed}: {why}")
+        if (got := _verdict(_walk(sc, shuffled, micro=True))) != want:
+            diverged.append(f"seed {seed}: engine {want}, walk {got}")
     assert diverged[:5] == []
 
 
@@ -420,6 +375,7 @@ def _document_of(sc: _Scenario, published: list[dict[str, Any]]) -> dict[str, An
                 "status": "active" if k["retiredAt"] is None else "retired",
                 "activatedAt": k["activatedAt"],
                 "retiredAt": k["retiredAt"],
+                **({"distrustedFrom": k["distrustedFrom"]} if "distrustedFrom" in k else {}),
                 "statements": [
                     {
                         "id": i,
@@ -435,13 +391,23 @@ def _document_of(sc: _Scenario, published: list[dict[str, Any]]) -> dict[str, An
     }
 
 
-def _walk_document(sc: _Scenario, published: list[dict[str, Any]]) -> KeyTrust:
-    keys, statements = key_statements_from_verification_keys(_document_of(sc, published))
+def _walk_document(
+    sc: _Scenario,
+    published: list[dict[str, Any]],
+    distrusted: list[DistrustedKey] | None = None,
+) -> KeyTrust:
+    keys, statements = key_statements_from_verification_keys(
+        _document_of(sc, published)
+    )
     return compute_key_trust(
         keys=keys,
         statements=statements,
         trust_anchors=[f"sha256:{POOL[k].digest}" for k in sc.anchors],
-        distrusted_keys=[DistrustedKey(POOL[k].digest, cutoff) for k, cutoff in sc.distrusted],
+        distrusted_keys=(
+            [DistrustedKey(POOL[k].digest, cutoff) for k, cutoff in sc.distrusted]
+            if distrusted is None
+            else distrusted
+        ),
     )
 
 
@@ -508,6 +474,58 @@ def test_a_document_walk_agrees_with_the_engine_when_every_statement_verifies_ev
             wrong.append(f"seed {seed}")
     assert wrong[:5] == []
     assert agreed >= 200
+
+
+def test_a_document_walk_reads_distrusted_from_only_into_wording() -> None:
+    """With or without the ``distrustedFrom`` the engine publishes, and whatever
+    distrust entries the walk is given, the same keys, windows and findings."""
+    reworded = 0
+    listed = 0
+    wrong: list[str] = []
+
+    def findings_of(t: KeyTrust) -> list[tuple[str, str | None, str | None]]:
+        return [(f.code, f.key_id, f.statement_id) for f in t.findings]
+
+    for seed in _RECORDED["verdicts"]:
+        sc = _scenario(int(seed))
+        published: list[dict[str, Any]] = _RECORDED["published"][seed]
+        if not any("distrustedFrom" in p for p in published):
+            continue
+        listed += 1
+        without = [
+            {k: v for k, v in p.items() if k != "distrustedFrom"} for p in published
+        ]
+        r = _prng(int(seed) ^ 0xD157)
+        # The engine's entries, none, and each moved to a random instant or none.
+        shifted = [
+            DistrustedKey(
+                POOL[k].digest,
+                None
+                if r() < 0.2
+                else f"2026-01-01T00:00:{int(r() * 60):02d}.{int(r() * 1e6):06d}Z",
+            )
+            for k, _c in sc.distrusted
+        ]
+        for distrusted in (
+            [DistrustedKey(POOL[k].digest, c) for k, c in sc.distrusted],
+            [],
+            shifted,
+        ):
+            a = _walk_document(sc, published, distrusted)
+            b = _walk_document(sc, without, distrusted)
+            if (_verdict(a), findings_of(a)) != (_verdict(b), findings_of(b)):
+                wrong.append(
+                    f"seed {seed}: with distrustedFrom {findings_of(a)}, without {findings_of(b)}"
+                )
+            if any(
+                f.detail != g.detail
+                and "is listed as the Server's distrust cutoff" in f.detail
+                for f, g in zip(a.findings, b.findings, strict=False)
+            ):
+                reworded += 1
+    assert wrong[:5] == []
+    assert listed >= 100
+    assert reworded >= 100
 
 
 def test_a_document_walk_needs_the_later_admissions_the_engine_publishes() -> None:

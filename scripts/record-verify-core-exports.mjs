@@ -1,6 +1,7 @@
 // Records what @agledger/verify-core's verifyAuditExport returns for every
 // corpus export vector, unpinned and pinned on the export's own anchoredFrom,
-// for tests/test_verify_export_parity.py to hold verify_export to field for
+// and the live dated-distrust export under four distrust entries, for
+// tests/test_verify_export_parity.py to hold verify_export to field for
 // field. Run from this repo's root against a built verify-core checkout at the
 // version this package ports:
 //
@@ -74,6 +75,25 @@ for (const v of manifest.vectors) {
   }
 }
 
-const out = { verifyCore: `${pkg.version} @ ${sha}`, runs };
+// An agledger-api 2.0 export taken after a dated VAULT_DISTRUSTED_KEYS entry
+// (its signingKeyWindows lists the distrusted key with distrustedFrom), pinned
+// on its anchoredFrom alone and with a distrust entry at the Server's instant,
+// a later one and an earlier one.
+const DISTRUST_FILE = join('tests', 'fixtures', 'live-2.0.0', 'export-dated-distrust.json');
+const distrustDoc = JSON.parse(readFileSync(DISTRUST_FILE, 'utf8'));
+const pin = [distrustDoc.exportMetadata.anchoredFrom];
+const distrustedKey = 'sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e';
+const distrust = {};
+for (const [id, distrustedKeys] of [
+  ['pin only', undefined],
+  ['server instant', [`${distrustedKey}@2026-10-05T23:03:51.537314Z`]],
+  ['later instant', [`${distrustedKey}@2026-10-05T23:04:00Z`]],
+  ['earlier instant', [`${distrustedKey}@2026-10-05T23:03:48Z`]],
+]) {
+  const options = { trustAnchors: pin, ...(distrustedKeys ? { distrustedKeys } : {}) };
+  distrust[id] = { trustAnchors: pin, distrustedKeys: distrustedKeys ?? null, result: project(verifyAuditExport(distrustDoc, options)) };
+}
+
+const out = { verifyCore: `${pkg.version} @ ${sha}`, runs, distrust };
 writeFileSync(join('tests', 'fixtures', 'verify-core-exports.json'), JSON.stringify(out, null, 1) + '\n');
 console.error(`recorded ${Object.keys(runs).length} runs from @agledger/verify-core ${out.verifyCore}`);

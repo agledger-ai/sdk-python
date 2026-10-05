@@ -2,7 +2,9 @@
 field, on every corpus export vector unpinned and pinned on the export's own
 anchoredFrom: validity, every entry's position, code, detail and signature
 state, the broken-at entry, signature coverage, key provenance, the optional
-checks, the agent-signature counts and the whole key-trust report.
+checks, the agent-signature counts and the whole key-trust report; and on
+the live export taken after a dated distrust entry, pinned alone and with a
+distrust entry at the Server's instant, a later one and an earlier one.
 
 The verify-core results in ``fixtures/verify-core-exports.json`` were recorded
 by ``scripts/record-verify-core-exports.mjs`` from the verify-core build the
@@ -77,4 +79,35 @@ def test_verify_export_gives_verify_core_s_result_field_for_field(run_id: str) -
     if options.get("requireSuppliedKeys"):
         kwargs["require_supplied_keys"] = True
     result = verify_export(_json(run["file"]), trust_anchors=run["trustAnchors"], **kwargs)
+    assert _project(result) == run["result"]
+
+
+DISTRUST_EXPORT = (
+    Path(__file__).parent / "fixtures" / "live-2.0.0" / "export-dated-distrust.json"
+)
+
+
+def test_the_fixture_covers_the_dated_distrust_export_under_four_distrust_entries() -> (
+    None
+):
+    assert sorted(_RECORDED["distrust"]) == [
+        "earlier instant",
+        "later instant",
+        "pin only",
+        "server instant",
+    ]
+
+
+@pytest.mark.parametrize("run_id", sorted(_RECORDED["distrust"]))
+def test_verify_export_gives_verify_core_s_result_on_a_dated_distrust_export(
+    run_id: str,
+) -> None:
+    """The export lists its distrusted key with ``distrustedFrom``: the finding's
+    wording, the note and the verdict are verify-core's, byte for byte."""
+    run = _RECORDED["distrust"][run_id]
+    result = verify_export(
+        json.loads(DISTRUST_EXPORT.read_text()),
+        trust_anchors=run["trustAnchors"],
+        distrusted_keys=run["distrustedKeys"],
+    )
     assert _project(result) == run["result"]

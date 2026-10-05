@@ -390,6 +390,22 @@ after the time it was stored, as the engine's scan grades them), and
 `CHAIN_KEY_WINDOW_DRIFT` (a listed window or status that differs from the
 signed value).
 
+A key the Server's `VAULT_DISTRUSTED_KEYS` names is listed with
+`distrustedFrom`, the instant its entry gives (in an export's
+`signingKeyWindows` and on `/v1/verification-keys`), and where that instant is
+earlier than the retirement the key's closures sign, the listed `retiredAt` is
+that instant. A walk not given the same entry still fails on that window, but
+the finding names the entry the listing says the Server applied
+(`distrustedKeys sha256:<hex>@<distrustedFrom>`, `--distrusted-key` in
+`agledger-verify`) rather than reading as a rewritten column, and says so when
+the entry it was given carries another instant; an entry at an earlier
+instant, which fails nothing on the window, is said in `key_trust.notes`.
+`distrustedFrom` is the source's unsigned word and only changes that wording:
+it never ends, opens or widens a window and never clears a finding. Confirm
+the instant with the Server's operator before giving that entry: off a dump an
+entry also voids every admission the key signed, so a key it admitted that
+nothing else reaches is no longer trusted and its window no longer graded.
+
 A pinned key distrusted with no instant raises `TypeError`, as the Server
 refuses to start with that pair. A pin beside a dated entry
 (`sha256:<hex>@<instant>`) is taken: the pin vouches for what the key stored

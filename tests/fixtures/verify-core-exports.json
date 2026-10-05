@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.0.0 @ 981f3885",
+ "verifyCore": "2.0.0 @ 618d9bbc",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
@@ -5362,6 +5362,310 @@
      "undecidedKeyIds": [],
      "findings": [],
      "notes": [],
+     "accounted": []
+    }
+   }
+  }
+ },
+ "distrust": {
+  "pin only": {
+   "trustAnchors": [
+    "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+   ],
+   "distrustedKeys": null,
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 0,
+     "code": "CHAIN_KEY_WINDOW_DRIFT",
+     "detail": "retiredAt 2026-10-05T23:03:51.537Z is listed as the Server's distrust cutoff for b649db0ec7c5c0fd (distrustedFrom 2026-10-05T23:03:51.537314Z), and the retirement its closures sign is 2026-10-05T23:04:11.954995Z: the listing says the Server distrusts the key from that instant (VAULT_DISTRUSTED_KEYS), and this walk was given no distrust entry for it. If the operator confirms it, give distrustedKeys sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e@2026-10-05T23:03:51.537314Z. The listing's instant is its unsigned word, so until the Server's operator confirms the entry, read the listed retirement as unexplained. Off a dump the entry also voids every admission b649db0ec7c5c0fd signed, so a key it admitted that nothing else reaches is no longer trusted and its window no longer graded."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a.",
+     "anchors": [
+      "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+     ],
+     "anchoredFrom": "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "78e7bba47a2dccdb",
+      "b649db0ec7c5c0fd"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [
+      {
+       "code": "CHAIN_KEY_WINDOW_DRIFT",
+       "keyId": "b649db0ec7c5c0fd",
+       "statementId": null,
+       "detail": "retiredAt 2026-10-05T23:03:51.537Z is listed as the Server's distrust cutoff for b649db0ec7c5c0fd (distrustedFrom 2026-10-05T23:03:51.537314Z), and the retirement its closures sign is 2026-10-05T23:04:11.954995Z: the listing says the Server distrusts the key from that instant (VAULT_DISTRUSTED_KEYS), and this walk was given no distrust entry for it. If the operator confirms it, give distrustedKeys sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e@2026-10-05T23:03:51.537314Z. The listing's instant is its unsigned word, so until the Server's operator confirms the entry, read the listed retirement as unexplained. Off a dump the entry also voids every admission b649db0ec7c5c0fd signed, so a key it admitted that nothing else reaches is no longer trusted and its window no longer graded."
+      }
+     ],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "server instant": {
+   "trustAnchors": [
+    "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+   ],
+   "distrustedKeys": [
+    "sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e@2026-10-05T23:03:51.537314Z"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a.",
+     "anchors": [
+      "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+     ],
+     "anchoredFrom": "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "78e7bba47a2dccdb",
+      "b649db0ec7c5c0fd"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "later instant": {
+   "trustAnchors": [
+    "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+   ],
+   "distrustedKeys": [
+    "sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e@2026-10-05T23:04:00Z"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": {
+     "position": 0,
+     "code": "CHAIN_KEY_WINDOW_DRIFT",
+     "detail": "retiredAt 2026-10-05T23:03:51.537Z is listed as the Server's distrust cutoff for b649db0ec7c5c0fd (distrustedFrom 2026-10-05T23:03:51.537314Z), and the retirement its closures sign is 2026-10-05T23:04:11.954995Z: the distrust entry given for it (from 2026-10-05T23:04:00.000000Z) and the one the listing says the Server applies (VAULT_DISTRUSTED_KEYS, from 2026-10-05T23:03:51.537314Z) disagree. Confirm the instant with the Server's operator. The listing's instant is its unsigned word, so until the Server's operator confirms the entry, read the listed retirement as unexplained. Off a dump the entry also voids every admission b649db0ec7c5c0fd signed, so a key it admitted that nothing else reaches is no longer trusted and its window no longer graded."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a.",
+     "anchors": [
+      "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+     ],
+     "anchoredFrom": "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "78e7bba47a2dccdb",
+      "b649db0ec7c5c0fd"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [
+      {
+       "code": "CHAIN_KEY_WINDOW_DRIFT",
+       "keyId": "b649db0ec7c5c0fd",
+       "statementId": null,
+       "detail": "retiredAt 2026-10-05T23:03:51.537Z is listed as the Server's distrust cutoff for b649db0ec7c5c0fd (distrustedFrom 2026-10-05T23:03:51.537314Z), and the retirement its closures sign is 2026-10-05T23:04:11.954995Z: the distrust entry given for it (from 2026-10-05T23:04:00.000000Z) and the one the listing says the Server applies (VAULT_DISTRUSTED_KEYS, from 2026-10-05T23:03:51.537314Z) disagree. Confirm the instant with the Server's operator. The listing's instant is its unsigned word, so until the Server's operator confirms the entry, read the listed retirement as unexplained. Off a dump the entry also voids every admission b649db0ec7c5c0fd signed, so a key it admitted that nothing else reaches is no longer trusted and its window no longer graded."
+      }
+     ],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "earlier instant": {
+   "trustAnchors": [
+    "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+   ],
+   "distrustedKeys": [
+    "sha256:b649db0ec7c5c0fd921c2cb4d40466d91f4d98252dad2f7c0243851167b2d09e@2026-10-05T23:03:48Z"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 1,
+    "verifiedEntries": 1,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 1,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 1
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 1
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a.",
+     "anchors": [
+      "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a"
+     ],
+     "anchoredFrom": "sha256:78e7bba47a2dccdb1dbf4f2dc81dc58a5c58735abe480de49d05081d3452aa3a",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "78e7bba47a2dccdb",
+      "b649db0ec7c5c0fd"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [
+      {
+       "keyId": "b649db0ec7c5c0fd",
+       "statementId": null,
+       "detail": "distrustedKeys gives b649db0ec7c5c0fd the instant 2026-10-05T23:03:48.000000Z, and the listing says the Server distrusts it from 2026-10-05T23:03:51.537314Z (distrustedFrom, VAULT_DISTRUSTED_KEYS): the auditor's entry and the one the listing gives disagree, so what the key signed between the two instants is graded differently here than on the Server. Confirm the instant with the Server's operator."
+      }
+     ],
      "accounted": []
     }
    }
