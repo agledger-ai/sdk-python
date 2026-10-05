@@ -1130,6 +1130,7 @@ def _trust_keys_of(meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey]
         if isinstance(window, Mapping):
             w = cast("Mapping[str, Any]", window)
             active = "retiredAt" in w and w["retiredAt"] is None
+            since = w.get("distrustedFrom")
             out.append(
                 TrustKeyInput(
                     key_id=str(key_id),
@@ -1137,6 +1138,7 @@ def _trust_keys_of(meta: Mapping[str, Any], supplied: Mapping[str, _SuppliedKey]
                     activated_at=w.get("activatedAt"),
                     retired_at=w.get("retiredAt"),
                     status="active" if active else "retired",
+                    distrusted_from=since if isinstance(since, str) else None,
                 )
             )
         else:

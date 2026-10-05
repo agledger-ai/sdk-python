@@ -27,6 +27,7 @@ are made.
 
 from __future__ import annotations
 
+import dataclasses
 import errno
 import json
 import os
@@ -210,7 +211,13 @@ Options:
                               key: the pin then vouches for what the key
                               stored before the instant. On a dump, entries
                               it signed before a trusted key retired it are
-                              listed as accounted for and do not fail.
+                              listed as accounted for and do not fail. Where
+                              an export lists a key retired at the instant the
+                              Server distrusts it from (distrustedFrom),
+                              earlier than its signed retirement, a run without
+                              the same entry fails on that window, and the
+                              finding names the --distrusted-key to confirm
+                              with the Server's operator.
   --report-format, -f         Output format. Default: text.
   --agent-keys                Path to a JSON file holding the Ed25519 public
                               keys of agent certs: a JWK, a list of JWKs, or a
@@ -451,6 +458,23 @@ def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None) -
     ]
 
 
+_TAMPER_ADVICE = (
+    " Treat the registry as tampered and compare it with the Server's own scan"
+)
+
+
+def _remedy(code: str, distrusted_from: str | None = None) -> str:
+    """The next step printed under a finding, naming the flags. A finding the
+    walk reads as the Server's own distrust entry (its ``distrusted_from`` set)
+    already says to confirm that entry with the operator, so the advice to
+    treat the registry as tampered is left off it; the pointer to the Server's
+    scan and the rest of the code's suggestion stand."""
+    text = suggestion(code)
+    if distrusted_from is not None:
+        text = text.replace(_TAMPER_ADVICE, " Compare it with the Server's own scan")
+    return _flag_wording(text)
+
+
 def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
     """What the key-statement walk concluded, in the text report. A report with
     no anchor says in plain words that its pass is not a trusted verdict."""
@@ -469,7 +493,7 @@ def _key_trust_lines(key_trust: KeyTrustReport) -> list[str]:
         lines.append(f"  anchored from     : {key_trust.anchored_from} ({pinned} one of your anchors)")
     for f in key_trust.findings:
         lines.append(f"    [{f.code}] key {f.key_id or '-'}: {f.detail}")
-        lines.append(f"      -> {suggestion(f.code)}")
+        lines.append(f"      -> {_remedy(f.code, f.distrusted_from)}")
     lines.extend(f"    note: key {n.key_id or '-'}: {n.detail}" for n in key_trust.notes)
     lines.extend(f"    accounted for: key {n.key_id or '-'}: {n.detail}" for n in key_trust.accounted)
     return lines
@@ -605,7 +629,18 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
             f"  broken at pos {result.broken_at.position}: [{result.broken_at.code}] "
             f"{result.broken_at.detail or ''}"
         )
-        lines.append(f"      -> {suggestion(result.broken_at.code)}")
+        # A key-registry finding is reported at position 0; it keeps its own wording.
+        from_listing = next(
+            (
+                f.distrusted_from
+                for f in result.key_trust.findings
+                if result.broken_at.position == 0
+                and (f.code, f.detail)
+                == (result.broken_at.code, result.broken_at.detail)
+            ),
+            None,
+        )
+        lines.append(f"      -> {_remedy(result.broken_at.code, from_listing)}")
     # A PASS must not be read as vouching for unsigned display projections
     # (e.g. actorDisplayName). The attribution the export's guide points at
     # instead, actorOwnerId/actorId, IS signature-covered, so say whether this
@@ -647,6 +682,108 @@ def _flag_message(message: str) -> str:
         r"^(sha256:[0-9a-f]{64}) is a trust anchor and a distrusted key with no instant,",
         r"\1 is a --trust-anchor and a --distrusted-key with no instant,",
         message,
+    )
+
+
+#: verify-core words a finding, note, failure or suggestion for a library
+#: caller, so its advice names options (``give distrustedKeys sha256:<hex>@<instant>``,
+#: ``pin it (trustAnchors)``). A CLI user gives those as flags, so the report
+#: names the flag; the library's own result objects are left as they are. As
+#: ``@agledger/verify``'s ``flagWording``.
+_OPTION_FLAGS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.ASCII), flag)
+    for pattern, flag in (
+        (
+            r"\badd (sha256:[0-9a-f]{64}) to distrustedKeys\b",
+            r"add --distrusted-key \1",
+        ),
+        (r"\bis in distrustedKeys\b", "is given as a --distrusted-key"),
+        (r"\bin trustAnchors\b", "with --trust-anchor"),
+        (r"\bNo trustAnchors were given\b", "No --trust-anchor was given"),
+        (r"\bdistrustedKeys\b", "--distrusted-key"),
+        (r"\btrustAnchors\b", "--trust-anchor"),
+        (r"\brequireSuppliedKeys\b", "--require-supplied-keys"),
+        (r"\brequireKeyId\b", "--require-key-id"),
+        (r"\bagentKeys\b", "--agent-keys"),
+    )
+)
+
+
+def _flag_wording(text: str) -> str:
+    """One prose string from a report, its option names given as this CLI's flags."""
+    for pattern, flag in _OPTION_FLAGS:
+        text = pattern.sub(flag, text)
+    return text
+
+
+def _key_trust_with_flags(key_trust: KeyTrustReport) -> KeyTrustReport:
+    """The prose a key-trust report carries, worded by :func:`_flag_wording`:
+    its detail and each finding, note and accounted-for detail. Ids, digests
+    and instants are data and pass through as they are."""
+    return dataclasses.replace(
+        key_trust,
+        detail=_flag_wording(key_trust.detail),
+        findings=[
+            dataclasses.replace(f, detail=_flag_wording(f.detail))
+            for f in key_trust.findings
+        ],
+        notes=[
+            dataclasses.replace(n, detail=_flag_wording(n.detail))
+            for n in key_trust.notes
+        ],
+        accounted=[
+            dataclasses.replace(n, detail=_flag_wording(n.detail))
+            for n in key_trust.accounted
+        ],
+    )
+
+
+def _export_result_with_flags(result: VerifyExportResult) -> VerifyExportResult:
+    """An export result with its prose (the details verify_export writes)
+    worded by :func:`_flag_wording`. As ``@agledger/verify``'s ``exportResultWithFlags``."""
+    broken = result.broken_at
+    return dataclasses.replace(
+        result,
+        broken_at=None
+        if broken is None
+        else dataclasses.replace(
+            broken,
+            detail=None if broken.detail is None else _flag_wording(broken.detail),
+        ),
+        entries=[
+            dataclasses.replace(
+                e, detail=None if e.detail is None else _flag_wording(e.detail)
+            )
+            for e in result.entries
+        ],
+        key_trust=_key_trust_with_flags(result.key_trust),
+    )
+
+
+def _dump_report_with_flags(report: VerifyReport) -> VerifyReport:
+    """A dump report with its prose (failure messages and details) worded by
+    :func:`_flag_wording`. As ``@agledger/verify``'s ``dumpReportWithFlags``."""
+    return dataclasses.replace(
+        report,
+        key_trust=_key_trust_with_flags(report.key_trust),
+        vault=dataclasses.replace(
+            report.vault,
+            failures=[
+                dataclasses.replace(f, message=_flag_wording(f.message))
+                for f in report.vault.failures
+            ],
+            accounted=[
+                dataclasses.replace(a, detail=_flag_wording(a.detail))
+                for a in report.vault.accounted
+            ],
+        ),
+        org_admin_reads=dataclasses.replace(
+            report.org_admin_reads,
+            failures=[
+                dataclasses.replace(f, message=_flag_wording(f.message))
+                for f in report.org_admin_reads.failures
+            ],
+        ),
     )
 
 
@@ -739,6 +876,7 @@ def run_cli(argv: Sequence[str]) -> int:
             )
         except (DumpLoadError, TypeError) as err:
             return _cannot_verify(str(err), report_format)
+        report = _dump_report_with_flags(report)
         if report_format == "json":
             print(json.dumps(report.to_json(), indent=2))
         else:
@@ -784,6 +922,8 @@ def run_cli(argv: Sequence[str]) -> int:
     except TypeError as err:
         return _cannot_verify(f"{err}\n{_KEYS_SHAPE}", report_format)
     verdict = result.verdict
+    # verify_export's result, with its advice naming the flags.
+    result = _export_result_with_flags(result)
     if report_format == "json":
         print(json.dumps(_export_to_json(result), indent=2))
     else:
