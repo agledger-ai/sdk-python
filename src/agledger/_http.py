@@ -173,7 +173,14 @@ def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
     try:
         return response.json()
     except Exception:
-        return {"detail": response.text or f"HTTP {response.status_code}"}
+        pass
+    # A text body (a proxy's error page) is the best message there is. A
+    # binary one, such as the CBOR problem details the SCITT routes answer
+    # with, is not text: it stays on raw_body and the status names the error.
+    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+    if response.text and (not content_type or content_type.startswith("text/")):
+        return {"detail": response.text}
+    return {"detail": response.reason_phrase or f"HTTP {response.status_code}"}
 
 
 def _str_or_none(value: object) -> str | None:

@@ -97,6 +97,7 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 
 ### Fixed
 
+- **A CBOR error body is no longer the message.** The SCITT routes answer their errors as RFC 9290 CBOR problem details, and `detail` (and so the error's text) was those bytes read as text. A body that is neither JSON nor `text/*` now stays on `raw_body` alone, and `detail` is the HTTP status text, as the TypeScript SDK reports it. A JSON error on those routes, such as a malformed entry id refused before the handler, already mapped its `code` and `detail`.
 - **A 429's `retry-after` is waited out in full**. The wait was capped at `MAX_BACKOFF` (30 s), so a `retry-after: 60` was retried at 30 s, drew another 429 and raised `RateLimitError`. The wait is now the larger of the exponential step and `retry-after`, plus the same 0 to 25% jitter, as the TypeScript SDK waits. `max_retries=0` is the way to not wait.
 - **`a2a.call()` leaves `params` out when you pass none.** It sent `"params": null`, which the Server refuses with 400 `-32600`.
 - **An `/a2a` HTTP 4xx raises an error that says what went wrong.** The JSON-RPC envelope was read as a problem body, so `code` was `unknown`, `detail` was `API error 400` and `recovery_hint` was None. `code` is now the ErrorInfo `reason` the Server sends (else the JSON-RPC code as a string), `detail`, `recovery_hint`, `request_id` and `retryable` come from `error.data[0].metadata`, `details` holds the JSON-RPC error object, and `raw_body` holds the response bytes.

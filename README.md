@@ -310,7 +310,7 @@ from agledger.verify import verify_export
 export_data = client.records.get_audit_export(record.id)
 result = verify_export(export_data.model_dump(by_alias=True))
 
-if result.verdict == "failed":
+if result.verdict == "failed" and result.broken_at:
     print(f"Broken at position {result.broken_at.position}: {result.broken_at.code}")
 print(result.verdict)  # "unanchored" here: pass trust_anchors for a trusted verdict
 ```
@@ -640,8 +640,11 @@ keys = client.scitt.keys.list()
 # COSE_KeySet of the Transparency Service's signing keys
 ```
 
-Wire format is binary `application/cose`. Errors surface as RFC 9290 CBOR
-problem-details on `APIError.raw_body`.
+Wire format is binary `application/cose`. The Server's own errors here are RFC
+9290 CBOR problem details, left on `APIError.raw_body` for you to decode, with
+the HTTP status text as the error's `detail`. A request refused before the
+handler, such as a malformed entry id, is answered in JSON and maps like any
+other error, `code` and `detail` included.
 
 ## Predicate Schemas
 
