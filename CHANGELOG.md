@@ -4,9 +4,9 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - 2026-10-05
+## [3.0.0] - 2026-10-05
 
-Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape alive. Version 1.13.0 was prepared and never published; its changes are folded into this release and listed with it. Breaking changes are under Removed and Changed.
+Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape alive. Version 1.13.0 was prepared and never published; its changes are folded into this release and listed with it. The 2.x version numbers belong to an earlier pre-production line, whose files PyPI does not allow to be uploaded again, so this release is 3.0.0, the same major as `@agledger/sdk`. Breaking changes are under Removed and Changed.
 
 ### Removed
 
