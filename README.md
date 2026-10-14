@@ -2,6 +2,8 @@
 
 The official Python SDK for [AGLedger](https://agledger.ai): change control for AI agents. Agent memory, approvals, audit trail, and notifications: one API, one signed ledger, self-hosted.
 
+Requires an AGLedger Server 2.0 or later. For a 1.x Server, use `pip install "agledger==1.12.0"`, the last release that supports it.
+
 **Learn more**
 
 - [agledger.ai](https://agledger.ai): what AGLedger is and who needs it
@@ -308,7 +310,7 @@ Verify a Record's hash-chained, signed audit export without calling the API:
 from agledger.verify import verify_export
 
 export_data = client.records.get_audit_export(record.id)
-result = verify_export(export_data.model_dump(by_alias=True))
+result = verify_export(export_data)
 
 if result.verdict == "failed" and result.broken_at:
     print(f"Broken at position {result.broken_at.position}: {result.broken_at.code}")
@@ -329,7 +331,7 @@ from agledger.verify import verify_export
 
 export_data = client.records.get_audit_export(record.id)
 result = verify_export(
-    export_data.model_dump(by_alias=True),
+    export_data,
     agent_keys=[credential.public_key_jwk],  # the JWK sent at cert exchange
 )
 print(result.agent_signature_check, result.agent_signatures)
