@@ -194,6 +194,38 @@ def _str_list_or_none(value: object) -> list[str] | None:
     return [item for item in items if isinstance(item, str)]
 
 
+def _list_or_none(value: object) -> list[Any] | None:
+    return cast("list[Any]", value) if isinstance(value, list) else None
+
+
+def _dict_or_none(value: object) -> dict[str, Any] | None:
+    return cast("dict[str, Any]", value) if isinstance(value, dict) else None
+
+
+def _dict_list_or_none(value: object) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list):
+        return None
+    items = cast("list[object]", value)
+    return [cast("dict[str, Any]", item) for item in items if isinstance(item, dict)]
+
+
+def _retry_after_seconds(header: str | None, body_seconds: object) -> float | None:
+    """``Retry-After`` as seconds: the header's delay-seconds form when it
+    parses as a non-negative number, else a 429 body's ``retryAfterSeconds``,
+    else None. An HTTP-date, which nothing in front of the engine sends, reads
+    as None rather than raising."""
+    if header:
+        try:
+            seconds = float(header.strip())
+        except ValueError:
+            seconds = None
+        if seconds is not None and seconds >= 0:
+            return seconds
+    if isinstance(body_seconds, (int, float)) and not isinstance(body_seconds, bool) and body_seconds >= 0:
+        return float(body_seconds)
+    return None
+
+
 def build_error(response: httpx.Response) -> APIError:
     raw = _parse_error_body(response)
     mapped = _jsonrpc_error_body(raw)
@@ -229,22 +261,42 @@ def build_error(response: httpx.Response) -> APIError:
         "allowed_actions": _str_list_or_none(body.get("allowedActions")),
         "valid_transitions": _str_list_or_none(body.get("validTransitions")),
         "existing_id": _str_or_none(body.get("existingId")),
+        # The rest of the served ErrorResponse. Each is a typed view; `body`
+        # keeps the whole thing so a field added later is still readable.
+        "title": _str_or_none(body.get("title")),
+        "instance": _str_or_none(body.get("instance")),
+        "errors": _list_or_none(body.get("errors")),
+        "validation_errors": _dict_list_or_none(body.get("validationErrors")),
+        "hint": _str_or_none(body.get("hint")),
+        "required_fields": _str_list_or_none(body.get("requiredFields")),
+        "optional_fields": _str_list_or_none(body.get("optionalFields")),
+        "example_payload": _dict_or_none(body.get("examplePayload")),
+        "schema_url": _str_or_none(body.get("schemaUrl")),
+        "record_type": _str_or_none(body.get("recordType")),
+        "attempted_action": _str_or_none(body.get("attemptedAction")),
+        "attempted_transition": _str_or_none(body.get("attemptedTransition")),
+        "attempted_state": _str_or_none(body.get("attemptedState")),
+        "allowed_values": _list_or_none(body.get("allowedValues")),
+        "allowed_actors": _str_list_or_none(body.get("allowedActors")),
+        "constraint_violations": _dict_list_or_none(body.get("constraintViolations")),
+        "missing_features": _str_list_or_none(body.get("missingFeatures")),
+        "current_tier": _str_or_none(body.get("currentTier")),
+        "required_tier": _str_or_none(body.get("requiredTier")),
+        "next_steps": _dict_list_or_none(body.get("nextSteps")),
+        "terminal_reason": _str_or_none(body.get("terminalReason")),
+        "previous_status": _str_or_none(body.get("previousStatus")),
+        "current_status": _str_or_none(body.get("currentStatus")),
+        # Read on every status, not only 429: a load balancer or proxy answers
+        # 503 with a Retry-After of its own, and a retry that ignores it lands
+        # inside the window it named. The header is the primary source; a 429
+        # body also carries `retryAfterSeconds`, which covers a proxy that
+        # strips headers. Only the delay-seconds form is read.
+        "retry_after": _retry_after_seconds(response.headers.get("retry-after"), body.get("retryAfterSeconds")),
+        "body": raw,
     }
 
     if cls is PermissionDeniedError:
         kwargs["missing_scopes"] = _str_list_or_none(body.get("missingScopes")) or []
-    elif cls is RateLimitError:
-        # The header is the primary source, but a 429 body also carries
-        # `retryAfterSeconds`, and a proxy that strips headers used to leave
-        # retry_after None with the answer sitting in the body unread.
-        retry_after = response.headers.get("retry-after")
-        body_seconds = body.get("retryAfterSeconds")
-        if retry_after:
-            kwargs["retry_after"] = float(retry_after)
-        elif isinstance(body_seconds, (int, float)) and not isinstance(body_seconds, bool):
-            kwargs["retry_after"] = float(body_seconds)
-        else:
-            kwargs["retry_after"] = None
 
     error = cls(status, **kwargs) if cls is APIError else cls(**kwargs)
     if rpc_error:

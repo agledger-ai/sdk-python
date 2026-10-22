@@ -963,6 +963,7 @@
     "StatusComponentReason": {
       "values": [
         "chain_rewind_detected",
+        "connections_overcommitted",
         "database_unavailable",
         "error",
         "no_connection",

@@ -36,6 +36,16 @@ Install via ``pip install 'agledger[verify]'``.
 """
 
 from agledger.verify.failures import FailureCode, suggestion
+from agledger.verify.federation_wire import (
+    FEDERATION_WIRE_SCHEME,
+    FederationWireCounts,
+    FederationWireOutcome,
+    build_federation_key_registry,
+    canonicalize_json,
+    check_federation_wire,
+    extract_federation_wire,
+    normalize_federation_key,
+)
 from agledger.verify.key_statements import (
     KEY_STATEMENT_CTY,
     DistrustedKey,
@@ -95,6 +105,7 @@ from agledger.verify.verify_export import (
 __all__ = [
     "ACCOUNTED_ENTRY_CODE",
     "AGENT_SIGNATURE_CONTEXT",
+    "FEDERATION_WIRE_SCHEME",
     "KEY_STATEMENT_CTY",
     "AccountedEntry",
     "AgentSignatureCounts",
@@ -106,6 +117,8 @@ __all__ = [
     "EntryVerificationResult",
     "Failure",
     "FailureCode",
+    "FederationWireCounts",
+    "FederationWireOutcome",
     "KeyProvenance",
     "KeyRegistryFinding",
     "KeySource",
@@ -124,15 +137,20 @@ __all__ = [
     "VerifyExportResult",
     "VerifyReport",
     "assert_not_pinned_and_distrusted",
+    "build_federation_key_registry",
+    "canonicalize_json",
     "chain_of_scope",
+    "check_federation_wire",
     "compute_key_trust",
     "earliest_key_activation",
     "ed25519_jwk_thumbprint",
+    "extract_federation_wire",
     "instant_ms",
     "key_statement_from_dump_row",
     "key_statements_from_export",
     "key_statements_from_verification_keys",
     "load_dump",
+    "normalize_federation_key",
     "org_read_leaf_hash",
     "org_read_merkle_root",
     "parse_distrusted_keys",

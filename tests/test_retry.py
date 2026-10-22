@@ -230,3 +230,37 @@ def test_connection_error_on_a_read_carries_no_key():
     with pytest.raises(APIConnectionError) as excinfo:
         client.records.get("rec-123")
     assert excinfo.value.idempotency_key is None
+
+
+@respx.mock
+def test_a_503_retry_after_is_waited_out(monkeypatch: pytest.MonkeyPatch):
+    """A proxy in front of the Server answers 503 with retry-after: 6. The
+    backoff read the header only off RateLimitError, so the retry went out
+    after the 0.5s exponential step, inside the window the proxy named."""
+    waits: list[float] = []
+    monkeypatch.setattr("agledger._http.time.sleep", lambda s: waits.append(s))
+    route = respx.get("https://agledger.example.com/v1/records/rec-123")
+    route.side_effect = [
+        httpx.Response(503, json={"error": "SERVICE_UNAVAILABLE", "detail": "busy"}, headers={"retry-after": "6"}),
+        httpx.Response(200, json=RECORD_JSON),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
+    client.records.get("rec-123")
+    assert route.call_count == 2
+    assert len(waits) == 1
+    # At least the 6s the header asked for; jitter adds up to 25% on top.
+    assert 6.0 <= waits[0] <= 7.5
+
+
+@respx.mock
+def test_retry_after_is_exposed_on_a_non_429_error():
+    respx.get("https://agledger.example.com/v1/records/rec-123").mock(
+        return_value=httpx.Response(
+            503, json={"error": "SERVICE_UNAVAILABLE", "detail": "busy"}, headers={"retry-after": "4"}
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=0)
+    with pytest.raises(APIError) as excinfo:
+        client.records.get("rec-123")
+    assert excinfo.value.status == 503
+    assert excinfo.value.retry_after == 4.0

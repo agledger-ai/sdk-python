@@ -256,3 +256,80 @@ def test_a_refusal_about_a_record_carries_its_valid_transitions():
     with pytest.raises(UnprocessableError) as info:
         client.request("POST", "/v1/records/r/verdict", json={"completionId": "c", "verdict": "accept"})
     assert info.value.valid_transitions == ["DISPUTED"]
+
+
+@respx.mock
+def test_a_400_keeps_its_rebuild_kit_title_instance_and_the_whole_body():
+    """A raw POST /v1/records with criteria: 5 answers a 400 whose keys include
+    examplePayload, requiredFields, schemaUrl, validationErrors, title and
+    instance. The SDK copied a fixed list and dropped them, so a caller could
+    not rebuild the body the recoveryHint told it to."""
+    body = {
+        "type": "/problems/validation",
+        "title": "Validation failed",
+        "status": 400,
+        "detail": "criteria must be an object",
+        "instance": "/v1/records",
+        "error": "VALIDATION_ERROR",
+        "errors": [{"instancePath": "/criteria", "message": "must be object"}],
+        "retryable": False,
+        "requestId": "req-1",
+        "recoveryHint": "Fetch schemaUrl and rebuild criteria from examplePayload.",
+        "requiredFields": ["criteria"],
+        "optionalFields": ["deadline"],
+        "examplePayload": {"type": "notarize-generic-v1", "criteria": {"summary": "x"}},
+        "schemaUrl": "/v1/schemas/notarize-generic-v1",
+        "recordType": "notarize-generic-v1",
+        "validationErrors": [{"field": "criteria", "message": "must be object", "keyword": "type"}],
+        "unknownFutureField": {"any": "thing"},
+    }
+    respx.post("https://agledger.example.com/v1/records").mock(return_value=httpx.Response(400, json=body))
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
+    with pytest.raises(BadRequestError) as exc_info:
+        client.records.create(type="notarize-generic-v1", criteria={"summary": "x"})
+    err = exc_info.value
+    assert err.title == "Validation failed"
+    assert err.instance == "/v1/records"
+    assert err.required_fields == ["criteria"]
+    assert err.optional_fields == ["deadline"]
+    assert err.example_payload == {"type": "notarize-generic-v1", "criteria": {"summary": "x"}}
+    assert err.schema_url == "/v1/schemas/notarize-generic-v1"
+    assert err.record_type == "notarize-generic-v1"
+    assert err.validation_errors == [{"field": "criteria", "message": "must be object", "keyword": "type"}]
+    assert err.errors == [{"instancePath": "/criteria", "message": "must be object"}]
+    assert err.body == body
+    assert err.body["unknownFutureField"] == {"any": "thing"}
+    assert err.retry_after is None
+
+
+@respx.mock
+def test_the_404_hint_and_the_422_attempted_action_are_kept():
+    respx.get("https://agledger.example.com/v1/records/nope").mock(
+        return_value=httpx.Response(
+            404,
+            json={"error": "NOT_FOUND", "detail": "No record", "hint": "List records with GET /v1/records."},
+        )
+    )
+    respx.post("https://agledger.example.com/v1/records/x/transition").mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "error": "INVALID_ACTION",
+                "detail": "cancel is refused on a FULFILLED record",
+                "attemptedAction": "cancel",
+                "attemptedTransition": "CANCELLED",
+                "attemptedState": "CANCELLED",
+                "currentState": "FULFILLED",
+                "allowedActions": [],
+            },
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
+    with pytest.raises(NotFoundError) as missing:
+        client.records.get("nope")
+    assert missing.value.hint == "List records with GET /v1/records."
+    with pytest.raises(UnprocessableError) as refused:
+        client.records.transition("x", "cancel")
+    assert refused.value.attempted_action == "cancel"
+    assert refused.value.attempted_transition == "CANCELLED"
+    assert refused.value.attempted_state == "CANCELLED"

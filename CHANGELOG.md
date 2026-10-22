@@ -4,10 +4,19 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0] - 2026-10-22
+
+### Added
+
+- **Every field of an error body is on the error.** `APIError` and its subclasses now carry the whole served `ErrorResponse`: the 400 rebuild kit (`required_fields`, `optional_fields`, `example_payload`, `schema_url`, `record_type`, `validation_errors`), the 404 `hint`, the 422 `attempted_action` / `attempted_transition` / `attempted_state`, `title`, `instance`, `allowed_values`, `allowed_actors`, `constraint_violations`, the license tier fields, `next_steps`, and `body`, the parsed body itself, so a field added later is readable without a release. `build_error` used to copy a fixed list and dropped the rest, so a strict caller could not rebuild the body its `recovery_hint` told it to.
+- **`retry_after` on every API error, and the client waits it out on any status.** A load balancer or proxy answers 503 with a `Retry-After` of its own; the retry backoff read the header only off a 429, so the retry went out after the 0.5 s step, inside the window the proxy named.
+- **`a2a.cancel_task()`**, the `CancelTask` call with its one typed extension: `reason` rides in `metadata["agledger:reason"]` and lands as the record's `lastTransitionReason`.
+- **`federation_keys=` on `verify_export` and `verify_dump`, and `--federation-key <hubId>=<key>` on `agledger-verify`:** a receiving Server's `FEDERATION_*` entries seal each peer message as the peer signed it (`payload.wire`); every sealed message is held to its body hash and to its entry, and one from a hub whose federation key is given is also re-verified under it. The reports count them under `federation_wire`; a failure is `CHAIN_FEDERATION_WIRE_INVALID`. `agledger.verify.canonicalize_json` is the RFC 8785 canonical form the body hash is taken over.
+- Types the Server now serves: the per-item rebuild kit on `BulkCreateResultItem`, `BulkCreateSummary.replayed`, `ComplianceExport.bulk_export`, `connections_overcommitted` on `StatusComponentReason`, and `standing` on each key-registry finding.
 
 ### Changed
 
+- The `reason` doc on errors names the thirteen 409 reason codes the Server can send, and says a 409 does not always carry one.
 - The README says the package needs an AGLedger Server 2.0 or later and names the last release for a 1.x Server (sdk-python#27).
 
 ## [3.0.0] - 2026-10-05
@@ -65,7 +74,7 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 - `KEY_STATEMENT_INVALID` on the admission of a trusted key whose endorser the walk does not trust, and on the admission of a key reached only through a signature this host cannot compute whose endorser is not reached either; `KEY_CLOSURE_INVALID` on every counting closure of a published key by a key the walk reaches but does not anchor, and on a closure dated after the time it was stored.
 - **`unsigned_projection_fields` on `VerifyExportResult`**, the export's `verificationGuide.unsignedFields`, as `@agledger/verify-core` reports them: `agledger-verify -f json` prints `unsignedProjectionFields`, and the text report notes that those display fields are not signature-covered and whether the signed attribution was cross-checked, as `@agledger/verify` does.
 - **`verify_dump_dir(path, ...)`** loads and verifies a dump directory, refusing a malformed or contradictory pin or distrust entry with `TypeError` before it reads anything.
-- **`KEY_CLOSURE_INVALID` on a closure by a key reached but not anchored** that retires an anchored key earlier, or with force, than any closure a published key signed: a walk over the Server's published key documents cannot see that closure, so it reads the key differently. The engine's scan reports the same case as `key_closure_invalid` from agledger-api 2.0.0, and the walk is held to the engine's verdicts on 1500 recorded registries.
+- **`KEY_CLOSURE_INVALID` on a closure by a key reached but not anchored** that retires an anchored key earlier, or with force, than any closure a published key signed: a walk over the Server's published key documents cannot see that closure, so it reads the key differently. The engine's scan reports the same case as `key_closure_invalid` from API 2.0.0, and the walk is held to the engine's verdicts on 1500 recorded registries.
 - `public_keys` also takes the `/v1/verification-keys` body as served (`{"data": [...]}`) and the `VerificationKeysResponse` that `client.verification_keys.list()` returns.
 - `agledger-verify -f json` lists `entries` on an `/audit-export` file and `failureCount` on each dump section, as `@agledger/verify` prints them, with a dump's `failures` capped at 1000 in JSON.
 - The `toggle_api_key` and `update_api_key` docstrings say revocation is one-way for an admin key: re-enabling a revoked key is a 403 `PLATFORM_REQUIRED` unless a platform credential sends it.
@@ -99,7 +108,7 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 - **`Scopes.DISPUTES_WRITE`** (`disputes:write`), which opening, evidencing, withdrawing and resolving a dispute now require.
 - **Unsigned rows are graded as the engine grades them.** An entry with no `signingKeyId` is reduced coverage only from before the install began signing. After an entry in the same chain that names a key, or written at or after the earliest `activatedAt` across the key set (retired keys included), it fails the new `CHAIN_ENTRY_UNSIGNED`. On a dump the same instant applies to vault checkpoints (`CHECKPOINT_UNSIGNED`), to read-log leaves carrying the unsigned sentinel kid (`TENANT_READ_LEAF_UNSIGNED`, also after a signed leaf in the org's log) and to read-log tree heads (`TENANT_CHECKPOINT_UNSIGNED`). The grading runs after every structural check and ahead of the caller's key policy. `earliest_key_activation` and `written_while_signing` are exported from `agledger.verify`.
 - **A full dump re-verifies agent signatures from the cert keys it signs itself.** Each `EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its cert's `publicKeyJwk`; the dump verifier takes those keys from a chain it verified clean, checkpoints included, and only from entries whose vault signature checked, and uses them beside any `agent_keys`. `VaultChainsReport.cert_keys_from_chain` counts them. An org-scoped dump leaves that chain out and still needs `agent_keys`.
-- **Conformance corpus regenerated from agledger-api 2.0.0 (`5444a54f`).** The export slice goes from 32 to 35 vectors and the dump slice from 18 to 28, adding the unsigned-entry vectors and, on the dump, the key-statement vectors that pin `trustAnchors` (`valid-key-succession` pinned both ways, `chain-signing-key-unanchored`, `chain-signing-key-closed-endorser`). Every vector passes as its manifest expects. The three key-window vectors (`chain-key-expired`, `chain-key-not-yet-active`, `valid-rotation-boundary`) sign the window they test and are pinned on the vault key, so pinned they grade as exactly the code their manifest names. Every export statement carries its row `id` and `createdAt`, and the manifest's key-policy option is `requireSuppliedKeys`. The walk is also held to the engine's recorded verdicts on 1,500 seeded random registries (recorded at `5444a54f`, the fixture verify-core carries, with each distrusted key's span and what the engine accounts for), which now include later admissions of trusted keys and write times that tie within a microsecond under random row ids: as a dump, with the statements shuffled at microsecond write times, and over the key document the engine publishes for each, where it gives exactly the engine's own walk over that document.
+- **Conformance corpus regenerated from API 2.0.0.** The export slice goes from 32 to 35 vectors and the dump slice from 18 to 28, adding the unsigned-entry vectors and, on the dump, the key-statement vectors that pin `trustAnchors` (`valid-key-succession` pinned both ways, `chain-signing-key-unanchored`, `chain-signing-key-closed-endorser`). Every vector passes as its manifest expects. The three key-window vectors (`chain-key-expired`, `chain-key-not-yet-active`, `valid-rotation-boundary`) sign the window they test and are pinned on the vault key, so pinned they grade as exactly the code their manifest names. Every export statement carries its row `id` and `createdAt`, and the manifest's key-policy option is `requireSuppliedKeys`. The walk is also held to the engine's recorded verdicts on 1,500 seeded random registries (recorded against API 2.0.0, the fixture verify-core carries, with each distrusted key's span and what the engine accounts for), which now include later admissions of trusted keys and write times that tie within a microsecond under random row ids: as a dump, with the statements shuffled at microsecond write times, and over the key document the engine publishes for each, where it gives exactly the engine's own walk over that document.
 
 ### Fixed
 
@@ -113,7 +122,7 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 - `VerificationKey.distrusted_from` declares the `distrustedFrom` instant API 2.0 publishes on a distrusted key, and `schemas.preview()` documents the `unchanged` flag of its answer. The preview result is the Server's body as a dict, so there is no typed field to add.
 
 - **A copied key-statement row is a no-op.** A dump row repeating an earlier row's signed payload counts once, at its first write, as the engine reads it, so a `vault_key_statements` row copied under a new id and time no longer reads as a second admission or as a statement stored after a closure, and no longer fails every dump. On a key document a copy stays a second statement, since its `createdAt` is the holder's word.
-- Two readings match agledger-api from `48670192` on, where an earlier engine's would account for what should fail: only a retirement signed by a key the walk trusts bounds what a distrust entry accounts for, and a later admission of a trusted key that the key itself signed is always a finding, never accounted for. The engine differential is re-recorded at agledger-api `007ffe32` (the fixture verify-core carries, with the `distrustedFrom` each key document lists) and holds the walk to the engine exactly, with no tolerance for a narrower reading.
+- Two readings match the current engine, where an earlier engine's would account for what should fail: only a retirement signed by a key the walk trusts bounds what a distrust entry accounts for, and a later admission of a trusted key that the key itself signed is always a finding, never accounted for. The engine differential is re-recorded against the current engine (the fixture verify-core carries, with the `distrustedFrom` each key document lists) and holds the walk to the engine exactly, with no tolerance for a narrower reading.
 - The admission of a trusted key signed by a distrusted key from its cutoff on is no finding when it is that key's first admission, and no remedy names a distrusted key as a pin: a closure that still counts suggests a dated `distrusted_keys` entry, its instant defaulting to the signer's earliest counting retirement capped at its write time.
 
 - **The README Quick Start runs.** It submitted the completion with the principal's key, which the Server refuses with 403 (`SUBMIT_COMPLETION` requires the performer); it now runs a principal and a performer client, and the disputes and vault-checkpoint examples name the key each call takes. The Quick Start, disputes, audit-export verification, predicate, attestation, vault-checkpoint and async examples were run against an API 2.0 Server.
@@ -132,11 +141,11 @@ Targets AGLedger API 2.0, and only 2.0: nothing here keeps a 1.x wire shape aliv
 
 - **Actor attribution is verified, not displayed on trust.** An audit export's own verification guide names `actorDisplayName`, `actorOwnerType` and `humanReadableLabel` as unsigned display projections and tells the auditor that the attribution to rely on is the `actorId`/`actorOwnerId` UUID. Those two, and `actorRole`, are signature-covered in the COSE protected header (CWT_Claims label 15, private label -65539), and nothing compared them against it: an export or dump row could be re-attributed to another actor, changing nothing else, and still verify with out-of-band keys. They are now cross-checked per entry, and a divergence fails the new `CHAIN_ACTOR_ATTRIBUTION_MISMATCH`. The check runs on `verify_export` and on `verify_dump`, and `optional_checks['actor_attribution']` says whether it applied.
 
-Reconciled against the AGLedger API 1.8.0 release (`v1.8.0`, `3948cc68`). Adds OIDC workload identity: an agent can authenticate with a short-lived certificate obtained from its own identity provider instead of an API key.
+Reconciled against the AGLedger API 1.8.0 release (`v1.8.0`). Adds OIDC workload identity: an agent can authenticate with a short-lived certificate obtained from its own identity provider instead of an API key.
 
 ### Added
 
-- **Conformance corpus regenerated from the tagged 1.8.0 engine** (`apiGitSha 3948cc68`, the `v1.8.0` commit), replacing a corpus generated at API 1.3.4. The export slice goes from 23 to 32 vectors and the dump slice from 12 to 18, and the additions cover this release's own work: `export/actor-attribution-mismatch.json` and `dump/chain-actor-attribution-mismatch` both expect `CHAIN_ACTOR_ATTRIBUTION_MISMATCH`, and `export/agent-signature-invalid.json` expects `CHAIN_AGENT_SIGNATURE_INVALID`. The runner now maps the manifest's `agentKeysFile` to the verifier's agent-key input; without it that vector ran with no agent keys, reported `skipped_no_input`, passed, and failed the suite on a check that never executed.
+- **Conformance corpus regenerated from the tagged 1.8.0 engine** (the `v1.8.0` release), replacing a corpus generated at API 1.3.4. The export slice goes from 23 to 32 vectors and the dump slice from 12 to 18, and the additions cover this release's own work: `export/actor-attribution-mismatch.json` and `dump/chain-actor-attribution-mismatch` both expect `CHAIN_ACTOR_ATTRIBUTION_MISMATCH`, and `export/agent-signature-invalid.json` expects `CHAIN_AGENT_SIGNATURE_INVALID`. The runner now maps the manifest's `agentKeysFile` to the verifier's agent-key input; without it that vector ran with no agent keys, reported `skipped_no_input`, passed, and failed the suite on a check that never executed.
 
 - **`bearer_token=` on `AgledgerClient` and `AsyncAgledgerClient`**, beside `api_key=`. Pass exactly one; both at once raises `ConfigurationError`. It takes a string, a function the client calls before every request (async functions on the async client), or a credential object implementing `BearerCredential` (`AsyncBearerCredential` on the async client). The function form caches nothing and is called again on a retried attempt, so a token source for an issuer registered with `jti_single_use` works as written. `AGLEDGER_API_KEY` still backs `api_key` only.
 
@@ -355,7 +364,7 @@ Everything the Server removed here was removed without an alias, so this SDK rem
 
 ### Fixed (enum members that could never have worked)
 
-- **`DisputeStatus` dropped `OPENED` and `TIER_1_REVIEW`.** Neither exists anywhere in the API. The type reaches three strict-enum query params (`GET /v1/records`, `GET /v1/records/search`, `GET /v1/disputes`), so either value was a guaranteed 400 from a documented parameter. The full set is `EVIDENCE_WINDOW`, `TIER_2_REVIEW`, `ESCALATED`, `TIER_3_ARBITRATION`, `RESOLVED`, `WITHDRAWN`. `RecordRow` carried its own copy of the member list, which is how the two declarations drifted apart; it now uses the named type. Reported by agledger-testbed against the 1.9.0 candidate (F-981).
+- **`DisputeStatus` dropped `OPENED` and `TIER_1_REVIEW`.** Neither exists anywhere in the API. The type reaches three strict-enum query params (`GET /v1/records`, `GET /v1/records/search`, `GET /v1/disputes`), so either value was a guaranteed 400 from a documented parameter. The full set is `EVIDENCE_WINDOW`, `TIER_2_REVIEW`, `ESCALATED`, `TIER_3_ARBITRATION`, `RESOLVED`, `WITHDRAWN`. `RecordRow` carried its own copy of the member list, which is how the two declarations drifted apart; it now uses the named type. Found in pre-release validation of the 1.9.0 candidate.
 
 - **The `dispute_status` request parameters name their values.** Seven signatures across `records` took a bare `str`, so nothing at the call site said what was valid. They take `DisputeStatus | str` now, which keeps a value from a newer Server working.
 
@@ -367,7 +376,7 @@ Everything the Server removed here was removed without an alias, so this SDK rem
 
 ### Changed
 
-- **An auto-paginating walk that hits the page ceiling now raises `PaginationLimitError` instead of returning a prefix.** `paginate` stopped at 100 pages and returned, so nothing distinguished "walked the whole listing" from "hit the ceiling". It was worse here than in the TypeScript SDK: `records.list_all()` accepted neither `limit` nor `max_pages`, so the bound was unreachable from the public method and the quiet stop landed at 5000 rows. The ceiling is a runaway guard, not a result, and this release makes it say so. A bound you pass yourself is an intentional stop and still ends the walk quietly. `compliance.stream_all` had the same shape and gets the same treatment, where the stakes are higher: a SIEM feed that stops early and says nothing reads as a quiet window with no events in it. Reported by agledger-testbed against the 1.9.0 candidate (agents#120).
+- **An auto-paginating walk that hits the page ceiling now raises `PaginationLimitError` instead of returning a prefix.** `paginate` stopped at 100 pages and returned, so nothing distinguished "walked the whole listing" from "hit the ceiling". It was worse here than in the TypeScript SDK: `records.list_all()` accepted neither `limit` nor `max_pages`, so the bound was unreachable from the public method and the quiet stop landed at 5000 rows. The ceiling is a runaway guard, not a result, and this release makes it say so. A bound you pass yourself is an intentional stop and still ends the walk quietly. `compliance.stream_all` had the same shape and gets the same treatment, where the stakes are higher: a SIEM feed that stops early and says nothing reads as a quiet window with no events in it. Found in pre-release validation of the 1.9.0 candidate.
 
 - **`max_pages` is reachable from every walker, and `limit` from the ones whose route takes it.** `records.list_all()` gains both, `events.list_all()` gains both, `completions.list_all()` and `admin.list_all_api_keys()` gain `max_pages`. `records.get_chain()` and `compliance.stream_all()` took `max_pages: int = 100`, which is an explicit bound as far as the guard is concerned, so on those two the default is now `None` and the guard applies: a chain long enough to exhaust it raises rather than truncating, which is the same defect `get_chain` was fixed for elsewhere in this release.
 
@@ -381,7 +390,7 @@ Each of these was reachable from a typed, documented method and failed on every 
 
 - **Mapping query params are expanded into the API's bracket notation.** `httpx` renders a dict parameter as its Python repr, so `search(metadata={"state": "blocked"})` went out as `metadata={'state': 'blocked'}` and came back `400 querystring/metadata must be object`. Metadata-filtered search had never worked from this SDK. A `datetime` in a query param now serializes as ISO-8601 rather than `str(dt)`, whose space separator the date-time params reject.
 
-- **`admin.list_api_keys()` and `admin.list_all_api_keys()` take typed filters and send them camelCase.** Both took `**params` and forwarded the kwarg names verbatim, so the idiomatic Python call went out as `owner_id`, `org_id`, `owner_type`, `is_active` and `created_before` and came back `400 querystring must NOT have additional properties`. Only `role` ever reached the engine, because it is the one filter that is a single word, which left single-owner mode unreachable from this SDK: the mode is selected by `ownerId`. The parameters are keyword-only now (`owner_id`, `org_id`, `owner_type`, `role`, `is_active`, `created_before`, `limit`, `offset`, `cursor`), so a camelCase kwarg is a `TypeError` at the call site rather than a 400 on the wire. Reported by agledger-testbed against the 1.9.0 candidate (sdk-python#10).
+- **`admin.list_api_keys()` and `admin.list_all_api_keys()` take typed filters and send them camelCase.** Both took `**params` and forwarded the kwarg names verbatim, so the idiomatic Python call went out as `owner_id`, `org_id`, `owner_type`, `is_active` and `created_before` and came back `400 querystring must NOT have additional properties`. Only `role` ever reached the engine, because it is the one filter that is a single word, which left single-owner mode unreachable from this SDK: the mode is selected by `ownerId`. The parameters are keyword-only now (`owner_id`, `org_id`, `owner_type`, `role`, `is_active`, `created_before`, `limit`, `offset`, `cursor`), so a camelCase kwarg is a `TypeError` at the call site rather than a 400 on the wire. Found in pre-release validation of the 1.9.0 candidate (sdk-python#10).
 
 - **`records.search(principal_agent_id=...)` is removed.** No record endpoint accepts a `principalAgentId` query param, and the search querystring rejects unknown properties, so it was a guaranteed `400`. What replaces it depends on the key: on an **agent key**, `role="principal"` narrows the caller's own auto-scope to the Records it is principal on. On an **admin or platform key** `role` is itself a `400` (it narrows an agent's auto-scope and those keys have none), so narrow with `performer_agent_id` instead.
 
@@ -411,7 +420,7 @@ Each of these was reachable from a typed, documented method and failed on every 
 
 - **`BulkCreateResultItem.recovery_hint`**, and **`APIError.registry_version`** for the `CONFLICTING_VERSION` 409, which names the registry slot a schema conflict is on.
 
-- **`admin.list_all_api_keys()`**, sync and async. `GET /v1/admin/api-keys` used to slice cross-owner mode in SQL and then report `hasMore: false` with `total` set to the count it had just sliced, so an install with more than 200 keys reported exactly 200 and called itself complete. That envelope is honest as of api#1251, and both modes now cap at `limit` (default 200), so a key audit reading `data` and stopping under-reports and can finally tell. The iterator resends the filters with each cursor, which the single-owner cursor requires: it carries the owner it was minted under, and replaying it without the matching `ownerId` is a 400 rather than a silent slide into the install-wide listing at the same offset.
+- **`admin.list_all_api_keys()`**, sync and async. `GET /v1/admin/api-keys` used to slice cross-owner mode in SQL and then report `hasMore: false` with `total` set to the count it had just sliced, so an install with more than 200 keys reported exactly 200 and called itself complete. The API now reports that envelope honestly, and both modes now cap at `limit` (default 200), so a key audit reading `data` and stopping under-reports and can finally tell. The iterator resends the filters with each cursor, which the single-owner cursor requires: it carries the owner it was minted under, and replaying it without the matching `ownerId` is a 400 rather than a silent slide into the install-wide listing at the same offset.
 
 ### Changed
 
@@ -461,7 +470,7 @@ Pinning `publisher` against a Server older than this API release will be rejecte
 
 ### Fixed
 
-- **A runtime that cannot compute an algorithm no longer reads as tamper.** With the OpenSSL FIPS provider active there is no EdDSA, so `cryptography` refuses a perfectly good Ed25519 key: depending on how it was built, either the key fails to load or `verify()` raises `UnsupportedAlgorithm`. Both were caught and reported as `CHAIN_SIGNATURE_INVALID`, which is indistinguishable from a forgery, so a FIPS-locked auditor verifying an intact chain got `0/N verified` and a tamper report on a chain that is fine (agents#113, found in the TS verifier and mirrored here).
+- **A runtime that cannot compute an algorithm no longer reads as tamper.** With the OpenSSL FIPS provider active there is no EdDSA, so `cryptography` refuses a perfectly good Ed25519 key: depending on how it was built, either the key fails to load or `verify()` raises `UnsupportedAlgorithm`. Both were caught and reported as `CHAIN_SIGNATURE_INVALID`, which is indistinguishable from a forgery, so a FIPS-locked auditor verifying an intact chain got `0/N verified` and a tamper report on a chain that is fine (found in the TS verifier and mirrored here).
 
   `verify_export` now proves runtime capability before dispatching, by checking a fixed known-answer signature for the algorithm. When the runtime refuses, the result is `CHAIN_UNSUPPORTED_ALGORITHM` with `signature="unsupported"`, whose detail names the FIPS provider as the cause and says to re-run on an unrestricted host. Still fail-closed: `valid` stays `False`, because an uncheckable chain is not a verified chain. The known-answer vectors are fixed bytes shared with `@agledger/verify-core`, so nothing in the audited export can influence whether a signature failure is reported as "not checked".
 
@@ -484,7 +493,7 @@ Pinning `publisher` against a Server older than this API release will be rejecte
 
 ### Changed (breaking for a client that never worked)
 
-- **`base_url` is now required.** It defaulted to `https://agledger.example.com`, a placeholder that resolves nowhere, so `AgledgerClient(api_key=...)` constructed fine and then failed every call against a host the caller never named and could only find by reading the SDK source. Omitting it now raises `ConfigurationError` at construction, where the mistake is. Every AGLedger deployment is self-hosted, so there was never a sensible default. This is the same fix the TypeScript SDK shipped at 1.7.0 (agents#109) and the CLI at 1.3.0 (agents#105); the Python client kept the placeholder through both, so the three clients disagreed about the same mistake. No working integration can be affected: a client with no base URL could never reach a Server. `api_key` still falls back to `AGLEDGER_API_KEY`.
+- **`base_url` is now required.** It defaulted to `https://agledger.example.com`, a placeholder that resolves nowhere, so `AgledgerClient(api_key=...)` constructed fine and then failed every call against a host the caller never named and could only find by reading the SDK source. Omitting it now raises `ConfigurationError` at construction, where the mistake is. Every AGLedger deployment is self-hosted, so there was never a sensible default. This is the same fix the TypeScript SDK shipped at 1.7.0 and the CLI at 1.3.0; the Python client kept the placeholder through both, so the three clients disagreed about the same mistake. No working integration can be affected: a client with no base URL could never reach a Server. `api_key` still falls back to `AGLEDGER_API_KEY`.
 
 ### Added
 
@@ -510,11 +519,11 @@ Pinning `publisher` against a Server older than this API release will be rejecte
 
 ### Fixed
 
-- **Vault checkpoints join on `chain_key`, so a healthy schema chain no longer fails.** A schema chain's checkpoint carries a derived UUIDv8 in `record_id` (the engine needs a non-null uuid for a chain whose rows have none), which matches no `audit_vault` row. Grouping checkpoints by that column stranded them, and a stock install returned a `CHECKPOINT_ROW_MISSING` failure on a vault nobody had touched: a tamper alarm for any audit gate wired to the exit code. Checkpoints now group on the producer's `chain_key`, falling back to `record_id` so dumps taken before the producer emitted it verify exactly as before. Failures also name a schema chain as `Chain schema:<orgId>` rather than `RecordRow <uuidv8>`, which sent auditors to `/v1/records/{id}` for a 404 (agents#103).
+- **Vault checkpoints join on `chain_key`, so a healthy schema chain no longer fails.** A schema chain's checkpoint carries a derived UUIDv8 in `record_id` (the engine needs a non-null uuid for a chain whose rows have none), which matches no `audit_vault` row. Grouping checkpoints by that column stranded them, and a stock install returned a `CHECKPOINT_ROW_MISSING` failure on a vault nobody had touched: a tamper alarm for any audit gate wired to the exit code. Checkpoints now group on the producer's `chain_key`, falling back to `record_id` so dumps taken before the producer emitted it verify exactly as before. Failures also name a schema chain as `Chain schema:<orgId>` rather than `RecordRow <uuidv8>`, which sent auditors to `/v1/records/{id}` for a 404.
 
 ### Changed (widened union)
 
-- **`CHAIN_KEY_NOT_YET_ACTIVE`** is now reported for an entry written BEFORE its signing key's activation. Both directions of the temporal key-window check previously reported `CHAIN_KEY_EXPIRED`, so a consumer branching on the code was told "expired" about a key that had not started yet and would investigate rotation or retention when the real condition is a backdated entry or clock skew. `CHAIN_KEY_EXPIRED` now means the retirement side only. Verdicts are unchanged: what failed before still fails (agents#112).
+- **`CHAIN_KEY_NOT_YET_ACTIVE`** is now reported for an entry written BEFORE its signing key's activation. Both directions of the temporal key-window check previously reported `CHAIN_KEY_EXPIRED`, so a consumer branching on the code was told "expired" about a key that had not started yet and would investigate rotation or retention when the real condition is a backdated entry or clock skew. `CHAIN_KEY_EXPIRED` now means the retirement side only. Verdicts are unchanged: what failed before still fails.
 
 ## [1.6.1] - 2026-08-07
 
@@ -531,7 +540,7 @@ Signing-agility wave 2: ES256 verification across the offline and webhook surfac
 
 ### Changed
 
-- **Conformance corpus regenerated from engine 1.3.4 @ `ed3369ab`** (full corpus, including the ES256 wave: `valid-es256` export + dump, `es256-signature-invalid`, `es256-header-alg-mismatch`).
+- **Conformance corpus regenerated from API 1.3.4** (full corpus, including the ES256 wave: `valid-es256` export + dump, `es256-signature-invalid`, `es256-header-alg-mismatch`).
 
 ## [1.5.1] - 2026-08-05
 
@@ -583,7 +592,7 @@ Docs only. No wire change.
 
 ### Fixed
 
-- Corrected the licensing claim (cross-repo #99): federation and multi-node are free on the bundled database; only an external or managed database requires an Enterprise license. The prior text wrongly listed federation and multi-node as gated.
+- The licensing section now states that federation and multi-node are free on the bundled database, and only an external or managed database requires an Enterprise license.
 
 ### Changed
 
@@ -640,7 +649,7 @@ Semver note: this is a minor, not a major, because the removed/reshaped import s
 
 ### Changed
 
-- Docs only: removed em-dashes from the README prose (cross-repo #98 writing-style sweep). Rewrote each sentence rather than swapping the glyph. No code, type, or runtime change.
+- Docs only: removed em-dashes from the README prose (writing-style sweep). Rewrote each sentence rather than swapping the glyph. No code, type, or runtime change.
 
 ## [1.0.3] - 2026-06-29
 
@@ -720,7 +729,7 @@ No functional change. First release published from CI with **build provenance** 
 
 ## [0.8.12] - 2026-06-02
 
-### Added — turnkey offline dump verifier + `agledger-verify` CLI (closes [agledger-agents#81](https://github.com/agledger-ai/agledger-agents/issues/81), F-708 follow-up)
+### Added — turnkey offline dump verifier + `agledger-verify` CLI
 
 The Python sibling of the TypeScript `@agledger/verify` full-vault dump verifier. Healthcare/financial compliance reviewers who standardize on Python can now verify an AGLedger audit dump offline without writing the COSE_Sign1 / Ed25519 / chain-integrity logic by hand.
 
@@ -737,7 +746,7 @@ The dump path's only third-party needs are `cbor2` + `cryptography` (the `verify
 - `WebhookEventType` reconciled to the API set (37 event types + the `*` wildcard; open literal).
 - Dropped the retired ACH-* built-in contract-type model (the API deleted the built-ins; orgs own their entire type namespace, with four editable samples auto-seeded).
 
-### Fixed — `compliance.create_assessment` ergonomics ([agledger-agents#88](https://github.com/agledger-ai/agledger-agents/issues/88), F-740)
+### Fixed — `compliance.create_assessment` ergonomics
 
 - `create_assessment` (sync + async) was a raw `**params` passthrough that required camelCase keys, so the idiomatic snake_case call 400'd against the `additionalProperties:false` route. It now takes explicit typed kwargs (`risk_level`, `domain`, `human_oversight`, `testing_results`) and maps snake→camel internally, matching its sibling `create_record`.
 
@@ -762,24 +771,22 @@ Mirrors the TypeScript SDK 0.8.13 sweep. A full minor of API field-shape drift h
 
 ## [0.8.10] - 2026-05-29
 
-Closes [agledger-agents#83 (F-730)](https://github.com/agledger-ai/agledger-agents/issues/83) and [#84 (F-731)](https://github.com/agledger-ai/agledger-agents/issues/84).
-
 ### Fixed
 
-- **`records.get_chain()` crashed with a Pydantic `ValidationError` on every call.** It iterated the paginated response dict's keys instead of `data["data"]`, validating the string `"data"` as a `RecordRow`. It now unwraps the envelope via the page helper (tolerant of a bare-array shape too). Same bug class as the 0.8.9 F-713 fix. (F-730)
+- **`records.get_chain()` crashed with a Pydantic `ValidationError` on every call.** It iterated the paginated response dict's keys instead of `data["data"]`, validating the string `"data"` as a `RecordRow`. It now unwraps the envelope via the page helper (tolerant of a bare-array shape too). Same bug class as the 0.8.9 audit-export fix.
 
 ### Added
 
-- **Offline `verify_export()` now detects denormalised-payload tampering** — the export's own verificationGuide step 4 (F-731). When an export entry carries the row `payload`+`entryType` (engine ≥ v0.26.x), the verifier re-decodes the signed predicate from `coseSign1` and deep-equals it against the row projection; a `payload` rewritten while `coseSign1` stays intact fails `CHAIN_PAYLOAD_BINDING_MISMATCH`. Ports `build_predicate_for_row`/`decode_predicate` from `@agledger/verify-core`; adds the `not-checked` signature state for parity (F-732). Validated against a live engine v0.26.4.
+- **Offline `verify_export()` now detects denormalised-payload tampering** — the export's own verificationGuide step 4. When an export entry carries the row `payload`+`entryType` (engine ≥ v0.26.x), the verifier re-decodes the signed predicate from `coseSign1` and deep-equals it against the row projection; a `payload` rewritten while `coseSign1` stays intact fails `CHAIN_PAYLOAD_BINDING_MISMATCH`. Ports `build_predicate_for_row`/`decode_predicate` from `@agledger/verify-core`; adds the `not-checked` signature state for parity. Validated against a live engine v0.26.4.
 
 ## [0.8.9] - 2026-05-28
 
-Closes [agledger-agents#82 (F-713)](https://github.com/agledger-ai/agledger-agents/issues/82) and [#80 (F-710)](https://github.com/agledger-ai/agledger-agents/issues/80), plus a codebase-wide sweep for the same two bug classes (required-field model drift that crashes Pydantic; request-body params the API rejects). Every fix was verified against the live API schemas.
+Two contract-drift fixes, plus a codebase-wide sweep for the same two bug classes (required-field model drift that crashes Pydantic; request-body params the API rejects). Every fix was verified against the live API schemas.
 
 ### Fixed
 
-- **F-713 (MAJOR, breaks the headline verification flow)**: `records.get_audit_export()` no longer crashes Pydantic. `AuditExportEntry` required `description`, but the engine renamed it to `humanReadableLabel` and dropped `description` (F-711). Every entry failed validation. The field is now `human_readable_label` (optional); the model also gained the F-705 actor-display fields (`actor_owner_id`, `actor_display_name`, `actor_owner_type`).
-- **F-710 (LOW, advertise-but-doesn't-work)**: `completions.submit()` no longer sends a root-level `notes` key — the API rejects it (`additionalProperties: false`). Removed `notes`; added `evidence_hash` (the genuinely-supported field, for encrypted mode), reaching parity with the TS SDK. Carry AI-agent rationale inside `evidence` via a `completionSchema` field.
+- `records.get_audit_export()` no longer crashes Pydantic. `AuditExportEntry` required `description`, but the engine renamed it to `humanReadableLabel` and dropped `description`. Every entry failed validation. The field is now `human_readable_label` (optional); the model also gained the actor-display fields (`actor_owner_id`, `actor_display_name`, `actor_owner_type`).
+- `completions.submit()` no longer sends a root-level `notes` key — the API rejects it (`additionalProperties: false`). Removed `notes`; added `evidence_hash` (the genuinely-supported field, for encrypted mode), reaching parity with the TS SDK. Carry AI-agent rationale inside `evidence` via a `completionSchema` field.
 - **Same-class crashes found in the sweep** — required fields the server renamed/dropped, which crashed on every call:
   - `AgentProfile` / `AgentDirectoryEntry`: required `name`/`slug`/`updatedAt`/`isActive`; the engine emits `displayName` and none of the others. `agents.get()` / `agents.list()` crashed.
   - `Event`: wire fields are `type` and `data`, not `eventType` / `payload`. `events.list()` crashed.
@@ -796,18 +803,18 @@ Closes [agledger-agents#82 (F-713)](https://github.com/agledger-ai/agledger-agen
 
 ### Changed
 
-- **Testing**: pytest now sets `pythonpath = ["src"]` so the suite runs against the working tree, not a stale installed wheel. Without this, prior runs silently validated the last *published* version — the root cause that let F-713/F-710/F-706 ship. Added `tests/test_response_contract.py` round-tripping each model against real-server-shaped payloads, and populated the previously-empty `get_audit_export` entry fixture.
+- **Testing**: pytest now sets `pythonpath = ["src"]` so the suite runs against the working tree, not a stale installed wheel. Without this, prior runs silently validated the last *published* version — the root cause that let the defects fixed in this release ship. Added `tests/test_response_contract.py` round-tripping each model against real-server-shaped payloads, and populated the previously-empty `get_audit_export` entry fixture.
 
 ## [0.8.8] - 2026-05-28
 
-Closes [agledger-agents#77 (F-698)](https://github.com/agledger-ai/agledger-agents/issues/77), [#78 (F-702)](https://github.com/agledger-ai/agledger-agents/issues/78), and [#79 (F-706)](https://github.com/agledger-ai/agledger-agents/issues/79). Brings the Python SDK into TS-SDK behavior parity on retry policy and rate-limit observability.
+Brings the Python SDK into TS-SDK behavior parity on retry policy and rate-limit observability.
 
 ### Fixed
 
-- **F-706 (HIGH, auditor-blocking)**: `client.verification_keys.list()` no longer crashes Pydantic on the live engine response. The model required `hashAlgorithm`, which the engine doesn't always emit (it's an implicit COSE/Ed25519 default). Made optional. Without this fix the load-bearing call for the independent-offline-audit story crashed before returning.
-- **F-706 follow-on**: `RecordAuditExport.entries[].position` / `timestamp` were the pre-v0.25 wire names; current engines emit `chainPosition` + `createdAt`. Both old and new names now parse cleanly. The `AuditExportEntry` model gained the modern actor fields (`actorId`, `actorRole`, `actorOidcIss`, `actorOidcSub`, `actorOidcSynthesized`) and `recordId` to match the engine wire.
-- **F-698 (HIGH, audit-independence)**: `agledger.verify.verify_export(public_keys=…)` now accepts the natural `client.verification_keys.list().data` list shape — list of `VerificationKey` Pydantic models or dicts of that shape — in addition to the compact `{keyId: spki_b64}` mapping. The wrong shape raises `TypeError` at the boundary rather than silently falling back to embedded keys (`key_provenance.out_of_band == 0` with `valid: True`). Polymorphic field-name access via `keyId`/`key_id` and `publicKey`/`public_key` uses `in`/`is None` rather than `or`, so an empty-string keyId no longer silently substitutes the snake_case sibling. Empty strings are rejected with an accurate diagnostic.
-- **F-702 (LOW)**: `Verdict` type widened to `Literal["accept", "reject"] | str` for forward compatibility. Note: under PEP 604, the literal arm collapses to plain `str` for static analyzers; this is documentation parity with the TS SDK's open verdict union rather than a type-system enforcement.
+- `client.verification_keys.list()` no longer crashes Pydantic on the live engine response. The model required `hashAlgorithm`, which the engine doesn't always emit (it's an implicit COSE/Ed25519 default). Made optional. Without this fix the load-bearing call for the independent-offline-audit story crashed before returning.
+- `RecordAuditExport.entries[].position` / `timestamp` were the pre-v0.25 wire names; current engines emit `chainPosition` + `createdAt`. Both old and new names now parse cleanly. The `AuditExportEntry` model gained the modern actor fields (`actorId`, `actorRole`, `actorOidcIss`, `actorOidcSub`, `actorOidcSynthesized`) and `recordId` to match the engine wire.
+- **Audit independence**: `agledger.verify.verify_export(public_keys=…)` now accepts the natural `client.verification_keys.list().data` list shape — list of `VerificationKey` Pydantic models or dicts of that shape — in addition to the compact `{keyId: spki_b64}` mapping. The wrong shape raises `TypeError` at the boundary rather than silently falling back to embedded keys (`key_provenance.out_of_band == 0` with `valid: True`). Polymorphic field-name access via `keyId`/`key_id` and `publicKey`/`public_key` uses `in`/`is None` rather than `or`, so an empty-string keyId no longer silently substitutes the snake_case sibling. Empty strings are rejected with an accurate diagnostic.
+- `Verdict` type widened to `Literal["accept", "reject"] | str` for forward compatibility. Note: under PEP 604, the literal arm collapses to plain `str` for static analyzers; this is documentation parity with the TS SDK's open verdict union rather than a type-system enforcement.
 
 ### Added
 
@@ -835,7 +842,7 @@ Verifier consolidation (Pass 1). Mirrors the TypeScript wave (`@agledger/verify-
 
 ### Fixed
 
-- **Offline audit verifier rejected valid exports (F-682).** `agledger.verify` read the legacy `position` field on each export entry, but current exports (v0.25+) emit `chainPosition`. With `position` absent, every valid export failed with a false `position_gap` on the first entry. The verifier now reads `chainPosition`, falling back to `position` for pre-v0.25 exports. Verified end-to-end against a live export. (Same root cause was present in `@agledger/cli` and `@agledger/mcp-server`, fixed in lockstep.)
+- **Offline audit verifier rejected valid exports.** `agledger.verify` read the legacy `position` field on each export entry, but current exports (v0.25+) emit `chainPosition`. With `position` absent, every valid export failed with a false `position_gap` on the first entry. The verifier now reads `chainPosition`, falling back to `position` for pre-v0.25 exports. Verified end-to-end against a live export. (Same root cause was present in `@agledger/cli` and `@agledger/mcp-server`, fixed in lockstep.)
 
 ## [0.8.5] - 2026-05-27
 
@@ -951,7 +958,7 @@ Tracks AGLedger API v0.24.0. Mirrors the `@agledger/sdk` 0.8.1 wave — pre-laun
 
 ## [0.8.0] - 2026-05-19
 
-Tracks AGLedger API v0.23.0. SCITT vocabulary alignment + canonical COSE_Sign1 chain envelope + new SCITT Transparency Service (SCRAPI) surface. Mirrors the `@agledger/sdk` 0.8.0 wave. Closes cross-repo issue agledger-agents#68.
+Tracks AGLedger API v0.23.0. SCITT vocabulary alignment + canonical COSE_Sign1 chain envelope + new SCITT Transparency Service (SCRAPI) surface. Mirrors the `@agledger/sdk` 0.8.0 wave.
 
 ### Changed (BREAKING — Receipt → Completion rename, no compat aliases)
 
@@ -1019,14 +1026,14 @@ Implements `draft-ietf-scitt-scrapi-09`. Binary `application/cose` wire; RFC 929
 
 ## [0.7.3] - 2026-05-02
 
-Resolves cross-repo issue agledger-agents#64 (testbed F-526). Patch fix for a 0.7.2 regression in `records.bulk_create()`.
+Patch fix for a 0.7.2 regression in `records.bulk_create()`.
 
 ### Fixed
 - **`BulkCreateResultItem.status` is now `Literal["created", "replayed", "error"]`** (was `int`). The API has always returned the string token; the 0.7.2 typed model annotated it as `int`, so every `bulk_create()` call raised `pydantic.ValidationError` at the deserialization step. The TS SDK had the same wrong shape (`number`); fixed in parallel in `@agledger/sdk` 0.7.2.
 
 ## [0.7.2] - 2026-05-02
 
-Resolves cross-repo issue agledger-agents#62 (testbed F-524). Type-safety / parity gaps versus TS SDK 0.7.1 with no API change.
+Type-safety / parity gaps versus TS SDK 0.7.1 with no API change.
 
 ### Fixed
 - **`agledger.verify.verify_export()` now accepts the typed `RecordAuditExport` model** returned by `client.records.get_audit_export()`. Previously raised `AttributeError` deep in the call stack — customers building the canonical fetch+verify flow had to manually `.model_dump(by_alias=True)` first. Both raw `dict` and Pydantic model inputs are supported.

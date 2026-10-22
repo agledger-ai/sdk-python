@@ -43,6 +43,10 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from agledger.verify.failures import FailureCode
+from agledger.verify.federation_wire import (
+    FederationWireCounts,
+    build_federation_key_registry,
+)
 from agledger.verify.key_statements import (
     DistrustedKey,
     KeyTrust,
@@ -86,6 +90,7 @@ from agledger.verify.verify_export import (
     cbor_whole,
     chain_row,
     check_agent_signature,
+    check_sealed_federation_wire,
     decode_cose_kid,
     decode_cose_parts,
     decode_cose_predicate,
@@ -439,6 +444,8 @@ def _collect_chain_failures(
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,
     accounted: list[AccountedEntry] | None = None,
+    federation_keys: Mapping[str, str] | None = None,
+    wire_counts: FederationWireCounts | None = None,
 ) -> list[EntryVerificationResult]:
     """Walk one chain group via the shared per-entry body, flatten any invalid
     entry into a Failure, and return each entry's result in chain order.
@@ -459,6 +466,8 @@ def _collect_chain_failures(
             signed_before = True
         if result.valid and result.accounted is None and agent_counts is not None and agent_check is not None:
             result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
+        if result.valid and result.accounted is None and wire_counts is not None:
+            result = check_sealed_federation_wire(entry, result, federation_keys, wire_counts, applied)
         if result.accounted is not None and accounted is not None:
             chain, record_id, org_id = chain_of_scope(scope_id)
             accounted.append(
@@ -678,6 +687,7 @@ def verify_vault_chains(
     keys: KeyCache | None = None,
     *,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
 ) -> VaultChainsReport:
     """Verify the audit_vault chains + checkpoint cross-check. Pass a prebuilt
     ``keys`` registry to share it (and its lazy key-DER cache) with the
@@ -697,9 +707,13 @@ def verify_vault_chains(
     agent_registry: dict[str, bytes] = (
         dict(build_agent_key_registry(agent_keys)) if agent_keys is not None else {}
     )
+    federation_registry = (
+        build_federation_key_registry(federation_keys) if federation_keys is not None else None
+    )
     cert_keys_from_chain = 0
     agent_counts = AgentSignatureCounts()
     agent_check: list[CheckApplicability] = ["skipped_no_input"]
+    wire_counts = FederationWireCounts()
     applied: set[str] = set()
 
     # Empty-vault fail-closed: zero vault entries must NOT verify clean.
@@ -736,6 +750,8 @@ def verify_vault_chains(
             accounted=accounted,
             agent_signatures_present=agent_counts.present,
             agent_signatures_verified=agent_counts.verified,
+            federation_wire_present=wire_counts.present,
+            federation_wire_verified=wire_counts.verified,
             cert_keys_from_chain=cert_keys_from_chain,
             signed_entries=signed_entries,
             optional_checks=optional_checks_report(
@@ -764,7 +780,17 @@ def verify_vault_chains(
         failures_before = len(failures)
         normalized = [_normalize_entry(e) for e in rows]
         results = _collect_chain_failures(
-            chain_key, normalized, keys, failures, agent_registry, agent_counts, agent_check, applied, accounted
+            chain_key,
+            normalized,
+            keys,
+            failures,
+            agent_registry,
+            agent_counts,
+            agent_check,
+            applied,
+            accounted,
+            federation_registry,
+            wire_counts,
         )
         signed_entries += sum(1 for r in results if r.signature == "ok")
         _verify_vault_checkpoints({chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures)
@@ -1273,6 +1299,7 @@ def verify_dump_dir(
     dump_dir: str,
     *,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
 ) -> VerifyReport:
@@ -1284,7 +1311,11 @@ def verify_dump_dir(
     directory cannot be read."""
     check_key_options(trust_anchors, distrusted_keys)
     return verify_dump(
-        load_dump(dump_dir), agent_keys=agent_keys, trust_anchors=trust_anchors, distrusted_keys=distrusted_keys
+        load_dump(dump_dir),
+        agent_keys=agent_keys,
+        federation_keys=federation_keys,
+        trust_anchors=trust_anchors,
+        distrusted_keys=distrusted_keys,
     )
 
 
@@ -1292,12 +1323,18 @@ def verify_dump(
     dump: Dump,
     *,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
 ) -> VerifyReport:
     """Verify a full-vault dump. Runs the key-statement walk (given
     ``trust_anchors``), the vault-chain pass and the org_admin_reads pass, and
     combines their verdicts.
+
+    ``federation_keys``: peer Servers' federation keys by hub id, as on
+    :func:`~agledger.verify.verify_export`. Every sealed peer message on the
+    vault is held to its body hash and to its entry; one from a listed hub
+    also has its signature re-verified under that key.
 
     ``agent_keys``: Ed25519 JWKs of agent certs. Where an entry's signed
     payload carries an engine-validated agent signature whose cert thumbprint
@@ -1324,7 +1361,12 @@ def verify_dump(
         dump.signing_keys, dump.key_statements, trust_anchors=trust_anchors, distrusted_keys=distrusted_keys
     )
     vault = verify_vault_chains(
-        dump.vault_entries, dump.vault_checkpoints, dump.signing_keys, keys, agent_keys=agent_keys
+        dump.vault_entries,
+        dump.vault_checkpoints,
+        dump.signing_keys,
+        keys,
+        agent_keys=agent_keys,
+        federation_keys=federation_keys,
     )
     org_admin_reads = verify_org_admin_reads_chains(
         dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys, keys
