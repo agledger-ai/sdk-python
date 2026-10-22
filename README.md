@@ -564,6 +564,7 @@ agledger-verify ./vault-dump-dir --trust-anchor "$PIN"      # full-vault dump
 agledger-verify audit-export.json --trust-anchor "$PIN"     # single record export
 agledger-verify ./vault-dump-dir -f json      # machine-readable report (unanchored)
 agledger-verify ./vault-dump-dir --agent-keys agent-keys.json   # also re-check agent signatures
+agledger-verify ./vault-dump-dir --federation-key hub-b=MCowBQYDK2VwAyEA...   # also re-check a peer's sealed messages
 agledger-verify audit-export.json --keys verification-keys.json --require-supplied-keys
 ```
 
@@ -573,6 +574,17 @@ agledger-verify audit-export.json --keys verification-keys.json --require-suppli
 on an `/audit-export` file; in code, pass `agent_keys=` to `verify_dump` or
 `verify_export`. Both reports say which input-gated checks ran
 (`optional_checks`) and how many agent signatures were present and verified.
+
+`--federation-key <hubId>=<key>` takes a peer Server's federation key as its
+operator gives it (base64 SPKI DER, or base64 of the raw 32 bytes), once per
+peer. A receiving Server seals each peer message it accepts on the chain entry
+it writes (`payload.wire`), as the peer signed it; every sealed message is held
+to its body hash and to its entry, and one from a hub you gave a key for also
+has its signature re-verified, which proves what the peer asserted from this
+Server's export alone. A failure is `CHAIN_FEDERATION_WIRE_INVALID`; the
+reports count them under `federation_wire`. In code, pass `federation_keys=`
+(`{hub_id: key}` or `[{"hubId": ..., "publicKey": ...}]`) to `verify_dump` or
+`verify_export`.
 A dump not scoped to one org carries the certificate keys itself: each
 `EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its
 certificate's `publicKeyJwk` (engines from 1.8.0 on), and a key is used once

@@ -54,6 +54,15 @@ class APIError(AgledgerError):
       display states, or a dispute's statuses)
     - ``existing_id``: the row a 409 collided with (e.g. TRUSTED_ISSUER_EXISTS)
     - ``refresh_url``: concrete GET URL to re-fetch state (e.g. on 422 INVALID_ACTION)
+    - ``required_fields`` / ``optional_fields`` / ``example_payload`` / ``schema_url`` /
+      ``record_type``: the rebuild kit a 400 carries when a Record or Completion body
+      failed its schema
+    - ``hint``: the 404's pointer at what to list or create instead
+    - ``attempted_action`` / ``attempted_transition`` / ``attempted_state``: what a 422 refused
+    - ``retry_after``: seconds the Server or a proxy asked the client to wait, from the
+      ``Retry-After`` header on any status (a 429 body's ``retryAfterSeconds`` fills it too)
+    - ``body``: the parsed error body as sent, every field included, for anything this
+      class does not name
     """
 
     status: int
@@ -93,9 +102,15 @@ class APIError(AgledgerError):
     reason: str | None
     """Machine-readable reason code, forwarded from the body. On a 401 OIDC
     refusal it names the token check that failed (``expired``,
-    ``wrong_audience``, ``wrong_azp``, ``jti_replayed``, ...); on a 409 it
-    names the conflict (``TRUSTED_ISSUER_EXISTS``, ``AGENT_NAME_IN_USE``,
-    ...). Branch on this rather than on the detail prose."""
+    ``wrong_audience``, ``wrong_azp``, ``jti_replayed``, ...); on a 409 that
+    carries one it names the conflict: ``STATUS_NOT_DISABLED``,
+    ``ACCOUNT_DEACTIVATED``, ``RECORDS_REFERENCE_TYPE``, ``CONFLICTING_VERSION``,
+    ``RESERVED_PUBLISHER_LABEL``, ``PROVISIONING_MANAGED``, ``OIDC_JTI_REPLAY``,
+    ``ROW_HAS_DEPENDENT_RECORDS``, ``CHAIN_REWIND_DETECTED``,
+    ``VAULT_SCAN_IN_FLIGHT``, ``AGENT_NAME_IN_USE``, ``TRUSTED_ISSUER_EXISTS`` or
+    ``KEY_ALREADY_ROTATED``. Not every 409 names one (a duplicate agent
+    ``displayName`` answers ``error: CONFLICT`` with no reason today), so branch
+    on ``code`` first and on ``reason`` when present."""
     current_state: str | None
     """State the resource was in when the request was refused, forwarded from
     the body. Some refusals name their precondition here instead, such as the
@@ -114,6 +129,67 @@ class APIError(AgledgerError):
     refresh_url: str | None
     deadline: str | None
     """ISO deadline that had already passed on a system TIME_OUT 422 (API v1.3.2)."""
+    title: str | None
+    """RFC 9457 ``title``: the short name of the problem class."""
+    instance: str | None
+    """RFC 9457 ``instance``: the request path this occurrence belongs to."""
+    errors: list[Any] | None
+    """Field-level errors as the body carries them top level (RFC 9457
+    extension). ``validation_errors`` is the normalized view."""
+    validation_errors: list[dict[str, Any]] | None
+    """Schema violations on a 400 or 422, each with ``field`` (or Ajv's
+    ``instancePath``) and ``message``, from the body's top-level
+    ``validationErrors``."""
+    hint: str | None
+    """The 404's pointer at what to do instead of retrying the same id: which
+    listing to read, or which create to run first."""
+    required_fields: list[str] | None
+    """Fields the schema requires, on a 400 that refused a Record or
+    Completion body."""
+    optional_fields: list[str] | None
+    """Fields the schema allows beyond the required ones, on the same 400."""
+    example_payload: dict[str, Any] | None
+    """A payload that passes the schema the 400 refused against. Rebuild
+    from it rather than from prose."""
+    schema_url: str | None
+    """Where the schema the 400 validated against is served."""
+    record_type: str | None
+    """The contract type the 400 validated against."""
+    attempted_action: str | None
+    """The action a 422 refused (``transition``, ``verdict``, ``cancel``, ...)."""
+    attempted_transition: str | None
+    """The transition name a 422 refused."""
+    attempted_state: str | None
+    """The display state a refused transition tried to reach."""
+    allowed_values: list[Any] | None
+    """Values the refused field accepts, when a 400 or 422 can enumerate them."""
+    allowed_actors: list[str] | None
+    """Role labels permitted to take the refused action."""
+    constraint_violations: list[dict[str, Any]] | None
+    """The bounds the request broke (``field``, ``parentValue``,
+    ``childValue``, ``reason``, ``tolerance``)."""
+    missing_features: list[str] | None
+    """License features the current tier lacks, on a 403 license refusal."""
+    current_tier: str | None
+    required_tier: str | None
+    next_steps: list[dict[str, Any]] | None
+    """Guided next actions the error body carries."""
+    terminal_reason: str | None
+    """The system action that terminalized the Record (``OVERFLOW_REJECT``,
+    ``TIME_OUT``, ...), beside ``previous_status``."""
+    previous_status: str | None
+    current_status: str | None
+    """Display status of the Record when the request was refused."""
+    retry_after: float | None
+    """Seconds the client was asked to wait before retrying, from the
+    ``Retry-After`` header on any status (a load balancer sends one on a 503
+    as the Server does on a 429), or from a 429 body's ``retryAfterSeconds``
+    when the header was stripped. None when neither was given. The SDK's own
+    retries wait at least this long."""
+    body: dict[str, Any]
+    """The error body as the Server sent it, parsed, every field included.
+    Everything this class names is a typed view onto it; read this for a
+    field the view does not name yet. Empty for a body that was not JSON."""
     raw_body: bytes | None
     """Raw response body for binary endpoints (``application/cose``,
     ``application/concise-problem-details+cbor``). Set when the API returns
@@ -144,9 +220,59 @@ class APIError(AgledgerError):
         pinned_records: int | None = None,
         unattributable_records: int | None = None,
         raw_body: bytes | None = None,
+        title: str | None = None,
+        instance: str | None = None,
+        errors: list[Any] | None = None,
+        validation_errors: list[dict[str, Any]] | None = None,
+        hint: str | None = None,
+        required_fields: list[str] | None = None,
+        optional_fields: list[str] | None = None,
+        example_payload: dict[str, Any] | None = None,
+        schema_url: str | None = None,
+        record_type: str | None = None,
+        attempted_action: str | None = None,
+        attempted_transition: str | None = None,
+        attempted_state: str | None = None,
+        allowed_values: list[Any] | None = None,
+        allowed_actors: list[str] | None = None,
+        constraint_violations: list[dict[str, Any]] | None = None,
+        missing_features: list[str] | None = None,
+        current_tier: str | None = None,
+        required_tier: str | None = None,
+        next_steps: list[dict[str, Any]] | None = None,
+        terminal_reason: str | None = None,
+        previous_status: str | None = None,
+        current_status: str | None = None,
+        retry_after: float | None = None,
+        body: dict[str, Any] | None = None,
     ) -> None:
         self.status = status
         self.code = code
+        self.title = title
+        self.instance = instance
+        self.errors = errors
+        self.validation_errors = validation_errors
+        self.hint = hint
+        self.required_fields = required_fields
+        self.optional_fields = optional_fields
+        self.example_payload = example_payload
+        self.schema_url = schema_url
+        self.record_type = record_type
+        self.attempted_action = attempted_action
+        self.attempted_transition = attempted_transition
+        self.attempted_state = attempted_state
+        self.allowed_values = allowed_values
+        self.allowed_actors = allowed_actors
+        self.constraint_violations = constraint_violations
+        self.missing_features = missing_features
+        self.current_tier = current_tier
+        self.required_tier = required_tier
+        self.next_steps = next_steps
+        self.terminal_reason = terminal_reason
+        self.previous_status = previous_status
+        self.current_status = current_status
+        self.retry_after = retry_after
+        self.body = body if body is not None else {}
         self.request_id = request_id
         self.details = details
         self.retryable = retryable if retryable is not None else (status == 429 or status >= 500)
@@ -246,12 +372,10 @@ class UnprocessableError(APIError):
 
 
 class RateLimitError(APIError):
-    """429: rate limit exceeded."""
+    """429: rate limit exceeded. ``retry_after`` is on every :class:`APIError`;
+    here it is also read from the body's ``retryAfterSeconds``."""
 
-    retry_after: float | None
-
-    def __init__(self, *, retry_after: float | None = None, **kwargs: Any) -> None:
-        self.retry_after = retry_after
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(429, **kwargs)
 
 

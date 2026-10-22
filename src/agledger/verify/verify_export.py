@@ -56,6 +56,12 @@ from pydantic import BaseModel
 
 from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 from agledger.verify.failures import FailureCode
+from agledger.verify.federation_wire import (
+    FederationWireCounts,
+    build_federation_key_registry,
+    check_federation_wire,
+    extract_federation_wire,
+)
 from agledger.verify.key_statements import (
     DistrustedKey,
     DistrustSpan,
@@ -372,6 +378,7 @@ OPTIONAL_CHECKS = (
     "key_temporal",
     "agent_signature",
     "key_anchoring",
+    "federation_wire",
 )
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
@@ -414,6 +421,12 @@ class VerifyExportResult:
     signature_coverage: SignatureCoverage = field(default_factory=SignatureCoverage)
     key_provenance: KeyProvenance = field(default_factory=KeyProvenance)
     agent_signatures: AgentSignatureCounts = field(default_factory=AgentSignatureCounts)
+    #: Federation messages sealed on the chain (``payload.wire``) vs re-verified
+    #: under a ``federation_keys`` entry for their sender. Every present one is
+    #: held to its body hash and to its entry; ``present > verified`` means no
+    #: key was supplied for those senders, never that they failed. Mirrors
+    #: ``federationWire`` in ``@agledger/verify-core``.
+    federation_wire: FederationWireCounts = field(default_factory=FederationWireCounts)
     #: ``applied`` only when ``agent_keys`` supplied the cert key for at least
     #: one engine-validated agent signature on the chain. Mirrors
     #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
@@ -458,6 +471,7 @@ def verify_export(
     require_key_id: str | None = None,
     require_supplied_keys: bool = False,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
+    federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
 ) -> VerifyExportResult:
@@ -481,6 +495,18 @@ def verify_export(
     :param require_supplied_keys: Refuse keys embedded in the export: an entry
         whose only key is export-embedded fails
         :data:`CHAIN_KEY_POLICY_VIOLATION`.
+    :param federation_keys: Federation keys of the Servers this one peers
+        with, keyed by hub id (``{hubId: key}`` or ``[{"hubId", "publicKey"}]``),
+        each as base64 SPKI DER or base64 of the raw 32 bytes, as the peer
+        registered it at handshake. Take them from the peer's operator, not
+        from this Server. A receiving Server's FEDERATION_* entries seal the
+        peer's message as the peer signed it (``payload.wire``); every sealed
+        message is held to its body hash and to its entry, and one from a hub
+        listed here also has its signature re-verified under that key, which
+        proves what the peer asserted from this export alone. A failure is
+        ``CHAIN_FEDERATION_WIRE_INVALID``; ``result.federation_wire`` counts
+        present and verified. Anything that is not an Ed25519 key raises
+        ``TypeError``.
     :param agent_keys: Ed25519 public keys of agent ephemeral certs, as JWKs
         (``{"kty": "OKP", "crv": "Ed25519", "x": ...}``): the ``publicKeyJwk``
         the agent sent to ``POST /v1/auth/oidc/cert``, which is also the
@@ -565,6 +591,9 @@ def verify_export(
     supplied = _normalize_supplied_keys(public_keys)
     registry = _build_key_registry(meta, supplied)
     agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
+    federation_registry = (
+        build_federation_key_registry(federation_keys) if federation_keys is not None else None
+    )
     trust: KeyTrust | None = None
     if trust_anchors is not None and len(trust_anchors) > 0:
         trust = compute_key_trust(
@@ -615,6 +644,7 @@ def verify_export(
     provenance = KeyProvenance()
     agent_counts = AgentSignatureCounts()
     agent_check: list[CheckApplicability] = ["skipped_no_input"]
+    wire_counts = FederationWireCounts()
     applied: set[str] = set()
     verified = 0
     broken_at: BrokenAt | None = None
@@ -639,6 +669,8 @@ def verify_export(
             signed_before = True
         if result.valid:
             result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
+        if result.valid:
+            result = check_sealed_federation_wire(entry, result, federation_registry, wire_counts, applied)
         entry_results.append(result)
         if result.valid:
             verified += 1
@@ -675,6 +707,7 @@ def verify_export(
         signature_coverage=coverage,
         key_provenance=provenance,
         agent_signatures=agent_counts,
+        federation_wire=wire_counts,
         agent_signature_check=agent_check[0],
         optional_checks=optional_checks_report(
             applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
@@ -1977,6 +2010,66 @@ def verify_agent_signature(
     except Exception:
         return "invalid"
     return "ok"
+
+
+def check_sealed_federation_wire(
+    entry: Mapping[str, Any],
+    result: EntryVerificationResult,
+    federation_keys: Mapping[str, str] | None,
+    counts: FederationWireCounts,
+    applied: set[str] | None,
+) -> EntryVerificationResult:
+    """The sealed federation message on an entry that already passed every
+    other check (so its row payload is what the receiver signed): its body
+    hash, its agreement with the entry, and, under a supplied key for the
+    sending hub, its signature. Mirrors verify-core's
+    ``checkSealedFederationWire``."""
+    row = chain_row(entry)
+    if row.binding is None:
+        return result
+    record_id, entry_type, payload = row.binding
+    if not isinstance(payload, Mapping):
+        return result
+    wire = extract_federation_wire(cast("Mapping[str, Any]", payload))
+    if wire is None:
+        return result
+    if applied is not None:
+        applied.add("federation_wire")
+    if wire == "malformed":
+        return EntryVerificationResult(
+            position=result.position,
+            valid=False,
+            code="CHAIN_FEDERATION_WIRE_INVALID",
+            detail=(
+                "payload.wire is present but is not a sealed federation message (an object with "
+                "scheme, senderHubId, senderPublicKey, recipientHubId, method, path, bodyHash, "
+                "timestamp, nonce, signature and an object body)."
+            ),
+            signature=result.signature,
+            key_source=result.key_source,
+        )
+    counts.present += 1
+    outcome = check_federation_wire(
+        entry_type,
+        record_id if isinstance(record_id, str) else None,
+        cast("Mapping[str, Any]", payload),
+        wire,
+        federation_keys,
+    )
+    if outcome.outcome == "ok":
+        if outcome.signature_checked:
+            counts.verified += 1
+        return result
+    if outcome.outcome == "unchecked":
+        return result
+    return EntryVerificationResult(
+        position=result.position,
+        valid=False,
+        code="CHAIN_UNSUPPORTED_ALGORITHM" if outcome.outcome == "unsupported" else "CHAIN_FEDERATION_WIRE_INVALID",
+        detail=outcome.detail,
+        signature=result.signature,
+        key_source=result.key_source,
+    )
 
 
 def check_agent_signature(

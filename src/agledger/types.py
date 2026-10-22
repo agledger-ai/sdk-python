@@ -655,6 +655,17 @@ class BulkCreateResultItem(BaseModel):
     """The values the refused field may take, as a singleton caller gets them
     in the error body. For an unregistered ``type``, the set registered for the
     org."""
+    validation_errors: list[dict[str, Any]] | None = Field(None, alias="validationErrors")
+    """The singleton 400's rebuild kit, carried on a refused item exactly as
+    ``POST /v1/records`` carries it in its error body: what the schema refused.
+    With ``schema_url``, ``record_type``, ``required_fields``,
+    ``optional_fields`` and ``example_payload``, enough to resend the item
+    rebuilt rather than guessed."""
+    schema_url: str | None = Field(None, alias="schemaUrl")
+    record_type: str | None = Field(None, alias="recordType")
+    required_fields: list[str] | None = Field(None, alias="requiredFields")
+    optional_fields: list[str] | None = Field(None, alias="optionalFields")
+    example_payload: dict[str, Any] | None = Field(None, alias="examplePayload")
 
 
 class BulkCreateSummary(BaseModel):
@@ -665,6 +676,8 @@ class BulkCreateSummary(BaseModel):
     total: int
     succeeded: int
     failed: int
+    replayed: int | None = None
+    """Items answered as ``replayed`` (also counted in ``succeeded``)."""
 
 
 class BulkCreateResult(BaseModel):
@@ -1793,6 +1806,7 @@ VaultScanKeyRegistryFinding = TypedDict(
         "keyId": str | None,
         "statementId": str | None,
         "detail": str,
+        "standing": bool,
     },
     total=False,
 )
@@ -1822,6 +1836,9 @@ class VaultScanKeyRegistry(TypedDict, total=False):
     """Rows nothing anchors. Not a finding by itself; every entry signed under
     one is a ``signing_key_unanchored`` break."""
     findings: list[VaultScanKeyRegistryFinding]
+    """Each carries ``standing``: True while the key it names has no retirement
+    a trusted key signed, so the walk grades entries under it differently from
+    this Server today; False is history the operator already closed."""
     distrustedStatements: list[VaultScanKeyRegistryFinding]
     """Statements a ``VAULT_DISTRUSTED_KEYS`` key signed that count for
     nothing and were stored before a key this Server trusts retired it.
@@ -2259,6 +2276,7 @@ StatusComponentReason = (
         "worker_not_consuming",
         "worker_stalled",
         "not_checked",
+        "connections_overcommitted",
     ]
     | str
 )
@@ -2572,6 +2590,12 @@ class ComplianceExport(BaseModel):
     #: ``record_count`` unless ``truncated``. Header twin on a download:
     #: ``X-AGLedger-Export-Total-Records``.
     total_records: int | None = Field(None, alias="totalRecords")
+    #: The read-transparency batch this export left: one manifest and one leaf
+    #: per exported record on the org whose records were read, under one
+    #: ``exportBatchId`` (keys ``exportBatchId``, ``manifestId``,
+    #: ``recordCount``, ``queryHash``). Read it back with
+    #: ``audit.list_org_reads()``. None on a Server that predates the field.
+    bulk_export: dict[str, Any] | None = Field(None, alias="bulkExport")
     #: The format the export was created in (``csv``, ``json`` or ``html``),
     #: which ``download_url`` serves. None on a Server that predates the field.
     format: Literal["csv", "json", "html"] | str | None = None

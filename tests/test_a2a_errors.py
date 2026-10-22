@@ -93,3 +93,33 @@ def test_a_rest_problem_body_is_unchanged():
     with pytest.raises(APIError) as excinfo:
         client.records.get("x")
     assert excinfo.value.code == "NOT_FOUND" and excinfo.value.raw_body is None
+
+
+@respx.mock
+def test_cancel_task_puts_the_reason_under_the_one_metadata_key():
+    route = respx.post(f"{BASE}/a2a").mock(return_value=httpx.Response(200, json={"jsonrpc": "2.0"}))
+    AgledgerClient(base_url=BASE, api_key="k").a2a.cancel_task(
+        task_id="0199a8f0-0000-7000-8000-000000000001", reason="superseded"
+    )
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["method"] == "CancelTask"
+    assert sent["params"] == {
+        "id": "0199a8f0-0000-7000-8000-000000000001",
+        "metadata": {"agledger:reason": "superseded"},
+    }
+
+
+@respx.mock
+def test_cancel_task_without_a_reason_sends_no_metadata_key():
+    route = respx.post(f"{BASE}/a2a").mock(return_value=httpx.Response(200, json={"jsonrpc": "2.0"}))
+    AgledgerClient(base_url=BASE, api_key="k").a2a.cancel_task(name="tasks/0199a8f0-0000-7000-8000-000000000001")
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["params"] == {"name": "tasks/0199a8f0-0000-7000-8000-000000000001"}
+
+
+def test_cancel_task_takes_exactly_one_task_name():
+    client = AgledgerClient(base_url=BASE, api_key="k")
+    with pytest.raises(ValueError):
+        client.a2a.cancel_task(reason="x")
+    with pytest.raises(ValueError):
+        client.a2a.cancel_task(name="tasks/a", task_id="a")

@@ -38,6 +38,7 @@ ALL_APPLIED = {
         "applied",
     ),
     "key_anchoring": "skipped_no_input",
+    "federation_wire": "skipped_no_input",
 }
 
 

@@ -61,6 +61,7 @@ FailureCode = Literal[
     "CHAIN_SIGNING_KEY_DRIFT",
     "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
     "CHAIN_AGENT_SIGNATURE_INVALID",
+    "CHAIN_FEDERATION_WIRE_INVALID",
     "CHAIN_ENTRY_UNSIGNED",
     "CHAIN_SIGNING_KEY_UNANCHORED",
     "CHAIN_KEY_WINDOW_DRIFT",
@@ -211,6 +212,15 @@ _SUGGESTIONS: dict[str, str] = {
         "intake and the envelope signature says the engine wrote it, so this is not a "
         "caller mistake: treat the agent attribution of this entry as unproven and "
         "escalate to the operator."
+    ),
+    "CHAIN_FEDERATION_WIRE_INVALID": (
+        "The federation message sealed in payload.wire does not hold: its body no longer "
+        "hashes to the bodyHash the sender signed, the entry asserts a state, type, "
+        "recommendation or dispute the sealed body does not carry, or (under the sender's "
+        "federation key you supplied) the signature does not verify or the sealed "
+        "senderPublicKey is not that key. The receiving Server verified the message at intake "
+        "and signed this entry, so this is not a caller mistake: treat what the entry says the "
+        "peer asserted as unproven and escalate to both operators."
     ),
     "CHAIN_ENTRY_UNSIGNED": (
         "The entry carries no signing key id where the install could not have written an "

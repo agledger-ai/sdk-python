@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from agledger.verify.failures import suggestion
+from agledger.verify.federation_wire import normalize_federation_key
 from agledger.verify.key_statements import (
     KeyTrustReport,
     assert_not_pinned_and_distrusted,
@@ -76,6 +77,8 @@ class ParsedArgs:
     """``--trust-anchor`` values, in the order given."""
     distrusted_keys: list[str] = field(default_factory=list[str])
     """``--distrusted-key`` values, one entry each, in the order given."""
+    federation_keys: list[str] = field(default_factory=list[str])
+    """``--federation-key`` values, ``<hubId>=<key>`` each, in the order given."""
 
 
 class UsageError(Exception):
@@ -157,6 +160,14 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
             out.distrusted_keys.append(value)
         elif arg == "--distrusted-keys" or arg.startswith("--distrusted-keys="):
             raise UsageError(_PLURAL_DISTRUSTED)
+        elif arg == "--federation-key":
+            out.federation_keys.append(take_value("--federation-key", nxt))
+            i += 1
+        elif arg.startswith("--federation-key="):
+            value = arg[len("--federation-key=") :]
+            if not value:
+                raise UsageError("--federation-key requires a value")
+            out.federation_keys.append(value)
         elif arg == "--require-supplied-keys":
             out.require_supplied_keys = True
         elif arg == "--require-out-of-band-keys":
@@ -180,6 +191,7 @@ Usage:
   agledger-verify <target> [--trust-anchor sha256:<hex>]...
                   [--distrusted-key sha256:<hex>[@<instant>]]...
                   [--agent-keys <file>]
+                  [--federation-key <hubId>=<key>]...
                   [--report-format text|json]
                   [--keys <file>] [--require-key-id <id>]
                   [--require-supplied-keys]
@@ -219,6 +231,20 @@ Options:
                               finding names the --distrusted-key to confirm
                               with the Server's operator.
   --report-format, -f         Output format. Default: text.
+  --federation-key            <hubId>=<key>: a peer Server's federation key,
+                              as its operator gives it (base64 SPKI DER, or
+                              base64 of the raw 32 bytes, the form the
+                              handshake registered). Repeat it once per peer.
+                              A receiving Server seals each peer message it
+                              accepts on the chain entry it writes
+                              (payload.wire), as the peer signed it. Every
+                              sealed message is held to its body hash and to
+                              its entry; one from a hub given here also has
+                              its signature re-verified under that key, which
+                              proves what the peer asserted from this
+                              Server's export alone. A failure is
+                              CHAIN_FEDERATION_WIRE_INVALID. Applies to a dump
+                              directory and to an /audit-export file.
   --agent-keys                Path to a JSON file holding the Ed25519 public
                               keys of agent certs: a JWK, a list of JWKs, or a
                               {keys:[...]} JWK Set. An entry may wrap its key
@@ -384,6 +410,55 @@ def load_supplied_keys(path: str) -> Mapping[str, Any] | list[Any] | str:
     )
 
 
+_FEDERATION_KEY_SHAPE = (
+    "Each --federation-key is <hubId>=<key>: the peer's hub id, then its Ed25519 federation key "
+    "as base64 SPKI DER or base64 of the raw 32 bytes, as its operator gives it."
+)
+
+
+def parse_federation_keys(values: Sequence[str]) -> dict[str, str] | str:
+    """``--federation-key`` values into the ``{hubId: key}`` mapping the
+    verifiers take, or the usage-error message. Each value is checked here,
+    before any verification runs, so a bad key is reported as a bad key rather
+    than as a verdict. Mirrors ``@agledger/verify``."""
+    out: dict[str, str] = {}
+    for value in values:
+        hub_id, sep, key = value.partition("=")
+        hub_id, key = hub_id.strip(), key.strip()
+        if not sep or not hub_id or not key:
+            return f"Invalid --federation-key {json.dumps(value)}: {_FEDERATION_KEY_SHAPE}"
+        if normalize_federation_key(key) is None:
+            return (
+                f"Invalid --federation-key for hub {hub_id}: the key is not an Ed25519 public key. "
+                f"{_FEDERATION_KEY_SHAPE}"
+            )
+        if hub_id in out:
+            return f"--federation-key names hub {hub_id} twice; give each peer one key."
+        out[hub_id] = key
+    return out
+
+
+def _federation_wire_summary(present: int, verified: int, keys_given: bool) -> str:
+    """One line on the sealed federation messages. Every present one was held
+    to its body hash and to its entry; ``verified`` says how many were also
+    checked under a peer's key, and the rest were not, which is not a failure."""
+    base = f"present={present} verified={verified}"
+    if present == 0:
+        return f"{base} (none on the chain)"
+    unverified = present - verified
+    if unverified == 0:
+        return f"{base} (each hashed, matched to its entry, and signed by the peer key given for its hub)"
+    if keys_given:
+        return (
+            f"{base} (each hashed and matched to its entry; {unverified} from a hub with no "
+            "--federation-key, so the peer's signature was not checked)"
+        )
+    return (
+        f"{base} (each hashed and matched to its entry; the peer signatures were NOT checked: "
+        "pass --federation-key <hubId>=<key> for each peer)"
+    )
+
+
 def _agent_signature_summary(
     counts: AgentSignatureCounts,
     check: CheckApplicability,
@@ -511,7 +586,9 @@ def _chain_name(a: AccountedEntry) -> str:
     return f"Chain schema:{a.org_id or '__platform__'}"
 
 
-def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
+def _format_dump_text(
+    report: VerifyReport, keys_given: bool = False, federation_keys_given: bool = False
+) -> str:
     lines: list[str] = [*headline(report.verdict, "dump", report.key_trust), ""]
     lines.extend(_key_trust_lines(report.key_trust))
     lines.append("")
@@ -524,6 +601,9 @@ def _format_dump_text(report: VerifyReport, keys_given: bool = False) -> str:
     )
     lines.append(
         f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain)}"
+    )
+    lines.append(
+        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, federation_keys_given)}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
@@ -580,6 +660,10 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "present": result.agent_signatures.present,
             "verified": result.agent_signatures.verified,
         },
+        "federationWire": {
+            "present": result.federation_wire.present,
+            "verified": result.federation_wire.verified,
+        },
         "unsignedProjectionFields": list(result.unsigned_projection_fields),
     }
     if result.broken_at is not None:
@@ -606,7 +690,9 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
     return out
 
 
-def _format_export_text(result: VerifyExportResult, keys_given: bool = False) -> str:
+def _format_export_text(
+    result: VerifyExportResult, keys_given: bool = False, federation_keys_given: bool = False
+) -> str:
     lines: list[str] = [*headline(result.verdict, "audit-export", result.key_trust), ""]
     lines.append(f"  record            : {result.record_id}")
     lines.append(
@@ -623,6 +709,10 @@ def _format_export_text(result: VerifyExportResult, keys_given: bool = False) ->
     lines.append(
         "  agent signatures  : "
         f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given)}"
+    )
+    lines.append(
+        "  peer messages     : "
+        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, federation_keys_given)}"
     )
     if result.broken_at is not None:
         lines.append(
@@ -673,6 +763,7 @@ def _flag_message(message: str) -> str:
     """A pin parser's message, named by the flag that carried the value."""
     for prefix, flag in (
         ("trust_anchors entry ", "--trust-anchor "),
+        ("federation_keys[", "--federation-key ["),
         ("distrusted_keys entry ", "--distrusted-key "),
         ("distrusted_keys names ", "--distrusted-key names "),
     ):
@@ -855,6 +946,13 @@ def run_cli(argv: Sequence[str]) -> int:
             return _cannot_verify(loaded, report_format)
         agent_keys = loaded
 
+    federation_keys: dict[str, str] | None = None
+    if args.federation_keys:
+        parsed_keys = parse_federation_keys(args.federation_keys)
+        if isinstance(parsed_keys, str):
+            return _cannot_verify(parsed_keys, report_format)
+        federation_keys = parsed_keys
+
     # Directory -> full-vault dump.
     if os.path.isdir(target):
         # A dump carries its own key registry, so a supplied key set has
@@ -871,6 +969,7 @@ def run_cli(argv: Sequence[str]) -> int:
             report = verify_dump(
                 load_dump(target),
                 agent_keys=agent_keys,
+                federation_keys=federation_keys,
                 trust_anchors=trust_anchors,
                 distrusted_keys=distrusted_keys,
             )
@@ -880,7 +979,7 @@ def run_cli(argv: Sequence[str]) -> int:
         if report_format == "json":
             print(json.dumps(report.to_json(), indent=2))
         else:
-            print(_format_dump_text(report, agent_keys is not None))
+            print(_format_dump_text(report, agent_keys is not None, federation_keys is not None))
         return _EXIT_BY_VERDICT[report.verdict]
 
     # File -> parse JSON, branch on exportMetadata.
@@ -916,6 +1015,7 @@ def run_cli(argv: Sequence[str]) -> int:
             require_key_id=args.require_key_id,
             require_supplied_keys=args.require_supplied_keys,
             agent_keys=agent_keys,
+            federation_keys=federation_keys,
             trust_anchors=trust_anchors,
             distrusted_keys=distrusted_keys,
         )
@@ -927,7 +1027,7 @@ def run_cli(argv: Sequence[str]) -> int:
     if report_format == "json":
         print(json.dumps(_export_to_json(result), indent=2))
     else:
-        print(_format_export_text(result, agent_keys is not None))
+        print(_format_export_text(result, agent_keys is not None, federation_keys is not None))
     return _EXIT_BY_VERDICT[verdict]
 
 

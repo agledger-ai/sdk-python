@@ -131,6 +131,14 @@ class VaultChainsReport:
     """Of those, the ones re-checked against a key passed as ``agent_keys`` and
     found good. ``present > verified`` on a clean report means some were not
     checked (no key for their cert, or a caller-asserted identity)."""
+    federation_wire_present: int = 0
+    """Federation messages sealed on the vault (``payload.wire`` on a receiving
+    Server's FEDERATION_* entries) on entries that passed every other check,
+    each held to its body hash and to its entry."""
+    federation_wire_verified: int = 0
+    """Of those, the ones whose signature was also re-checked under a
+    ``federation_keys`` entry for the sending hub. ``present > verified`` on a
+    clean report means no key was supplied for those senders."""
     cert_keys_from_chain: int = 0
     """Agent cert public keys taken from the dump itself: the ``publicKeyJwk``
     each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
@@ -151,6 +159,7 @@ class VaultChainsReport:
                 "key_temporal",
                 "agent_signature",
                 "key_anchoring",
+                "federation_wire",
             ),
             "skipped_no_input",
         )
@@ -174,6 +183,10 @@ class VaultChainsReport:
             "agentSignatures": {
                 "present": self.agent_signatures_present,
                 "verified": self.agent_signatures_verified,
+            },
+            "federationWire": {
+                "present": self.federation_wire_present,
+                "verified": self.federation_wire_verified,
             },
             "certKeysFromChain": self.cert_keys_from_chain,
             "signedEntries": self.signed_entries,
