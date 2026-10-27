@@ -53,7 +53,7 @@ oidc = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
-    "respx>=0.22",
+    "respx>=0.23.1",
     "cryptography>=42.0",
     "cbor2>=5.6",
     # Pinned so CI matches the gate the SDK was validated against. Ruff stable
