@@ -227,11 +227,14 @@ class FederationWireCounts:
     passed every other check and carry one, each held to its own body hash
     and to the entry that carries it; ``verified`` counts those whose sealed
     signature was also checked under a ``federation_keys`` entry for the
-    sending hub and found good. ``present > verified`` on a valid chain means
-    no key was supplied for those senders, never that they failed."""
+    sending hub and found good; ``failed`` counts those that failed a check
+    (the body hash, the entry, or the signature under the hub's key).
+    ``present - verified - failed`` is the messages from a hub with no key
+    supplied."""
 
     present: int = 0
     verified: int = 0
+    failed: int = 0
 
 
 def _verify_ed25519(spki_base64: str, message: bytes, signature: bytes) -> bool | None:
