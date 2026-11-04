@@ -11,8 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Every field of an error body is on the error.** `APIError` and its subclasses now carry the whole served `ErrorResponse`: the 400 rebuild kit (`required_fields`, `optional_fields`, `example_payload`, `schema_url`, `record_type`, `validation_errors`), the 404 `hint`, the 422 `attempted_action` / `attempted_transition` / `attempted_state`, `title`, `instance`, `allowed_values`, `allowed_actors`, `constraint_violations`, the license tier fields, `next_steps`, and `body`, the parsed body itself, so a field added later is readable without a release. `build_error` used to copy a fixed list and dropped the rest, so a strict caller could not rebuild the body its `recovery_hint` told it to.
 - **`retry_after` on every API error, and the client waits it out on any status.** A load balancer or proxy answers 503 with a `Retry-After` of its own; the retry backoff read the header only off a 429, so the retry went out after the 0.5 s step, inside the window the proxy named.
 - **`a2a.cancel_task()`**, the `CancelTask` call with its one typed extension: `reason` rides in `metadata["agledger:reason"]` and lands as the record's `lastTransitionReason`.
-- **`federation_keys=` on `verify_export` and `verify_dump`, and `--federation-key <hubId>=<key>` on `agledger-verify`:** a receiving Server's `FEDERATION_*` entries seal each peer message as the peer signed it (`payload.wire`); every sealed message is held to its body hash and to its entry, and one from a hub whose federation key is given is also re-verified under it. The reports count them under `federation_wire`; a failure is `CHAIN_FEDERATION_WIRE_INVALID`. `agledger.verify.canonicalize_json` is the RFC 8785 canonical form the body hash is taken over.
-- Types the Server now serves: the per-item rebuild kit on `BulkCreateResultItem`, `BulkCreateSummary.replayed`, `ComplianceExport.bulk_export`, `connections_overcommitted` on `StatusComponentReason`, and `standing` on each key-registry finding.
+- **`federation_keys=` on `verify_export` and `verify_dump`, and `--federation-key <hubId>=<key>` on `agledger-verify`:** a receiving Server's `FEDERATION_*` entries seal each peer message as the peer signed it (`payload.wire`); every sealed message is held to its body hash and to its entry, and one from a hub whose federation key is given is also re-verified under it. The reports count them under `federation_wire` (`present`, `verified`, `failed`), and the text report's peer-message line tells a key that did not match from a hub given no key; a failure is `CHAIN_FEDERATION_WIRE_INVALID`. `agledger.verify.canonicalize_json` is the RFC 8785 canonical form the body hash is taken over.
+- Types the Server now serves: the per-item rebuild kit and `error_code` on `BulkCreateResultItem`, `BulkCreateSummary.replayed`, `ComplianceExport.bulk_export`, `connections_overcommitted` on `StatusComponentReason`, and `standing` on each key-registry finding.
+
+### Fixed
+
+- **`raw_body` on a JSON route's error, when the body was not a JSON object.** A load balancer's 502 page reached the caller as `detail` and nothing else; the page's bytes are on `raw_body` now, as a binary route's error bytes already were, and `body` is empty, as its doc says for a body that is not JSON. A JSON error body that is an array no longer raises `AttributeError` inside the client.
 
 ### Changed
 
@@ -555,7 +559,7 @@ The verifier forward-compatibility floor, mirroring `@agledger/verify-core` 1.1.
 ### Changed
 
 - **Algorithm dispatch binds to the trusted verification key, never the protected header.** The header `alg` (label 1) is asserted equal to what the key's SPKI material commits to; a missing, unassigned, or foreign value fails `CHAIN_ALG_MISMATCH` (tamper class). A key whose algorithm this build cannot compute fails closed as `CHAIN_UNSUPPORTED_ALGORITHM` (previously it surfaced as a misleading `CHAIN_SIGNATURE_MISSING_KEY`). Ed25519 accepts COSE alg `-8` and the RFC 9864 fully-specified `-19` interchangeably.
-- **Signed-kid binding (`CHAIN_SIGNING_KEY_DRIFT`).** The signature-covered kid (label 4) is cross-checked against the row's `signingKeyId` column, mirroring the engine's `signing_key_drift` check (#893).
+- **Signed-kid binding (`CHAIN_SIGNING_KEY_DRIFT`).** The signature-covered kid (label 4) is cross-checked against the row's `signingKeyId` column, mirroring the engine's `signing_key_drift` check.
 - **Registry algorithm cross-check.** The dump's `vault_signing_keys.algorithm` is compared against the key material itself; a registry row that lies about its own key fails `CHAIN_ALG_MISMATCH`.
 - **Untagged COSE_Sign1 is rejected** (leading byte must be `0xd2`), matching the engine's decoder.
 - **The all-zero unsigned sentinel is evaluated after algorithm resolution, at the key's expected signature length**, and an all-zero signature on an entry that claims a signing key fails `CHAIN_KEY_POLICY_VIOLATION` under `require_key_id` / `require_out_of_band_keys`.
@@ -576,8 +580,8 @@ Tracks API v1.3.4. Additive; no wire or behavior change.
 
 ### Added
 
-- `ComplianceExport.truncated` and `.total_records` (API #968/#991). The org-wide export is capped at 10000 rows, newest first. Before this the response carried only `record_count`, so a truncated export was indistinguishable from a complete one and a compliance packet could silently omit most of the trail. Window with `filters.from` / `filters.to` to cover the rest. On a download the same answer rides the `X-AGLedger-Export-Truncated` and `X-AGLedger-Export-Total-Records` response headers, which are the only carriers for a `csv` download, since the body is raw rows and a notice line would corrupt the parse. Both are `None` on a pre-1.3.4 server, which means unknown and is deliberately not the same as `False`.
-- `VaultCheckpoint.chain` plus the `VaultCheckpointChain` alias (`"record" | "schema" | "admin"`, API #995). Three chains are checkpointed by the same signed construction, and **only `chain == "record"` is keyed by a real record id**. On `"schema"` and `"admin"` the `record_id` is a derived key that resolves to no record, so fetching it 404s by design. `None` on a pre-1.3.4 server.
+- `ComplianceExport.truncated` and `.total_records`. The org-wide export is capped at 10000 rows, newest first. Before this the response carried only `record_count`, so a truncated export was indistinguishable from a complete one and a compliance packet could silently omit most of the trail. Window with `filters.from` / `filters.to` to cover the rest. On a download the same answer rides the `X-AGLedger-Export-Truncated` and `X-AGLedger-Export-Total-Records` response headers, which are the only carriers for a `csv` download, since the body is raw rows and a notice line would corrupt the parse. Both are `None` on a pre-1.3.4 server, which means unknown and is deliberately not the same as `False`.
+- `VaultCheckpoint.chain` plus the `VaultCheckpointChain` alias (`"record" | "schema" | "admin"`). Three chains are checkpointed by the same signed construction, and **only `chain == "record"` is keyed by a real record id**. On `"schema"` and `"admin"` the `record_id` is a derived key that resolves to no record, so fetching it 404s by design. `None` on a pre-1.3.4 server.
 - `VaultCheckpoint` and `VaultCheckpointChain` are now exported from the package root. `VaultCheckpoint` was reachable only as `agledger.types.VaultCheckpoint`, even though `audit.vault_checkpoints.list()` returns them and its sibling `OrgReadsCheckpoint` was already exported.
 
 ### Notes
@@ -596,7 +600,7 @@ Docs only. No wire change.
 
 ### Changed
 
-- Corrected the PyPI summary and positioning, and removed dead vocabulary from the README (#99).
+- Corrected the PyPI summary and positioning, and removed dead vocabulary from the README.
 
 ## [1.2.1] - 2026-07-13
 
@@ -616,11 +620,11 @@ Tracks AGLedger API **v1.3.2** (was v1.2.0). Route surface is unchanged (193 rou
 
 ### Added
 
-- **`SignedStatement.signed_at`** (API #877): the signed instant of the head Signed Statement (the CWT `iat` claim sealed in the COSE_Sign1 protected header, second precision). The authoritative timestamp for time-anchored contracts (statutory wait windows, notice clocks); the record's millisecond `created_at` only approximates it. Nullable, wire name `signedAt`.
-- **`VerdictResult.record_status`** (API #876): the settled record status (`FULFILLED` on accept, `FAILED` on reject) returned inline on `records.submit_verdict()`, so the outcome is known without a follow-up `records.get()`.
-- **`record.gate_held` webhook event** (API #913): a principal-mode record held at PROCESSING awaiting the verdict emits this event; the payload carries the `completionId` to verdict against plus the engine/rollup advisory. Added to `WebhookEventType`.
-- **`records.get_audit_export(id, evidence=True)`** (API #870): inlines the completion evidence body at each COMPLETION_SUBMITTED entry (`AuditExportEntry.evidence`) — an UNSIGNED projection the chain binds by hash via `payload.evidenceHash`. JSON/NDJSON only.
-- **`chain_integrity_reason`** gains `signature_invalid`, `signing_key_unknown`, `signing_key_drift` (API #888/#893): the vault now fails closed on per-entry signature verification and surfaces the specific failing invariant.
+- **`SignedStatement.signed_at`**: the signed instant of the head Signed Statement (the CWT `iat` claim sealed in the COSE_Sign1 protected header, second precision). The authoritative timestamp for time-anchored contracts (statutory wait windows, notice clocks); the record's millisecond `created_at` only approximates it. Nullable, wire name `signedAt`.
+- **`VerdictResult.record_status`**: the settled record status (`FULFILLED` on accept, `FAILED` on reject) returned inline on `records.submit_verdict()`, so the outcome is known without a follow-up `records.get()`.
+- **`record.gate_held` webhook event**: a principal-mode record held at PROCESSING awaiting the verdict emits this event; the payload carries the `completionId` to verdict against plus the engine/rollup advisory. Added to `WebhookEventType`.
+- **`records.get_audit_export(id, evidence=True)`**: inlines the completion evidence body at each COMPLETION_SUBMITTED entry (`AuditExportEntry.evidence`) — an UNSIGNED projection the chain binds by hash via `payload.evidenceHash`. JSON/NDJSON only.
+- **`chain_integrity_reason`** gains `signature_invalid`, `signing_key_unknown`, `signing_key_drift`: the vault now fails closed on per-entry signature verification and surfaces the specific failing invariant.
 
 ## [1.1.0] - 2026-07-06
 
@@ -628,8 +632,8 @@ Tracks AGLedger API **v1.2.0** (was v1.1.0). Route surface is identical (193 rou
 
 ### Added
 
-- **Webhook `record_types` filter** (API #825): `webhooks.create()` and `webhooks.update()` accept `record_types`, and the `Webhook` model carries it back (wire name `recordTypes`). `["*"]` means all record types (wildcard sentinel); any other list means record-scoped events are delivered ONLY for the listed types (fail-closed). Omit for no filter.
-- **`records.accept(record_id, message=None)`** (API #855): optional acceptance rationale, symmetric with `reject()`. The API stores one rationale field; `reason`/`notes` are wire-level aliases of `message` on all four handshake endpoints (#780).
+- **Webhook `record_types` filter**: `webhooks.create()` and `webhooks.update()` accept `record_types`, and the `Webhook` model carries it back (wire name `recordTypes`). `["*"]` means all record types (wildcard sentinel); any other list means record-scoped events are delivered ONLY for the listed types (fail-closed). Omit for no filter.
+- **`records.accept(record_id, message=None)`**: optional acceptance rationale, symmetric with `reject()`. The API stores one rationale field; `reason`/`notes` are wire-level aliases of `message` on all four handshake endpoints.
 
 ### Fixed
 
@@ -657,12 +661,12 @@ Tracks AGLedger API **v1.1.0** (was pinned to v1.0.3). Route surface is identica
 
 ### Added
 
-- **`Completion.settlement_signal`** (API #816): the auto-gate's settle/hold/reject decision, surfaced inline on a submitted Completion so the caller learns the outcome without a follow-up `records.get`. Typed `CompletionSettlementSignal` (`recommendation`, `outcome`, `reason_code`); `None` when the gate did not render inline (encrypted Records, principal-mode held at PENDING_VERDICT, or skipped).
+- **`Completion.settlement_signal`**: the auto-gate's settle/hold/reject decision, surfaced inline on a submitted Completion so the caller learns the outcome without a follow-up `records.get`. Typed `CompletionSettlementSignal` (`recommendation`, `outcome`, `reason_code`); `None` when the gate did not render inline (encrypted Records, principal-mode held at PENDING_VERDICT, or skipped).
 - New exported type: `CompletionSettlementSignal`.
 
 ### Changed
 
-- `reason_code` docs note the new `AUTO_SETTLE_WITHIN_TOLERANCE` value (API #824): an auto-settle that cleared only via a non-zero tolerance band rather than the base criteria threshold. The field stays `str | None`.
+- `reason_code` docs note the new `AUTO_SETTLE_WITHIN_TOLERANCE` value: an auto-settle that cleared only via a non-zero tolerance band rather than the base criteria threshold. The field stays `str | None`.
 - Gate-mode docs no longer say "the rules engine renders the verdict": auto mode auto-settles against the principal's pre-configured predicates; the verdict is always the principal's and AGLedger only holds the signed decision.
 - Parity snapshot regenerated to `apiVersion 1.1.0`. (`schemas.list()` already returns raw dict rows, so the new `defaultGateMode` field on catalog rows is passed through without a type change.)
 
@@ -672,9 +676,9 @@ Tracks AGLedger API **v1.0.3** (was pinned to v1.0.0). A full route + field-leve
 
 ### Added
 
-- **`records.get(record_id, integrity=True)`** (sync + async) — re-verify the Record's audit chain and cross-check the served row against it (API #732). The result is exposed on the new `RecordRow.integrity` field (typed `RecordIntegrity`: `verified`, `integrity_level`, `reason`, `entries`, `projection_checked`, `drift_fields`).
-- **`records.list(actionable=True)` / `list_all(actionable=True)`** (sync + async) — the agent-recovery query: every Record whose next action awaits the caller's structural side (API #731). Agent keys only.
-- **`auth.rotate_key(grace_period_seconds=...)`** (sync + async) — keep the old key valid for an overlap window instead of an immediate hard cutover (API #793).
+- **`records.get(record_id, integrity=True)`** (sync + async) — re-verify the Record's audit chain and cross-check the served row against it. The result is exposed on the new `RecordRow.integrity` field (typed `RecordIntegrity`: `verified`, `integrity_level`, `reason`, `entries`, `projection_checked`, `drift_fields`).
+- **`records.list(actionable=True)` / `list_all(actionable=True)`** (sync + async) — the agent-recovery query: every Record whose next action awaits the caller's structural side. Agent keys only.
+- **`auth.rotate_key(grace_period_seconds=...)`** (sync + async) — keep the old key valid for an overlap window instead of an immediate hard cutover.
 - New exported type: `RecordIntegrity`.
 
 ### Changed
@@ -683,7 +687,7 @@ Tracks AGLedger API **v1.0.3** (was pinned to v1.0.0). A full route + field-leve
 
 ### Notes
 
-- `compliance.export(**params)` and the schema methods already pass `embed` / `default_gate_mode` through verbatim (untyped passthrough), so the API #771 / defaultGateMode additions need no method change.
+- `compliance.export(**params)` and the schema methods already pass `embed` / `default_gate_mode` through verbatim (untyped passthrough), so the `embed` and `defaultGateMode` additions need no method change.
 
 ## [1.0.1] - 2026-06-10
 
@@ -760,7 +764,7 @@ The dump path's only third-party needs are `cbor2` + `cryptography` (the `verify
 
 Mirrors the TypeScript SDK 0.8.13 sweep. A full minor of API field-shape drift had accumulated while the route surface stayed in sync:
 
-- **`RecordRow`**: renamed `vault_completion` → `signed_statement` (closes #87) and `self_commitment` → `self_principal`; dropped `no_op`. Added 17 fields: `settlement_signal`, `counter_signature`, `co_sign_required`, `co_sign_status`, `federation_status`, `dispute_id`, `dispute_status`, `has_dispute`, `has_children`, `latest_completion_id`, `terminal_reason`, `expired_at`, `awaiting_actor`, `share`, `shared_to_peers`, `source`, `imported`.
+- **`RecordRow`**: renamed `vault_completion` → `signed_statement` and `self_commitment` → `self_principal`; dropped `no_op`. Added 17 fields: `settlement_signal`, `counter_signature`, `co_sign_required`, `co_sign_status`, `federation_status`, `dispute_id`, `dispute_status`, `has_dispute`, `has_children`, `latest_completion_id`, `terminal_reason`, `expired_at`, `awaiting_actor`, `share`, `shared_to_peers`, `source`, `imported`.
 - **Model rename** `VaultCompletion` → `SignedStatement` (drops `signature`, adds `url`). New `SettlementSignalSummary` model.
 - **`Completion`**: added `verdict`, `last_verdict_reason`.
 - **`NextStep`**: added `after_this`, `workflow_label`, `workflow_step`, `workflow_total`.

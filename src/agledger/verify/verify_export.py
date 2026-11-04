@@ -505,7 +505,7 @@ def verify_export(
         listed here also has its signature re-verified under that key, which
         proves what the peer asserted from this export alone. A failure is
         ``CHAIN_FEDERATION_WIRE_INVALID``; ``result.federation_wire`` counts
-        present and verified. Anything that is not an Ed25519 key raises
+        present, verified and failed. Anything that is not an Ed25519 key raises
         ``TypeError``.
     :param agent_keys: Ed25519 public keys of agent ephemeral certs, as JWKs
         (``{"kty": "OKP", "crv": "Ed25519", "x": ...}``): the ``publicKeyJwk``
@@ -2062,6 +2062,7 @@ def check_sealed_federation_wire(
         return result
     if outcome.outcome == "unchecked":
         return result
+    counts.failed += 1
     return EntryVerificationResult(
         position=result.position,
         valid=False,

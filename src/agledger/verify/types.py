@@ -137,8 +137,11 @@ class VaultChainsReport:
     each held to its body hash and to its entry."""
     federation_wire_verified: int = 0
     """Of those, the ones whose signature was also re-checked under a
-    ``federation_keys`` entry for the sending hub. ``present > verified`` on a
-    clean report means no key was supplied for those senders."""
+    ``federation_keys`` entry for the sending hub and found good."""
+    federation_wire_failed: int = 0
+    """Of those, the ones that failed a check (the body hash, the entry, or
+    the signature under the hub's key). ``present - verified - failed`` is the
+    messages from a hub no key was supplied for."""
     cert_keys_from_chain: int = 0
     """Agent cert public keys taken from the dump itself: the ``publicKeyJwk``
     each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
@@ -187,6 +190,7 @@ class VaultChainsReport:
             "federationWire": {
                 "present": self.federation_wire_present,
                 "verified": self.federation_wire_verified,
+                "failed": self.federation_wire_failed,
             },
             "certKeysFromChain": self.cert_keys_from_chain,
             "signedEntries": self.signed_entries,

@@ -438,25 +438,30 @@ def parse_federation_keys(values: Sequence[str]) -> dict[str, str] | str:
     return out
 
 
-def _federation_wire_summary(present: int, verified: int, keys_given: bool) -> str:
-    """One line on the sealed federation messages. Every present one was held
-    to its body hash and to its entry; ``verified`` says how many were also
-    checked under a peer's key, and the rest were not, which is not a failure."""
-    base = f"present={present} verified={verified}"
+def _federation_wire_summary(present: int, verified: int, failed: int, keys_given: bool) -> str:
+    """One line on the sealed federation messages. Each is held to its body
+    hash and to its entry, then checked under the peer key given for its hub,
+    if one was. ``verified`` passed under a key, ``failed`` failed a check
+    (listed below), and the rest came from a hub with no key, which is not a
+    failure."""
+    base = f"present={present} verified={verified} failed={failed}"
     if present == 0:
         return f"{base} (none on the chain)"
-    unverified = present - verified
-    if unverified == 0:
+    no_key = present - verified - failed
+    if no_key == 0 and failed == 0:
         return f"{base} (each hashed, matched to its entry, and signed by the peer key given for its hub)"
-    if keys_given:
-        return (
-            f"{base} (each hashed and matched to its entry; {unverified} from a hub with no "
-            "--federation-key, so the peer's signature was not checked)"
+    parts: list[str] = []
+    if failed > 0:
+        parts.append(f"{failed} failed: see the failures below")
+    if no_key > 0:
+        parts.append(
+            f"{no_key} hashed and matched to its entry, from a hub with no --federation-key, "
+            "so the peer's signature was not checked"
+            if keys_given
+            else f"{no_key} hashed and matched to its entry; the peer signatures were NOT checked: "
+            "pass --federation-key <hubId>=<key> for each peer"
         )
-    return (
-        f"{base} (each hashed and matched to its entry; the peer signatures were NOT checked: "
-        "pass --federation-key <hubId>=<key> for each peer)"
-    )
+    return f"{base} ({'; '.join(parts)})"
 
 
 def _agent_signature_summary(
@@ -603,7 +608,7 @@ def _format_dump_text(
         f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain)}"
     )
     lines.append(
-        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, federation_keys_given)}"
+        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, report.vault.federation_wire_failed, federation_keys_given)}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
@@ -663,6 +668,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
         "federationWire": {
             "present": result.federation_wire.present,
             "verified": result.federation_wire.verified,
+            "failed": result.federation_wire.failed,
         },
         "unsignedProjectionFields": list(result.unsigned_projection_fields),
     }
@@ -712,7 +718,7 @@ def _format_export_text(
     )
     lines.append(
         "  peer messages     : "
-        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, federation_keys_given)}"
+        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed, federation_keys_given)}"
     )
     if result.broken_at is not None:
         lines.append(

@@ -752,6 +752,7 @@ def verify_vault_chains(
             agent_signatures_verified=agent_counts.verified,
             federation_wire_present=wire_counts.present,
             federation_wire_verified=wire_counts.verified,
+            federation_wire_failed=wire_counts.failed,
             cert_keys_from_chain=cert_keys_from_chain,
             signed_entries=signed_entries,
             optional_checks=optional_checks_report(

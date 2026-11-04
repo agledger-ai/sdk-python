@@ -154,6 +154,7 @@ def test_the_sealed_key_must_be_the_key_the_senders_operator_supplied():
     assert result.broken_at is not None
     assert (result.broken_at.position, result.broken_at.code) == (1, "CHAIN_FEDERATION_WIRE_INVALID")
     assert "not the federation key supplied" in (result.broken_at.detail or "")
+    assert (result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed) == (1, 0, 1)
 
 
 def test_a_signature_by_someone_else_under_the_senders_key_id_fails():
@@ -267,9 +268,14 @@ def test_the_json_report_carries_federation_wire_and_the_text_report_a_line(caps
             json.dump(doc, fh)
         assert run([path, "--federation-key", f"{SENDER_HUB}={_spki(SENDER)}", "-f", "json"]) == 0
         out = json.loads(capsys.readouterr().out)
-        assert out["federationWire"] == {"present": 1, "verified": 1}
+        assert out["federationWire"] == {"present": 1, "verified": 1, "failed": 0}
         assert out["optionalChecks"]["federation_wire"] == "applied"
         assert run([path]) == 0
         text = capsys.readouterr().out
-        assert "peer messages     : present=1 verified=0 (each hashed and matched to its entry; the peer signatures were NOT checked" in text
+        assert "peer messages     : present=1 verified=0 failed=0 (1 hashed and matched to its entry; the peer signatures were NOT checked" in text
+        # A key that does not match is a failure, not a hub given no key.
+        assert run([path, "--federation-key", f"{SENDER_HUB}={_spki(STRANGER)}"]) == 1
+        text = capsys.readouterr().out
+        assert "peer messages     : present=1 verified=0 failed=1 (1 failed: see the failures below)" in text
+        assert "no --federation-key" not in text
         assert run([path, "--federation-key", "hub-b=nope"]) == 2

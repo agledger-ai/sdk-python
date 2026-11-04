@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.1.0 @ 62c48924",
+ "verifyCore": "2.1.0 @ 95f2ded9",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
