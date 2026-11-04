@@ -629,6 +629,8 @@ class BulkCreateResultItem(BaseModel):
     status: Literal["created", "replayed", "error"]
     data: RecordRow | None = None
     error: str | None = None
+    error_code: str | None = Field(None, alias="errorCode")
+    """Error class of a ``status: "error"`` item, e.g. ``ValidationError``."""
     problem_type: str | None = Field(None, alias="problemType")
     """RFC 9457 problem URI when the failure carries a narrower one than its
     class, e.g. ``/problems/ambiguous-publisher``. Branch on this rather than on

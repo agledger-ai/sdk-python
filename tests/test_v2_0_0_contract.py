@@ -569,6 +569,19 @@ def test_a_bulk_item_carries_the_values_its_field_may_take():
 
 
 @respx.mock
+def test_a_bulk_item_declares_its_error_class():
+    respx.post(f"{BASE}/v1/records/bulk").mock(return_value=httpx.Response(207, json={
+        "results": [{
+            "index": 0, "status": "error", "error": "Unknown type", "errorCode": "ValidationError",
+        }],
+        "summary": {"total": 1, "succeeded": 0, "failed": 1},
+    }))
+    item = _client().records.bulk_create([{"type": "t", "criteria": {}}]).results[0]
+    assert item.error_code == "ValidationError"
+    assert not item.model_extra
+
+
+@respx.mock
 def test_a_verdict_sends_message_as_the_wire_alias_it_is():
     route = respx.post(f"{BASE}/v1/records/rec-1/verdict").mock(return_value=httpx.Response(200, json={
         "recordId": "rec-1", "completionId": "cmp-1", "verdict": "reject",
