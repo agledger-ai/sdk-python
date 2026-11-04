@@ -191,10 +191,12 @@ class APIError(AgledgerError):
     Everything this class names is a typed view onto it; read this for a
     field the view does not name yet. Empty for a body that was not JSON."""
     raw_body: bytes | None
-    """Raw response body for binary endpoints (``application/cose``,
-    ``application/concise-problem-details+cbor``). Set when the API returns
-    a 4xx/5xx on a SCITT or attestation endpoint: decode with ``cbor2`` for
-    SCITT problem-details (RFC 9290)."""
+    """The response body's bytes, when it was not a JSON object. On a binary
+    endpoint (``application/cose``, ``application/concise-problem-details+cbor``)
+    every error sets it: decode SCITT problem details (RFC 9290) with
+    ``cbor2``. On a JSON route it is set when something in front of the
+    Server answered instead (a load balancer's 502 page). Also set on an
+    ``/a2a`` JSON-RPC error, whose envelope is kept whole."""
 
     def __init__(
         self,

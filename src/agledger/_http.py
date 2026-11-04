@@ -169,14 +169,19 @@ def _jsonrpc_error_body(parsed: Any) -> dict[str, Any] | None:
     }
 
 
-def _parse_error_body(response: httpx.Response) -> dict[str, Any]:
+def _parse_error_body(response: httpx.Response) -> dict[str, Any] | None:
+    """The error body when it is a JSON object, else None."""
     try:
-        return response.json()
+        parsed = response.json()
     except Exception:
-        pass
+        return None
+    return cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else None
+
+
+def _fallback_error_body(response: httpx.Response) -> dict[str, Any]:
     # A text body (a proxy's error page) is the best message there is. A
     # binary one, such as the CBOR problem details the SCITT routes answer
-    # with, is not text: it stays on raw_body and the status names the error.
+    # with, is not text: the status names the error.
     content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
     if response.text and (not content_type or content_type.startswith("text/")):
         return {"detail": response.text}
@@ -227,9 +232,10 @@ def _retry_after_seconds(header: str | None, body_seconds: object) -> float | No
 
 
 def build_error(response: httpx.Response) -> APIError:
-    raw = _parse_error_body(response)
+    parsed = _parse_error_body(response)
+    raw = parsed if parsed is not None else {}
     mapped = _jsonrpc_error_body(raw)
-    body = mapped if mapped is not None else raw
+    body = mapped if mapped is not None else parsed if parsed is not None else _fallback_error_body(response)
     rpc_error = mapped is not None
     status = response.status_code
     cls = _ERROR_MAP.get(status, APIError)
@@ -299,8 +305,10 @@ def build_error(response: httpx.Response) -> APIError:
         kwargs["missing_scopes"] = _str_list_or_none(body.get("missingScopes")) or []
 
     error = cls(status, **kwargs) if cls is APIError else cls(**kwargs)
-    if rpc_error:
-        # The envelope carries more than the mapped fields; keep it whole.
+    if rpc_error or (parsed is None and response.content):
+        # A JSON-RPC envelope carries more than the mapped fields, and a body
+        # that is not a JSON object (a load balancer's 502 page) has no parsed
+        # form at all: keep either whole.
         error.raw_body = response.content
     return error
 
