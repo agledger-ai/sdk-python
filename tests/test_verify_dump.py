@@ -371,3 +371,11 @@ def test_signing_key_statements_not_keyed_by_key_id_are_refused_as_verify_core_r
     doc["exportMetadata"]["signingKeyStatements"] = value
     with pytest.raises(TypeError, match=r"^signingKeyStatements must be an object keyed by key id\.$"):
         verify_export(doc, trust_anchors=[doc["exportMetadata"]["anchoredFrom"]])
+
+
+def test_version_flag_names_the_verifier_and_exits_0(capsys: pytest.CaptureFixture[str]) -> None:
+    from agledger._http import SDK_VERSION
+
+    for flag in ("--version", "-V"):
+        assert run_cli([flag]) == 0
+        assert capsys.readouterr().out == f"agledger-verify {SDK_VERSION} (agledger, Python)\n"

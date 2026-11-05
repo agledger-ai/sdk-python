@@ -59,6 +59,7 @@ class APIError(AgledgerError):
       failed its schema
     - ``hint``: the 404's pointer at what to list or create instead
     - ``attempted_action`` / ``attempted_transition`` / ``attempted_state``: what a 422 refused
+    - ``inapplicable_fields``: the fields a 422 ``notarize_only_field`` refused on a notarize-only create
     - ``retry_after``: seconds the Server or a proxy asked the client to wait, from the
       ``Retry-After`` header on any status (a 429 body's ``retryAfterSeconds`` fills it too)
     - ``body``: the parsed error body as sent, every field included, for anything this
@@ -168,6 +169,10 @@ class APIError(AgledgerError):
     constraint_violations: list[dict[str, Any]] | None
     """The bounds the request broke (``field``, ``parentValue``,
     ``childValue``, ``reason``, ``tolerance``)."""
+    inapplicable_fields: list[str] | None
+    """Fields a 422 ``notarize_only_field`` refused on a notarize-only create
+    (``deadline``, ``gateMode``, ``maxSubmissions``, ``maxRevisions``): drop
+    them and re-send."""
     missing_features: list[str] | None
     """License features the current tier lacks, on a 403 license refusal."""
     current_tier: str | None
@@ -238,6 +243,7 @@ class APIError(AgledgerError):
         allowed_values: list[Any] | None = None,
         allowed_actors: list[str] | None = None,
         constraint_violations: list[dict[str, Any]] | None = None,
+        inapplicable_fields: list[str] | None = None,
         missing_features: list[str] | None = None,
         current_tier: str | None = None,
         required_tier: str | None = None,
@@ -266,6 +272,7 @@ class APIError(AgledgerError):
         self.allowed_values = allowed_values
         self.allowed_actors = allowed_actors
         self.constraint_violations = constraint_violations
+        self.inapplicable_fields = inapplicable_fields
         self.missing_features = missing_features
         self.current_tier = current_tier
         self.required_tier = required_tier

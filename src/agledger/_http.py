@@ -285,6 +285,7 @@ def build_error(response: httpx.Response) -> APIError:
         "allowed_values": _list_or_none(body.get("allowedValues")),
         "allowed_actors": _str_list_or_none(body.get("allowedActors")),
         "constraint_violations": _dict_list_or_none(body.get("constraintViolations")),
+        "inapplicable_fields": _str_list_or_none(body.get("inapplicableFields")),
         "missing_features": _str_list_or_none(body.get("missingFeatures")),
         "current_tier": _str_or_none(body.get("currentTier")),
         "required_tier": _str_or_none(body.get("requiredTier")),

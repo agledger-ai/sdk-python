@@ -2795,6 +2795,11 @@ class FederationPeer(BaseModel):
     last_delivery_error: str | None = Field(None, alias="lastDeliveryError")
     """Why the most recent delivery attempt failed, cleared on the next
     success."""
+    signing_public_key: str | None = Field(None, alias="signingPublicKey")
+    """The peer's federation public key this Server holds (base64 SPKI DER),
+    registered by the handshake: inbound messages verify under it while the row
+    is active, and it is the ``wire.senderPublicKey`` a receipt seals. A row
+    keeps one key for its life. Sent by a Server 2.2 or later."""
 
 
 class PeerHandshakeResult(BaseModel):

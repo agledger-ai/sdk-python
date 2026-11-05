@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`retry_after` on every API error.** The client waits it out on any status that sends `Retry-After`, not only 429.
 - **`a2a.cancel_task()`** for the `CancelTask` call. `reason` is sent in `metadata["agledger:reason"]` and recorded as the record's `lastTransitionReason`.
 - **`federation_keys=` on `verify_export` and `verify_dump`, and `--federation-key <hubId>=<key>` on `agledger-verify`.** Sealed peer messages are checked against their body hash and entry, and re-verified under the hub's key when one is given. Reports count them under `federation_wire` (`present`, `verified`, `failed`); a failure is `CHAIN_FEDERATION_WIRE_INVALID`. `agledger.verify.canonicalize_json` is the RFC 8785 canonical form used for the body hash.
+- **`schemas.import_()` takes a `get_manifest()` response whole** and sends its `manifestDigest`; the Server refuses the import with 400, writing nothing, when the manifest does not hash to it. `manifest_digest=` sets the digest by hand. A bare manifest imports as before. Sending a digest needs an AGLedger Server 2.2 or later.
+- **`discovery.get_federation_keys()`** reads `GET /.well-known/agledger-federation-keys.json` (no auth): every federation signing key the Server has held, with its validity window, and the signed statements linking them. Needs a Server 2.2 or later.
+- **`inapplicable_fields`** on `APIError`: the fields a 422 `notarize_only_field` refused on a notarize-only create.
+- `FederationPeer.signing_public_key`, the peer's federation key this Server holds.
+- **`agledger-verify --version`** (`-V`) prints the verifier's version and exits 0, so an audit record can name the verifier that produced it.
 - Types for newly served fields: the per-item fields and `error_code` on `BulkCreateResultItem`, `BulkCreateSummary.replayed`, `ComplianceExport.bulk_export`, `connections_overcommitted` on `StatusComponentReason`, and `standing` on each key-registry finding.
 
 ### Fixed

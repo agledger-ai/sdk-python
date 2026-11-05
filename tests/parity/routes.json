@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-05T01:15:50.002Z",
+  "generatedAt": "2026-11-05T03:32:35.216Z",
   "sourceKind": "local",
-  "apiVersion": "2.0.0",
-  "count": 195,
+  "apiVersion": "2.2.0",
+  "count": 196,
   "routes": [
     {
       "method": "DELETE",
@@ -184,6 +184,22 @@
       "pathParams": [],
       "responseCodes": [
         200
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/.well-known/agledger-federation-keys.json",
+      "operationId": "getFederationKeys",
+      "tag": "Discovery",
+      "requiredFields": [],
+      "bodyFields": [],
+      "queryFields": [],
+      "pathParams": [],
+      "responseCodes": [
+        200,
+        414,
+        429,
+        500
       ]
     },
     {
@@ -3670,6 +3686,7 @@
         404,
         409,
         414,
+        422,
         429,
         500,
         503
@@ -4564,6 +4581,8 @@
         "federateDisputes",
         "flipRecordStatusOnDispute",
         "manifest",
+        "manifestDigest",
+        "nextSteps",
         "orgId"
       ],
       "queryFields": [],

@@ -265,3 +265,29 @@ async def test_async_import_schema():
         import json as _json
         body = _json.loads(route.calls[0].request.content)
         assert body["manifest"] == MANIFEST
+
+
+@respx.mock
+def test_import_takes_a_get_manifest_response_whole_and_sends_its_digest():
+    route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(200, json=IMPORT_JSON))
+    client = AgledgerClient(base_url=BASE, api_key="test-key")
+    digest = "sha256:" + "a" * 64
+    exported = {"manifest": MANIFEST, "manifestDigest": digest, "nextSteps": [{"action": "import"}]}
+    client.schemas.import_(exported)
+    assert json.loads(route.calls[0].request.content) == {"manifest": MANIFEST, "manifestDigest": digest}
+    # A bare manifest with a digest given by hand.
+    client.schemas.import_(MANIFEST, manifest_digest=digest, org_id="org-1")
+    assert json.loads(route.calls[1].request.content) == {
+        "manifest": MANIFEST,
+        "manifestDigest": digest,
+        "orgId": "org-1",
+    }
+
+
+@respx.mock
+def test_get_federation_keys_reads_the_well_known_document():
+    doc = {"hubId": None, "anchoredFrom": None, "statementDomain": "agledger.federation.key-statement.v1", "keys": [], "statements": []}
+    route = respx.get(f"{BASE}/.well-known/agledger-federation-keys.json").mock(return_value=httpx.Response(200, json=doc))
+    client = AgledgerClient(base_url=BASE, api_key="test-key")
+    assert client.discovery.get_federation_keys() == doc
+    assert route.called
