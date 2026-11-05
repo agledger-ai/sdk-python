@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "agledger"
 version = "3.1.0"
-description = "AGLedger Python SDK: change control for AI agents. Self-hosted, signed, hash-chained."
+description = "AGLedger Python SDK: change control for AI agents. Self-hosted, signed, hash-chained. Patent pending."
 readme = "README.md"
 license = "LicenseRef-Proprietary"
 # Floor tracks Python's EOL schedule, taken as the old version comes due rather
