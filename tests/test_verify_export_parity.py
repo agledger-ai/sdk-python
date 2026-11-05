@@ -2,9 +2,11 @@
 field, on every corpus export vector unpinned and pinned on the export's own
 anchoredFrom: validity, every entry's position, code, detail and signature
 state, the broken-at entry, signature coverage, key provenance, the optional
-checks, the agent-signature counts and the whole key-trust report; and on
-the live export taken after a dated distrust entry, pinned alone and with a
-distrust entry at the Server's instant, a later one and an earlier one.
+checks, the agent-signature and evidence-binding counts and the whole
+key-trust report; on the live export taken after a dated distrust entry,
+pinned alone and with a distrust entry at the Server's instant, a later one
+and an earlier one; and on live Server 2.2 exports taken with
+``?evidence=true``, unedited and with one inlined body edited or misplaced.
 
 The verify-core results in ``fixtures/verify-core-exports.json`` were recorded
 by ``scripts/record-verify-core-exports.mjs`` from the verify-core build the
@@ -53,6 +55,12 @@ def _project(r: VerifyExportResult) -> dict[str, Any]:
         "keyProvenance": {"supplied": r.key_provenance.supplied, "embedded": r.key_provenance.embedded},
         "optionalChecks": dict(r.optional_checks),
         "agentSignatures": {"present": r.agent_signatures.present, "verified": r.agent_signatures.verified},
+        "evidenceBinding": {
+            "present": r.evidence_binding.present,
+            "verified": r.evidence_binding.verified,
+            "clientHashed": r.evidence_binding.client_hashed,
+            "failed": r.evidence_binding.failed,
+        },
         "unsignedProjectionFields": r.unsigned_projection_fields,
         "keyTrust": trust,
     }
@@ -110,4 +118,26 @@ def test_verify_export_gives_verify_core_s_result_on_a_dated_distrust_export(
         trust_anchors=run["trustAnchors"],
         distrusted_keys=run["distrustedKeys"],
     )
+    assert _project(result) == run["result"]
+
+
+EVIDENCE_DIR = Path(__file__).parent / "fixtures" / "live-2.2.0"
+
+
+def test_the_fixture_covers_the_evidence_exports() -> None:
+    assert len(_RECORDED["evidence"]) == 7
+
+
+@pytest.mark.parametrize("run_id", sorted(_RECORDED["evidence"]))
+def test_verify_export_gives_verify_core_s_result_on_inlined_evidence(run_id: str) -> None:
+    """Each inlined body is re-bound to the hash its entry signs: the counts,
+    the failure code and its detail are verify-core's, byte for byte."""
+    run = _RECORDED["evidence"][run_id]
+    doc = json.loads((EVIDENCE_DIR / run["file"]).read_text())
+    edit = run["edit"]
+    if edit is not None:
+        at = edit["at"]
+        entry = doc["entries"][at] if isinstance(at, int) else next(e for e in doc["entries"] if e["entryType"] == at)
+        entry["evidence"] = {**entry["evidence"], **edit["merge"]} if "merge" in edit else edit["set"]
+    result = verify_export(doc, trust_anchors=run["trustAnchors"])
     assert _project(result) == run["result"]

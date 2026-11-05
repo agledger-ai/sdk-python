@@ -751,10 +751,7 @@ def verify_vault_chains(
             accounted=accounted,
             agent_signatures_present=agent_counts.present,
             agent_signatures_verified=agent_counts.verified,
-            federation_wire_present=wire_counts.present,
-            federation_wire_verified=wire_counts.verified,
-            federation_wire_failed=wire_counts.failed,
-            federation_wire_after_retirement=wire_counts.after_retirement,
+            federation_wire=wire_counts,
             cert_keys_from_chain=cert_keys_from_chain,
             signed_entries=signed_entries,
             optional_checks=optional_checks_report(

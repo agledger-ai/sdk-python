@@ -283,7 +283,7 @@ def test_the_json_report_carries_federation_wire_and_the_text_report_a_line(caps
         # A key that does not match is a failure, not a hub given no key.
         assert run([path, "--federation-key", f"{SENDER_HUB}={_spki(STRANGER)}"]) == 1
         text = capsys.readouterr().out
-        assert "peer messages     : present=1 verified=0 failed=1 (1 failed: see the failures below)" in text
+        assert "peer messages     : present=1 verified=0 failed=1, counted on the entries that passed every other check (1 failed: see the failures below)" in text
         assert "no --federation-key" not in text
         assert run([path, "--federation-key", "hub-b=nope"]) == 2
 
@@ -313,10 +313,15 @@ def _fed_key(name: str) -> Ed25519PrivateKey:
     return key
 
 
-def _under(name: str, received_at: str) -> dict[str, Any]:
-    wire = _sealed(_fed_key(name), BODY, senderHubId=_HUB)
-    wire["signature"] = _fed_key(name).sign(federation_sign_input(wire).encode()).hex()
-    return _export(_projection(wire, peerHubId=_HUB), received_at)
+def _under(name: str, signed_at: str, created_at: str = "2030-01-01T00:00:00.000Z", key: Any = None) -> dict[str, Any]:
+    """An export whose entry seals a message the sender signed under ``name``
+    (or ``key``) at ``signed_at``. The entry's ``createdAt`` sits inside no
+    window at all, so a test passes only if the walk places the message by the
+    signed timestamp."""
+    sender = key if key is not None else _fed_key(name)
+    wire = _sealed(sender, BODY, senderHubId=_HUB, timestamp=signed_at)
+    wire["signature"] = sender.sign(federation_sign_input(wire).encode()).hex()
+    return _export(_projection(wire, peerHubId=_HUB), created_at)
 
 
 def _pin(name: str, history: Any = None) -> dict[str, Any]:
@@ -340,13 +345,13 @@ def test_without_the_history_the_earlier_key_fails_and_the_detail_says_what_to_s
     assert r.broken_at is not None and "agledger-federation-keys.json" in str(r.broken_at.detail)
 
 
-def test_a_message_taken_before_its_key_was_activated_fails():
+def test_a_message_signed_before_its_key_was_activated_fails():
     r = verify_export(_under("K2", "2026-11-05T04:22:01.000Z"), federation_keys=[_pin("K3", _SUCCESSION)])
     assert not r.valid
     assert r.broken_at is not None and "activates at 2026-11-05T04:22:03.323630Z" in str(r.broken_at.detail)
 
 
-def test_a_message_taken_after_its_key_was_retired_verifies_and_is_counted():
+def test_a_message_signed_after_its_key_was_retired_verifies_and_is_counted():
     r = verify_export(_under("K1", "2026-11-05T04:22:05.000Z"), federation_keys=[_pin("K3", _SUCCESSION)])
     assert r.valid
     assert (r.federation_wire.verified, r.federation_wire.after_retirement) == (1, 1)
@@ -376,8 +381,37 @@ def test_an_altered_foreign_or_unlinked_history_is_refused_before_anything_is_ve
         build_federation_key_registry([_pin("K3", altered)])
     with pytest.raises(TypeError, match="key history of hub"):
         build_federation_key_registry([{**_pin("K3", _SUCCESSION), "hubId": "another-hub"}])
-    with pytest.raises(TypeError, match="appears in none of the key histories"):
+    with pytest.raises(TypeError, match=r"no key pinned for hub .* appears in the key history"):
         build_federation_key_registry([{"hubId": _HUB, "publicKey": _spki(STRANGER), "history": _SUCCESSION}])
+
+
+def test_a_message_is_placed_by_its_signed_timestamp_and_an_edited_created_at_moves_nothing():
+    for created_at in ("2026-11-05T04:22:01.000Z", "2026-11-05T04:22:20.000Z"):
+        r = verify_export(_under("K2", "2026-11-05T04:22:05.000Z", created_at), federation_keys=[_pin("K3", _SUCCESSION)])
+        assert r.valid
+        assert (r.federation_wire.verified, r.federation_wire.after_retirement) == (1, 0)
+
+
+def test_a_timestamp_that_is_not_rfc3339_cannot_be_placed_in_a_window():
+    r = verify_export(_under("K2", "Thu, 05 Nov 2026 04:22:05 GMT"), federation_keys=[_pin("K3", _SUCCESSION)])
+    assert not r.valid
+    assert r.broken_at is not None and "not an RFC 3339 instant" in str(r.broken_at.detail)
+
+
+def test_a_pin_the_history_does_not_list_sits_beside_it_and_is_trusted_on_its_own():
+    pins = [_pin("K3", _SUCCESSION), {"hubId": _HUB, "publicKey": _spki(STRANGER)}]
+    stranger_msg = _under("", "2026-11-05T04:21:00.000Z", key=STRANGER)
+    r = verify_export(stranger_msg, federation_keys=pins)
+    assert r.valid and r.federation_wire.verified == 1
+    assert verify_export(_under("K1", "2026-11-05T04:22:02.000Z"), federation_keys=pins).valid
+    assert not verify_export(stranger_msg, federation_keys=[pins[0]]).valid
+
+
+def test_a_hub_whose_pins_the_history_lists_none_of_is_refused_naming_each_pin():
+    with pytest.raises(TypeError, match=r"federation_keys\[0\] \([0-9a-f]{16}\), federation_keys\[1\] \([0-9a-f]{16}\)"):
+        build_federation_key_registry(
+            [{"hubId": _HUB, "publicKey": _spki(STRANGER), "history": _SUCCESSION}, _pin("K4")]
+        )
 
 
 def test_the_cli_takes_a_history_file_beside_the_key_for_its_hub(capsys: pytest.CaptureFixture[str]):

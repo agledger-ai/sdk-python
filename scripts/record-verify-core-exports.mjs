@@ -38,6 +38,7 @@ function project(r) {
     keyProvenance: r.keyProvenance,
     optionalChecks: r.optionalChecks,
     agentSignatures: r.agentSignatures,
+    evidenceBinding: r.evidenceBinding,
     unsignedProjectionFields: r.unsignedProjectionFields,
     keyTrust: {
       status: r.keyTrust.status,
@@ -94,6 +95,31 @@ for (const [id, distrustedKeys] of [
   distrust[id] = { trustAnchors: pin, distrustedKeys: distrustedKeys ?? null, result: project(verifyAuditExport(distrustDoc, options)) };
 }
 
-const out = { verifyCore: `${pkg.version} @ ${sha}`, runs, distrust };
+// Server 2.2 exports taken with ?evidence=true, pinned on their anchoredFrom:
+// unedited, then with one inlined body edited or misplaced. Each edit is
+// recorded as data (the entry by type, or by index, and the value set on its
+// `evidence`) so the Python test applies exactly the same one.
+const EVIDENCE_DIR = join('tests', 'fixtures', 'live-2.2.0');
+const evidenceCases = {
+  'cleartext, unedited': { file: 'export-evidence.json', edit: null },
+  'completion body edited': { file: 'export-evidence.json', edit: { at: 'COMPLETION_SUBMITTED', merge: { summary: 'edited' } } },
+  'dispute body edited': { file: 'export-evidence.json', edit: { at: 'DISPUTE_EVIDENCE', merge: { doc: 'invoice-999' } } },
+  'body on an entry that binds none': { file: 'export-evidence.json', edit: { at: 0, set: { summary: 'attached where nothing signs it' } } },
+  'body is an array': { file: 'export-evidence.json', edit: { at: 'DISPUTE_EVIDENCE', set: ['x'] } },
+  'body is a string': { file: 'export-evidence.json', edit: { at: 'COMPLETION_SUBMITTED', set: 'x' } },
+  'encrypted-mode completion': { file: 'export-encrypted-evidence.json', edit: null },
+};
+const evidence = {};
+for (const [id, c] of Object.entries(evidenceCases)) {
+  const doc = JSON.parse(readFileSync(join(EVIDENCE_DIR, c.file), 'utf8'));
+  if (c.edit) {
+    const entry = typeof c.edit.at === 'number' ? doc.entries[c.edit.at] : doc.entries.find((e) => e.entryType === c.edit.at);
+    entry.evidence = c.edit.merge ? { ...entry.evidence, ...c.edit.merge } : c.edit.set;
+  }
+  const trustAnchors = [doc.exportMetadata.anchoredFrom];
+  evidence[id] = { ...c, trustAnchors, result: project(verifyAuditExport(doc, { trustAnchors })) };
+}
+
+const out = { verifyCore: `${pkg.version} @ ${sha}`, runs, distrust, evidence };
 writeFileSync(join('tests', 'fixtures', 'verify-core-exports.json'), JSON.stringify(out, null, 1) + '\n');
 console.error(`recorded ${Object.keys(runs).length} runs from @agledger/verify-core ${out.verifyCore}`);
