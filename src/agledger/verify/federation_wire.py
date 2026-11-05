@@ -29,11 +29,21 @@ import binascii
 import hashlib
 import json
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+from agledger.verify.key_statements import rfc3339_ms
+
 FEDERATION_WIRE_SCHEME = "agledger.federation.v2"
+
+#: The domain a federation key statement's signatures sign under.
+FEDERATION_KEY_STATEMENT_DOMAIN = "agledger.federation.key-statement.v1"
+
+_INSTANT_US = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_HEX_SIG = re.compile(r"^[0-9a-fA-F]{128}$")
 
 #: The 12-byte SPKI prefix of an Ed25519 key.
 _ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
@@ -151,39 +161,249 @@ def normalize_federation_key(public_key_base64: object) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class FederationTrustedKey:
+    """One federation key a sender hub is trusted under, base64 SPKI DER, with
+    the window its signed statements give it. Both bounds are None for a key
+    given without a history: it is trusted at any time."""
+
+    public_key: str
+    activated_at: str | None = None
+    retired_at: str | None = None
+
+
+#: Hub id to the federation keys its messages are trusted under.
+FederationKeyRegistry = Mapping[str, Sequence[FederationTrustedKey]]
+
+
+@dataclass(frozen=True)
+class _Statement:
+    typ: str
+    subject_key: str
+    subject_digest: str
+    activated_at: str | None
+    predecessor_key: str | None = None
+    predecessor_digest: str | None = None
+    retired_at: str | None = None
+
+
+def _spki_sha256(spki_base64: str) -> str:
+    return hashlib.sha256(base64.b64decode(spki_base64)).hexdigest()
+
+
+def _key_ref(value: object, extra: str) -> Mapping[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    ref = cast("Mapping[str, Any]", value)
+    if any(k not in ("publicKey", "spkiSha256", extra) for k in ref):
+        return None
+    public_key = ref.get("publicKey")
+    digest = ref.get("spkiSha256")
+    if not isinstance(public_key, str) or not isinstance(digest, str) or not _HEX64.match(digest):
+        return None
+    if normalize_federation_key(public_key) != public_key or _spki_sha256(public_key) != digest:
+        return None
+    return ref
+
+
+def _verify_statement_signature(public_key: str, signature: object, payload: str) -> bool:
+    if not isinstance(signature, str) or not _HEX_SIG.match(signature):
+        return False
+    message = f"{FEDERATION_KEY_STATEMENT_DOMAIN}:{payload}".encode()
+    return _verify_ed25519(public_key, message, bytes.fromhex(signature)) is True
+
+
+def _verify_key_statement(stmt: object, hub_id: str) -> _Statement | str:
+    """The statement when it holds as the Server holds it, else why not.
+    Mirrors verify-core's ``verifyKeyStatement``."""
+    if not isinstance(stmt, Mapping):
+        return "it is not an object"
+    st = cast("Mapping[str, Any]", stmt)
+    payload = st.get("payload")
+    if not isinstance(payload, str):
+        return "it carries no payload string"
+    try:
+        parsed: object = json.loads(payload)
+    except ValueError:
+        return "its payload is not JSON"
+    if not isinstance(parsed, Mapping):
+        return "its payload is not in its RFC 8785 canonical form"
+    p = cast("Mapping[str, Any]", parsed)
+    if canonicalize_json(p) != payload:
+        return "its payload is not in its RFC 8785 canonical form"
+    if any(k not in ("typ", "hubId", "subject", "predecessor") for k in p):
+        return "its payload carries a field a statement does not"
+    typ = p.get("typ")
+    if typ not in ("genesis", "succession"):
+        return f"its typ is {json.dumps(typ)}"
+    if st.get("kind") != typ:
+        return f"its kind {json.dumps(st.get('kind'))} is not its payload's typ {typ}"
+    if p.get("hubId") != hub_id:
+        return f"it names hub {json.dumps(p.get('hubId'))}"
+    subject = _key_ref(p.get("subject"), "activatedAt")
+    if subject is None:
+        return "its subject is not an Ed25519 key with its digest"
+    activated_at = subject.get("activatedAt")
+    if not (activated_at is None or (isinstance(activated_at, str) and _INSTANT_US.match(activated_at))):
+        return "its subject.activatedAt is not a microsecond RFC 3339 instant or null"
+    predecessor: Mapping[str, Any] | None = None
+    if "predecessor" in p:
+        predecessor = _key_ref(p.get("predecessor"), "retiredAt")
+        if predecessor is None:
+            return "its predecessor is not an Ed25519 key with its digest"
+        if not isinstance(predecessor.get("retiredAt"), str) or predecessor.get("retiredAt") != activated_at:
+            return "its predecessor.retiredAt is not its subject.activatedAt"
+        if predecessor["spkiSha256"] == subject["spkiSha256"]:
+            return "it names one key as its own predecessor"
+    elif activated_at is not None:
+        return "it activates a key at a signed instant without naming a predecessor"
+    if typ == "succession" and predecessor is None:
+        return "it is a succession with no predecessor"
+    if not _verify_statement_signature(str(subject["publicKey"]), st.get("subjectSignature"), payload):
+        return "its subjectSignature does not verify under its subject key"
+    if typ == "succession":
+        assert predecessor is not None
+        if not _verify_statement_signature(str(predecessor["publicKey"]), st.get("predecessorSignature"), payload):
+            return "its predecessorSignature does not verify under its predecessor key"
+    elif st.get("predecessorSignature") is not None:
+        return "it is a genesis carrying a predecessorSignature"
+    return _Statement(
+        typ=str(typ),
+        subject_key=str(subject["publicKey"]),
+        subject_digest=str(subject["spkiSha256"]),
+        activated_at=activated_at,
+        predecessor_key=None if predecessor is None else str(predecessor["publicKey"]),
+        predecessor_digest=None if predecessor is None else str(predecessor["spkiSha256"]),
+        retired_at=None if predecessor is None else str(predecessor["retiredAt"]),
+    )
+
+
+def _trusted_keys_from_history(
+    hub_id: str,
+    pins: Sequence[tuple[str, str]],
+    histories: Sequence[tuple[object, str]],
+) -> list[FederationTrustedKey]:
+    """The pin and every key a chain of successions links to it, each
+    succession counted only when it admits its subject. Mirrors verify-core's
+    ``trustedKeysFromHistory``."""
+    statements: list[_Statement] = []
+    seen_ids: set[str] = set()
+    for doc, label in histories:
+        if not isinstance(doc, Mapping) or not isinstance(cast("Mapping[str, Any]", doc).get("statements"), list):
+            raise TypeError(f"{label} is not a federation key-history document (no statements array).")
+        d = cast("Mapping[str, Any]", doc)
+        if d.get("hubId") != hub_id:
+            raise TypeError(f"{label} is the key history of hub {json.dumps(d.get('hubId'))}, not {hub_id}.")
+        if d.get("statementDomain") != FEDERATION_KEY_STATEMENT_DOMAIN:
+            raise TypeError(
+                f"{label} signs under {json.dumps(d.get('statementDomain'))}, not {FEDERATION_KEY_STATEMENT_DOMAIN}."
+            )
+        for j, stmt in enumerate(cast("list[object]", d["statements"])):
+            sid = cast("Mapping[str, Any]", stmt).get("id") if isinstance(stmt, Mapping) else None
+            ident = sid if isinstance(sid, str) else f"#{j}"
+            if ident in seen_ids:
+                continue
+            seen_ids.add(ident)
+            verified = _verify_key_statement(cast("object", stmt), hub_id)
+            if isinstance(verified, str):
+                raise TypeError(
+                    f"{label}.statements[{j}] ({ident}) does not hold: {verified}. A served history lists only "
+                    "statements that verify, so this document was altered."
+                )
+            statements.append(verified)
+
+    admission: dict[str, _Statement] = {}
+    for st in statements:
+        admission.setdefault(st.subject_digest, st)
+    public_key_of: dict[str, str] = {}
+    for st in statements:
+        public_key_of[st.subject_digest] = st.subject_key
+        if st.predecessor_digest is not None and st.predecessor_key is not None:
+            public_key_of[st.predecessor_digest] = st.predecessor_key
+    links: dict[str, list[str]] = {}
+    retired_at: dict[str, str] = {}
+    for st in statements:
+        if st.typ != "succession" or admission.get(st.subject_digest) is not st or st.predecessor_digest is None:
+            continue
+        links.setdefault(st.predecessor_digest, []).append(st.subject_digest)
+        links.setdefault(st.subject_digest, []).append(st.predecessor_digest)
+        if st.retired_at is not None:
+            retired_at.setdefault(st.predecessor_digest, st.retired_at)
+
+    trusted: list[str] = []
+    for spki, label in pins:
+        digest = _spki_sha256(spki)
+        if digest not in public_key_of:
+            raise TypeError(
+                f"{label}: the key pinned for hub {hub_id} appears in none of the key histories given for it, "
+                "so the history is not linked to anything you hold."
+            )
+        queue = [digest]
+        while queue:
+            k = queue.pop()
+            if k in trusted:
+                continue
+            trusted.append(k)
+            queue.extend(links.get(k, []))
+    return [
+        FederationTrustedKey(
+            public_key=public_key_of[d],
+            activated_at=admission[d].activated_at if d in admission else None,
+            retired_at=retired_at.get(d),
+        )
+        for d in trusted
+    ]
+
+
 def build_federation_key_registry(
     keys: Mapping[str, str] | Sequence[Mapping[str, Any]],
-) -> dict[str, str]:
-    """Hub id to the sender's key as base64 SPKI DER, from ``{hubId: key}`` or
-    ``[{"hubId": ..., "publicKey": ...}]``. Raises ``TypeError`` naming the
-    entry on any key that is not an Ed25519 key in one of the two forms, so a
-    mistyped key is refused before any verification runs."""
-    out: dict[str, str] = {}
-    entries: list[tuple[str, object, str]] = []
+) -> dict[str, list[FederationTrustedKey]]:
+    """Hub id to the keys its messages are trusted under, from ``{hubId: key}``
+    or ``[{"hubId": ..., "publicKey": ..., "history"?: ...}]``. ``history`` is
+    the sender's ``GET /.well-known/agledger-federation-keys.json``: every key
+    it links to the pinned ``publicKey`` through successions both keys signed
+    is trusted inside its window. A hub may be named more than once, to pin a
+    key no succession links. Raises ``TypeError`` naming the entry on a key
+    that is not an Ed25519 key, and on a history that is another hub's,
+    carries a statement that does not verify, or never reaches the pin, so a
+    bad input is refused before any verification runs."""
+    entries: list[tuple[str, object, object, str]] = []
     given = cast("object", keys)
     if isinstance(given, Mapping):
         mapping = cast("Mapping[object, object]", given)
         for hub_id, key in mapping.items():
             label = f"federation_keys[{json.dumps(str(hub_id))}]"
-            entries.append((hub_id if isinstance(hub_id, str) else "", key, label))
+            entries.append((hub_id if isinstance(hub_id, str) else "", key, None, label))
     elif isinstance(given, Sequence) and not isinstance(given, (str, bytes)):
         for i, item in enumerate(cast("Sequence[object]", given)):
             hub_id: object = None
             key: object = None
+            history: object = None
             if isinstance(item, Mapping):
                 m = cast("Mapping[object, object]", item)
                 hub_id = m.get("hubId")
                 key = m.get("publicKey")
-            entries.append((hub_id if isinstance(hub_id, str) else "", key, f"federation_keys[{i}]"))
+                history = m.get("history")
+            entries.append((hub_id if isinstance(hub_id, str) else "", key, history, f"federation_keys[{i}]"))
     else:
         raise TypeError("federation_keys must be a {hubId: key} mapping or a list of {hubId, publicKey} entries.")
-    for hub_id, key, label in entries:
+    by_hub: dict[str, tuple[list[tuple[str, str]], list[tuple[object, str]]]] = {}
+    for hub_id, key, history, label in entries:
         if not hub_id:
             raise TypeError(f"{label} names no hubId.")
         spki = normalize_federation_key(key)
         if spki is None:
             raise TypeError(f"{label} is not an Ed25519 public key (base64 SPKI DER, or base64 of the raw 32 bytes).")
-        out[hub_id] = spki
+        pins, histories = by_hub.setdefault(hub_id, ([], []))
+        pins.append((spki, label))
+        if history is not None:
+            histories.append((history, f"{label}.history"))
+    out: dict[str, list[FederationTrustedKey]] = {}
+    for hub_id, (pins, histories) in by_hub.items():
+        if not histories:
+            out[hub_id] = [FederationTrustedKey(public_key=k) for k in dict.fromkeys(spki for spki, _ in pins)]
+        else:
+            out[hub_id] = _trusted_keys_from_history(hub_id, pins, histories)
     return out
 
 
@@ -219,6 +439,10 @@ class FederationWireOutcome:
     detail: str | None = None
     #: With ``ok``, whether the signature was checked under a supplied key.
     signature_checked: bool = False
+    #: With ``ok``, the key the message is sealed under was retired, by a
+    #: succession it signed, before the receiver wrote the entry: in order when
+    #: the receiver's ``federation.peer_revoked`` audit row comes after it.
+    after_retirement: bool = False
 
 
 @dataclass
@@ -230,11 +454,13 @@ class FederationWireCounts:
     sending hub and found good; ``failed`` counts those that failed a check
     (the body hash, the entry, or the signature under the hub's key).
     ``present - verified - failed`` is the messages from a hub with no key
-    supplied."""
+    supplied. ``after_retirement`` counts verified ones sealed under a key the
+    sender's history retired before the receiver wrote the entry."""
 
     present: int = 0
     verified: int = 0
     failed: int = 0
+    after_retirement: int = 0
 
 
 def _verify_ed25519(spki_base64: str, message: bytes, signature: bytes) -> bool | None:
@@ -261,12 +487,15 @@ def check_federation_wire(
     record_id: object,
     payload: Mapping[str, Any],
     wire: Mapping[str, Any],
-    keys: Mapping[str, str] | None,
+    keys: FederationKeyRegistry | None,
+    received_at: object = None,
 ) -> FederationWireOutcome:
     """Check one sealed message against the entry that carries it, and under
     the sender's key when ``keys`` has one for ``wire["senderHubId"]``. Runs on
     an entry that already passed every other check, so ``payload`` is what the
-    receiver signed."""
+    receiver signed. ``received_at`` is the entry's ``createdAt`` on the
+    receiver's chain, which places the message in its key's window when the
+    sender's keys came with a history."""
     if wire["scheme"] != FEDERATION_WIRE_SCHEME:
         return FederationWireOutcome(
             "invalid", f"Sealed message scheme is {json.dumps(wire['scheme'])}, not {FEDERATION_WIRE_SCHEME}."
@@ -301,15 +530,43 @@ def check_federation_wire(
                 f"{canonicalize_json(theirs)}: the entry asserts what the sender did not sign.",
             )
 
-    supplied = keys.get(str(wire["senderHubId"])) if keys is not None else None
-    if supplied is None:
+    trusted = keys.get(str(wire["senderHubId"])) if keys is not None else None
+    if trusted is None:
         return FederationWireOutcome("unchecked")
-    if normalize_federation_key(wire["senderPublicKey"]) != supplied:
+    sealed = normalize_federation_key(wire["senderPublicKey"])
+    key = next((k for k in trusted if k.public_key == sealed), None)
+    if key is None:
+        with_history = any(k.activated_at is not None or k.retired_at is not None for k in trusted)
         return FederationWireOutcome(
             "invalid",
-            f"The sealed senderPublicKey for {wire['senderHubId']} is not the federation key supplied for that "
-            "hub: the receiver verified this message under a key the sender's operator did not give you.",
+            f"The sealed senderPublicKey for {wire['senderHubId']} is not a federation key its history links to "
+            "the key you pinned: the receiver verified this message under a key no succession from your pin "
+            "reaches. A key listed linked: false sits behind a genesis that named it without its signature; pin "
+            "it too once its operator confirms it."
+            if with_history
+            else f"The sealed senderPublicKey for {wire['senderHubId']} is not the federation key supplied for "
+            "that hub: the receiver verified this message under a key the sender's operator did not give you. If "
+            "the sender changed its federation key, supply its key history (GET "
+            "/.well-known/agledger-federation-keys.json on the sender) with the key you pinned.",
         )
+    after_retirement = False
+    if key.activated_at is not None or key.retired_at is not None:
+        at = rfc3339_ms(received_at)
+        if at is None:
+            return FederationWireOutcome(
+                "invalid",
+                f"Entry has no parseable createdAt, so the sealed message from {wire['senderHubId']} cannot be "
+                "placed in its key's window.",
+            )
+        activated = rfc3339_ms(key.activated_at)
+        if activated is not None and at < activated:
+            return FederationWireOutcome(
+                "invalid",
+                f"Entry written {received_at} seals a message from {wire['senderHubId']} under a federation key "
+                f"its history activates at {key.activated_at}, after the receiver says it took the message.",
+            )
+        retired = rfc3339_ms(key.retired_at)
+        after_retirement = retired is not None and at > retired
     signature_hex = str(wire["signature"])
     try:
         signature = bytes.fromhex(signature_hex)
@@ -317,7 +574,7 @@ def check_federation_wire(
         signature = b""
     if len(signature) != 64:
         return FederationWireOutcome("invalid", f"Sealed signature from {wire['senderHubId']} is not 64 bytes of hex.")
-    verified = _verify_ed25519(supplied, federation_sign_input(wire).encode("utf-8"), signature)
+    verified = _verify_ed25519(key.public_key, federation_sign_input(wire).encode("utf-8"), signature)
     if verified is None:
         return FederationWireOutcome(
             "unsupported",
@@ -330,4 +587,4 @@ def check_federation_wire(
             f"Sealed signature from {wire['senderHubId']} does not verify under that hub's federation key over "
             "the sign-input the entry seals.",
         )
-    return FederationWireOutcome("ok", signature_checked=True)
+    return FederationWireOutcome("ok", signature_checked=True, after_retirement=after_retirement)

@@ -142,6 +142,10 @@ class VaultChainsReport:
     """Of those, the ones that failed a check (the body hash, the entry, or
     the signature under the hub's key). ``present - verified - failed`` is the
     messages from a hub no key was supplied for."""
+    federation_wire_after_retirement: int = 0
+    """Of the verified ones, those sealed under a key the sender's history
+    retired before the receiver wrote the entry: in order when the receiver's
+    ``federation.peer_revoked`` audit row for the sender comes after them."""
     cert_keys_from_chain: int = 0
     """Agent cert public keys taken from the dump itself: the ``publicKeyJwk``
     each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
@@ -191,6 +195,7 @@ class VaultChainsReport:
                 "present": self.federation_wire_present,
                 "verified": self.federation_wire_verified,
                 "failed": self.federation_wire_failed,
+                "afterRetirement": self.federation_wire_after_retirement,
             },
             "certKeysFromChain": self.cert_keys_from_chain,
             "signedEntries": self.signed_entries,

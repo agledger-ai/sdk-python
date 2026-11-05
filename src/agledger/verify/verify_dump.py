@@ -44,6 +44,7 @@ from typing import Any, cast
 
 from agledger.verify.failures import FailureCode
 from agledger.verify.federation_wire import (
+    FederationKeyRegistry,
     FederationWireCounts,
     build_federation_key_registry,
 )
@@ -444,7 +445,7 @@ def _collect_chain_failures(
     agent_check: list[CheckApplicability] | None = None,
     applied: set[str] | None = None,
     accounted: list[AccountedEntry] | None = None,
-    federation_keys: Mapping[str, str] | None = None,
+    federation_keys: FederationKeyRegistry | None = None,
     wire_counts: FederationWireCounts | None = None,
 ) -> list[EntryVerificationResult]:
     """Walk one chain group via the shared per-entry body, flatten any invalid
@@ -753,6 +754,7 @@ def verify_vault_chains(
             federation_wire_present=wire_counts.present,
             federation_wire_verified=wire_counts.verified,
             federation_wire_failed=wire_counts.failed,
+            federation_wire_after_retirement=wire_counts.after_retirement,
             cert_keys_from_chain=cert_keys_from_chain,
             signed_entries=signed_entries,
             optional_checks=optional_checks_report(
