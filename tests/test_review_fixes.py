@@ -1,4 +1,4 @@
-"""Regressions from an independent review of the OIDC credential, the HTTP
+"""Regressions in the OIDC credential, the HTTP
 client's 401 handling and the offline verifier. Each test failed before its
 fix."""
 

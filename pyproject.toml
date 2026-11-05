@@ -23,6 +23,7 @@ keywords = ["agledger", "records", "accountability", "agents", "audit"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -36,7 +37,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://www.agledger.ai"
+Homepage = "https://agledger.ai"
+Documentation = "https://agledger.ai/docs"
+Source = "https://github.com/agledger-ai/sdk-python"
 Repository = "https://github.com/agledger-ai/sdk-python"
 Changelog = "https://github.com/agledger-ai/sdk-python/blob/main/CHANGELOG.md"
 
@@ -70,6 +73,9 @@ dev = [
 # exit 3, since a console script cannot be conditional on an extra.
 agledger-verify = "agledger._verify_entry:main"
 
+[tool.hatch.build.targets.sdist]
+include = ["src/agledger", "README.md", "LICENSE", "CHANGELOG.md", "pyproject.toml"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/agledger"]
 
@@ -78,7 +84,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 # Run against the working tree in src/, never a stale installed wheel. Without
 # this, pytest imports site-packages `agledger` and silently validates the last
-# published version instead of local changes (this masked F-713/F-710/F-706).
+# published version instead of local changes (this once hid drift between the source and the published version).
 pythonpath = ["src"]
 
 [tool.ruff]

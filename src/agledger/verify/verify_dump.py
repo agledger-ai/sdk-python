@@ -17,7 +17,7 @@ undecided, an anchored key carrying the window its statements sign. Entries,
 vault checkpoints, read-log leaves and read-log tree heads under an unanchored
 key fail CHAIN_SIGNING_KEY_UNANCHORED, CHECKPOINT_KEY_UNANCHORED,
 TENANT_READ_KEY_UNANCHORED and TENANT_CHECKPOINT_KEY_UNANCHORED, as the
-engine's scan grades them. Without anchors no walk runs, the registry rows are
+Server's scan grades them. Without anchors no walk runs, the registry rows are
 taken as they stand, and a report with no failure has the verdict
 ``unanchored``: it passes, flagged as not trusted.
 
@@ -29,7 +29,7 @@ fork-detection passes. They emit the canonical CHECKPOINT_* / TENANT_* codes.
 
 Fail-closed posture: an empty vault is CHAIN_EMPTY (never a silent pass); a row
 lacking ``cose_sign1`` is a pre-2.0 shape → UNSUPPORTED_FORMAT (not parsed
-best-effort). Mirrors ``packages/verify/src/dump-verifier.ts``.
+best-effort). Mirrors ``verifyDump`` in ``@agledger/verify``.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ from agledger.verify.verify_export import (
 )
 
 #: The kid an unsigned org_admin_reads leaf carries in its protected header:
-#: eight zero bytes, the engine's ``UNSIGNED_KID_SENTINEL``.
+#: eight zero bytes, the Server's ``UNSIGNED_KID_SENTINEL``.
 UNSIGNED_KID_SENTINEL = "0000000000000000"
 
 
@@ -129,7 +129,7 @@ def _checkpoint_signature_outcome(
     cose_sign1_b64: Any, signing_key_id: Any, keys: KeyCache
 ) -> str:
     """Resolve a checkpoint/STH signing key and verify its COSE_Sign1 signature,
-    in the engine's order: a key the registry does not hold, then one nothing
+    in the Server's order: a key the registry does not hold, then one nothing
     anchors, then one only a signature this host cannot compute reaches.
 
     Returns ``"ok"`` (nothing to verify, or verified), ``"missing-key"`` (the
@@ -138,7 +138,7 @@ def _checkpoint_signature_outcome(
     (the key is reached only through a statement this host cannot compute),
     ``"unsupported"`` (the key's algorithm is beyond this build; an upgrade
     signal, never a pass), or ``"invalid"``. Fail-closed on every other non-ok outcome, including an
-    all-zero signature on a checkpoint that CLAIMS a signing key: the engine
+    all-zero signature on a checkpoint that CLAIMS a signing key: the Server
     never writes a signing_key_id it did not sign with, so ``unsigned`` there
     is tampering. Only None means unsigned; "" must resolve in the registry
     and fail as a missing key rather than silently skip the signature check.
@@ -163,10 +163,10 @@ def _checkpoint_signature_outcome(
 
 # --- the signed claim inside a checkpoint or read-log envelope ---
 #
-# Decoded the way the engine decodes it (its decodeCoseSign1ToClaim), so a dump
-# is held to the claim checks the engine's own scan applies. An envelope the
-# engine would not decode as a claim decodes to None here, and the caller
-# reports that as a claim mismatch, as the engine does. Mirrors
+# Decoded the way the Server decodes it (its decodeCoseSign1ToClaim), so a dump
+# is held to the claim checks the Server's own scan applies. An envelope the
+# Server would not decode as a claim decodes to None here, and the caller
+# reports that as a claim mismatch, as the Server does. Mirrors
 # ``@agledger/verify``.
 
 _COSE_HEADER_KID = 4
@@ -255,7 +255,7 @@ def _decode_signed_claim(envelope: bytes) -> _SignedClaim | None:
 
 
 def _uuid_subject_digest(uuid: object) -> str | None:
-    """sha256 of a UUID's 16 bytes, the digest the engine signs as a record's subject."""
+    """sha256 of a UUID's 16 bytes, the digest the Server signs as a record's subject."""
     if not isinstance(uuid, str):
         return None
     h = uuid.replace("-", "").lower()
@@ -280,7 +280,7 @@ def _shown(value: object) -> str:
 
 
 def _envelope_bytes(cose_sign1: object) -> bytes:
-    """The bytes of a row's cose_sign1 column. The engine never writes it null,
+    """The bytes of a row's cose_sign1 column. The Server never writes it null,
     so a row without one was edited: it reads as empty bytes, which no leaf hash
     matches and no claim decodes from, rather than raising out of the walk."""
     if not isinstance(cose_sign1, str):
@@ -371,7 +371,7 @@ def _checkpoint_chain_key(cp: DumpRow) -> str:
     """Group identity for a checkpoint, which is NOT always its record_id.
 
     A schema chain's checkpoint carries a derived UUIDv8 in record_id (the
-    engine needs a non-null uuid for a chain whose rows have none), so joining
+    Server needs a non-null uuid for a chain whose rows have none), so joining
     on that column strands the checkpoint and reports CHECKPOINT_ROW_MISSING
     against a healthy vault. Join on the producer's chain_key; fall back to
     record_id for older dumps, which is correct for every chain except schema
@@ -509,10 +509,10 @@ def _harvest_cert_keys(
     and return how many were new.
 
     Each ``EPHEMERAL_CERT_ISSUED`` entry on the platform-ops chain signs its
-    cert's ``publicKeyJwk`` (engines from 1.8.0 on). Called only for a chain
+    cert's ``publicKeyJwk`` (Servers from 1.8.0 on). Called only for a chain
     that verified with no failure, its checkpoints included, and reads only
     entries whose vault signature checked ``ok``, so every key taken is one the
-    engine signed and nobody changed since. The key is read from the signed
+    Server signed and nobody changed since. The key is read from the signed
     predicate, never the row copy, and filed under its own RFC 7638
     thumbprint, which is how a sealed agent signature names its cert, so a key
     can only ever check the signatures made under it. Mirrors
@@ -544,8 +544,8 @@ def _verify_vault_checkpoints(
     failures: list[Failure],
 ) -> None:
     """Cross-check signed checkpoints against the live chain. A checkpoint
-    survives audit_vault TRUNCATE, so a chain shorter than (or hash-mismatched
-    with) its anchor is evidence of out-of-band tampering."""
+    outlives removed or rewritten chain entries, so a chain shorter than (or
+    hash-mismatched with) its anchor is evidence of tampering."""
     for cp in checkpoints:
         chain_key = _checkpoint_chain_key(cp)
         label = _chain_label(chain_key)
@@ -580,8 +580,8 @@ def _verify_vault_checkpoints(
             )
             continue
 
-        # Engine mirror of `checkpoint_claim_mismatch`, after the row and hash
-        # cross-checks and before anything about the key, as the engine orders it.
+        # Server mirror of `checkpoint_claim_mismatch`, after the row and hash
+        # cross-checks and before anything about the key, as the Server orders it.
         vault_claim = _claim_disagreement(
             cp.get("cose_sign1"),
             lambda c: [
@@ -604,7 +604,7 @@ def _verify_vault_checkpoints(
 
         signing_key_id = cp.get("signing_key_id")
         # An unsigned checkpoint is legitimate only from before the install
-        # began signing (engine mirror: checkpoint_unsigned).
+        # began signing (Server mirror: checkpoint_unsigned).
         if signing_key_id is None and written_while_signing(cp.get("created_at"), keys.signing_since):
             failures.append(
                 Failure(
@@ -801,7 +801,7 @@ def verify_vault_chains(
     for seen, e in enumerate(entries, start=1):
         # Format gate: format 2.0 requires cose_sign1 on every vault row. A row
         # lacking it is a pre-cutover shape, so fail closed rather than parse
-        # it; one such row means the dump came from a pre-cutover engine.
+        # it; one such row means the dump came from a pre-cutover Server.
         if not e.get("cose_sign1"):
             failures.append(
                 Failure(
@@ -865,7 +865,7 @@ def _detect_checkpoint_forks(checkpoints: list[DumpRow], failures: list[Failure]
                     message=(
                         f"Org {cp.get('org_id')}: two checkpoints at tree_size "
                         f"{cp.get('tree_size')} carry different root_hash "
-                        f"({prior.get('id')} vs {cp.get('id')}): engine fork or key compromise"
+                        f"({prior.get('id')} vs {cp.get('id')}): Server fork or key compromise"
                     ),
                     scope_id=_as_str(cp.get("org_id")),
                     tree_size=_as_int(cp.get("tree_size")),
@@ -889,17 +889,17 @@ def _check_leaf_signature(
     keys: KeyCache,
     must_sign: _MustSign,
 ) -> Failure | None:
-    """Grade one read-log leaf's signature the way the engine does, after its
+    """Grade one read-log leaf's signature the way the Server does, after its
     index and hash have been checked, or return None when it holds up.
 
     The leaf has no signing-key column, so the envelope's signature-covered kid
     is the only marker it has. The unsigned sentinel kid is reduced coverage
     only before the install began signing and before any signed leaf in the
-    org's log (engine mirror: ``leaf_signature_missing``). Any other kid names
+    org's log (Server mirror: ``leaf_signature_missing``). Any other kid names
     a key: it must be in the dumped registry and its signature must verify,
     because otherwise a forger could name any kid and skip the unsigned rule.
     ``must_sign.signed_before`` is set by any leaf naming a real key, whatever
-    its own verdict, as the engine's walk does. Mirrors ``@agledger/verify``.
+    its own verdict, as the Server's walk does. Mirrors ``@agledger/verify``.
     """
     at = f"Org {org_id} leaf {leaf.get('leaf_index')}"
     leaf_index = _as_int(leaf.get("leaf_index"))
@@ -960,7 +960,7 @@ def _check_leaf_signature(
             signing_key_id=kid,
         )
     # Fail closed on ANY non-ok outcome; an all-zero signature under a real kid
-    # is a wiped signature, as the engine grades it.
+    # is a wiped signature, as the Server grades it.
     outcome = verify_cose_sign1(envelope, key)
     if outcome == "ok":
         return None
@@ -1024,7 +1024,7 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return  # a tampered leaf stops the whole org
-        # Engine mirror of `leaf_claim_mismatch`: the claim is what links each
+        # Server mirror of `leaf_claim_mismatch`: the claim is what links each
         # leaf to the one before it and to the record it says was read.
         previous = None if i == 0 else leaves[i - 1].get("leaf_hash")
         leaf_claim = _claim_disagreement(
@@ -1085,7 +1085,7 @@ def _verify_one_org_admin_reads_log(
             )
             continue
 
-        # Engine mirror of the read log's `checkpoint_claim_mismatch`, after the
+        # Server mirror of the read log's `checkpoint_claim_mismatch`, after the
         # leaf-count and root cross-checks and before anything about the key.
         head_claim = _claim_disagreement(
             cp.get("cose_sign1"),
@@ -1216,7 +1216,7 @@ def verify_org_admin_reads_chains(
             failures,
         )
 
-    # Witness cosignatures are reported, not verified: the engine cannot verify
+    # Witness cosignatures are reported, not verified: the Server cannot verify
     # customer-chosen witness keys because their algorithm is untyped.
     witness_cosigned = [
         WitnessCosignedCheckpoint(
@@ -1337,7 +1337,7 @@ def verify_dump(
     also has its signature re-verified under that key.
 
     ``agent_keys``: Ed25519 JWKs of agent certs. Where an entry's signed
-    payload carries an engine-validated agent signature whose cert thumbprint
+    payload carries a Server-validated agent signature whose cert thumbprint
     matches one, it is re-verified offline in every chain walk; one that does
     not verify fails ``CHAIN_AGENT_SIGNATURE_INVALID``. Without them the check
     reports ``skipped_no_input`` and no verdict changes.
@@ -1349,8 +1349,8 @@ def verify_dump(
     runs and the verdict is ``unanchored``: the report passes when nothing
     failed, flagged as resting on keys nobody pinned.
 
-    ``distrusted_keys``: the operator's ``VAULT_DISTRUSTED_KEYS``
-    (``sha256:<64 hex>``, optionally ``@<RFC 3339 instant>``). What such a key
+    ``distrusted_keys``: the same entries the operator sets in the Server's
+    ``VAULT_DISTRUSTED_KEYS`` (``sha256:<64 hex>``, optionally ``@<RFC 3339 instant>``). What such a key
     stored from the instant on (with none, from the retirement a trusted key
     signed for it) counts for nothing in the walk. Requires ``trust_anchors``.
     """

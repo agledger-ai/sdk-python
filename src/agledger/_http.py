@@ -217,7 +217,7 @@ def _dict_list_or_none(value: object) -> list[dict[str, Any]] | None:
 def _retry_after_seconds(header: str | None, body_seconds: object) -> float | None:
     """``Retry-After`` as seconds: the header's delay-seconds form when it
     parses as a non-negative number, else a 429 body's ``retryAfterSeconds``,
-    else None. An HTTP-date, which nothing in front of the engine sends, reads
+    else None. An HTTP-date, which nothing in front of the Server sends, reads
     as None rather than raising."""
     if header:
         try:
@@ -333,7 +333,7 @@ def _query_params(params: dict[str, Any] | None) -> dict[str, Any]:
 
     ``httpx`` serializes a dict parameter as its Python repr, so
     ``search(metadata={"state": "blocked"})`` went out as
-    ``metadata={'state': 'blocked'}`` and came back 400. The engine wants
+    ``metadata={'state': 'blocked'}`` and came back 400. The Server wants
     ``metadata[state]=blocked``, which is what the ``criteria`` and ``metadata``
     filters on ``GET /v1/records/search`` are documented to take.
 

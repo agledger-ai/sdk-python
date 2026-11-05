@@ -5,10 +5,10 @@ verifier pinned out of band (``trust_anchors``). The Server's database stores
 the statements and never vouches for them: anything with write access to it
 can add a ``vault_signing_keys`` row and a statement row, and neither makes a
 key trusted, because every edge below is a signature that writer cannot
-produce. This is the engine's ``computeKeyTrust``, re-implemented as
-``@agledger/verify-core`` 2.0 implements it, so the verifier has no engine
+produce. This is the Server's key-trust walk, re-implemented as
+``@agledger/verify-core`` 2.0 implements it, so the verifier has no Server
 dependency. Where the two could disagree, this one must never trust a key the
-engine refuses.
+Server refuses.
 
 **Format.** Each statement is one or two COSE_Sign1 (RFC 9052, tag 18) over the
 SAME deterministic-CBOR (RFC 8949 section 4.2.1) payload, protected header
@@ -36,9 +36,9 @@ which the producer writes as ``created_at, id``). Every key document (``GET
 ``id`` and ``createdAt`` at microseconds, and lists under a trusted key its
 admission, every later genesis or succession it signed, and its counting
 closures. A walk over a document therefore dates a window and cuts an edge back
-as the engine does, except for a later succession whose endorser the document
+as the Server does, except for a later succession whose endorser the document
 does not carry: it cannot be verified here, is KEY_STATEMENT_INVALID, and the
-window opens earlier than the engine's, which the listed ``activatedAt``
+window opens earlier than the Server's, which the listed ``activatedAt``
 reports as CHAIN_KEY_WINDOW_DRIFT.
 
 A document from a Server that published neither field is ordered by the
@@ -114,7 +114,7 @@ KeyRegistryFindingCode = Literal["KEY_STATEMENT_INVALID", "KEY_CLOSURE_INVALID",
 KeyTrustState = Literal["anchored", "unanchored", "undecided"]
 
 # The COSE ``alg`` a statement signature must carry for its key's algorithm.
-# Exactly one per algorithm, as the engine signs and checks them; the chain
+# Exactly one per algorithm, as the Server signs and checks them; the chain
 # envelope's wider acceptance (RFC 9864 fully-specified code points) does not
 # apply to statements.
 _STATEMENT_COSE_ALG: dict[str, int] = {"Ed25519": -8, "ES256": -7}
@@ -151,7 +151,7 @@ class KeyStatementInput:
     id: str | None = None
     """Row id (the dump's or a key document's ``id``), named in findings. Under
     the write order it breaks a tie between two statements whose
-    ``created_at`` are the same microsecond, as the engine's ``created_at, id``
+    ``created_at`` are the same microsecond, as the Server's ``created_at, id``
     does."""
     subject_key_id: str | None = None
     """The key id the source files the statement under, bound to the signed
@@ -166,7 +166,7 @@ class KeyStatementInput:
     """Where the statement was read from. ``"dump"``: a row of a dump's
     ``vault_key_statements.ndjson`` (:func:`key_statement_from_dump_row` sets
     it), whose ``created_at`` the walk holds a distrusted key's statements to,
-    as the engine does. Anything else, ``None`` included, is a key document's
+    as the Server does. Anything else, ``None`` included, is a key document's
     (an export's or a supplied ``/v1/verification-keys`` entry's): its
     ``createdAt`` orders it but never keeps an edge out of a distrusted key."""
     created_at: str | None = None
@@ -255,7 +255,7 @@ class KeyTrustNote:
     """Something the walk did that is not a finding and never fails a verdict:
     a statement from a key document, signed by a distrusted key, that admits
     nothing here because the document's write time is the holder's word and is
-    never held against the key's cutoff, though the engine, holding it to the
+    never held against the key's cutoff, though the Server, holding it to the
     time it was stored, counts it. It still dates windows and cuts edges back.
     Also a listed key whose ``distrusted_from`` differs from the instant the
     caller's ``distrusted_keys`` entry gives it, where no finding on its window
@@ -302,7 +302,7 @@ class KeyStatementCounts:
 
 @dataclass(frozen=True)
 class DistrustSpan:
-    """What a ``distrusted_keys`` entry covers for one key, as the engine's
+    """What a ``distrusted_keys`` entry covers for one key, as the Server's
     ``distrustSpans`` gives it. ``cutoff``: the instant from which what the key
     signs counts for nothing (the entry's own, else ``retired_at``; ``None``:
     trusted for nothing). ``retired_at``: the earliest retirement of the key
@@ -551,7 +551,7 @@ def rfc3339_ms(instant: object) -> int | None:
 
 def instant_ms(instant: object) -> int | None:
     """Milliseconds of an RFC 3339 instant, truncating any finer fraction the
-    way the engine reads a microsecond instant. Key statements sign microsecond
+    way the Server reads a microsecond instant. Key statements sign microsecond
     instants; entry write times, dump columns and key documents carry
     milliseconds, so every comparison between them is made here. Strict: a
     ``T``, an offset or ``Z``, a real calendar date and time of day; ``None``
@@ -698,7 +698,7 @@ def assert_not_pinned_and_distrusted(
     (``sha256:<hex>@<instant>``) is how a leaked key whose history is still
     needed is kept from signing anything new: the pin vouches for what it
     stored before the instant. :func:`compute_key_trust` itself walks any pair
-    as the engine's walk does; a verifier calls this on what its caller passed
+    as the Server's walk does; a verifier calls this on what its caller passed
     before it walks. Mirrors verify-core ``assertNotPinnedAndDistrusted``."""
     if trust_anchors is None or distrusted_keys is None:
         return
@@ -1286,7 +1286,7 @@ def compute_key_trust(
     # One stored row, read from two sources (an export and a key document), is
     # one statement. With no write time and no row id, two identical
     # statements are one; with them, a row is its id and write time, and a
-    # copy of a row under another id is a second row, as the engine reads it.
+    # copy of a row under another id is a second row, as the Server reads it.
     seen: set[str] = set()
     inputs: list[KeyStatementInput] = []
     for s in statements:
@@ -1354,7 +1354,7 @@ def compute_key_trust(
         return 1 if order == "signed" and c.payload is not None and c.payload.typ == "closure" else 0
 
     # Under the write order: ``created_at``, then ``id`` for two stored in the
-    # same microsecond (the engine's ``created_at, id``), then input order,
+    # same microsecond (the Server's ``created_at, id``), then input order,
     # which a dump writes as ``created_at, id`` at the microseconds its
     # milliseconds hide.
     placed = [(sort_key(c), closure_last(c), i, c) for i, c in enumerate(checked)]
@@ -1376,7 +1376,7 @@ def compute_key_trust(
     # A dump row whose signed payload an earlier row already carries says
     # nothing new: a copy of a row (anything with write access to the database
     # can write one), or the same payload signed again. Only the first, in
-    # write order, takes part, as the engine reads it; the database stamps the
+    # write order, takes part, as the Server reads it; the database stamps the
     # write time, so a copy always lands after what it copies. A key document's
     # write time is its holder's word, so there a copy dated earlier would push
     # the published statement aside: on a document a copy stays a second
@@ -1484,7 +1484,7 @@ def compute_key_trust(
         holds the leaked key writes whatever time it likes. For those every
         edge out of a distrusted key is void whatever time it gives, and every
         closure it signed still counts: dropping an edge or keeping a closure
-        only ever takes trust away. Narrower than the engine, never wider."""
+        only ever takes trust away. Narrower than the Server, never wider."""
         if signer is None or signer not in cutoffs:
             return False
         if order == "signed" or s.check.input.source != "dump":
@@ -1493,7 +1493,7 @@ def compute_key_trust(
         return cutoff is None or (s.stored_ms is not None and s.stored_ms >= cutoff[0])
 
     def voided_by_stored_time(s: _Statement, signer: str) -> bool:
-        """What the engine would void: signed by a distrusted key with no
+        """What the Server would void: signed by a distrusted key with no
         cutoff, or stored at or after its cutoff. On a key document the stored
         time is the holder's word, so this decides only whether voiding it is a
         finding."""
@@ -1535,13 +1535,13 @@ def compute_key_trust(
     for d in untrusted:
         trusted.discard(d)
     # What a distrust entry accounts for is bounded only by a retirement a key
-    # the walk trusts signed. The engine bounds it by any key reached without a
+    # the walk trusts signed. The Server bounds it by any key reached without a
     # distrusted key, a forced closure's cut-off keys included, so a key cut
     # off from a leaked one could retire a distrusted key it also holds and
     # have what that key forged read as accounted for. Only a signer the walk
     # trusts and reaches without a distrusted key bounds it here: narrower than
-    # the engine, never wider; the cutoff a bound gives an undated entry is the
-    # engine's. Mirrors verify-core.
+    # the Server, never wider; the cutoff a bound gives an undated entry is the
+    # Server's. Mirrors verify-core.
     if distrust_spans:
         clear_of_distrust = _reach(anchors, [e for e in edges if e.from_ not in distrust])
         for d, span in list(distrust_spans.items()):
@@ -1677,7 +1677,7 @@ def compute_key_trust(
             continue
         if e is not None and voided_here and not voided_by_stored_time(s, e):
             # Voided only because a key document's time is not held against the
-            # cutoff: it admits nothing, but a statement the engine would count
+            # cutoff: it admits nothing, but a statement the Server would count
             # is no finding. It still dates windows and cuts edges back, so it
             # can only narrow trust. The checks below still apply to it.
             note_cutoff = cast("tuple[int, str]", cutoffs[e])
@@ -1722,7 +1722,7 @@ def compute_key_trust(
                 retired_by = span.retired_at if span is not None else None
                 # A later admission of a trusted key that the key itself signed
                 # is the record of its own half leaking, whoever co-signed it:
-                # never accounted for. Narrower than the engine, never wider.
+                # never accounted for. Narrower than the Server, never wider.
                 leaked_subject = (
                     s.payload.typ != "closure"
                     and admissions.get(s.subject) is not s
@@ -1920,7 +1920,7 @@ def compute_key_trust(
 
     # Keys an admission names that this walk could not verify. A key document
     # carries a key's admissions but not every endorser, so the walk can date a
-    # trusted key's window earlier than the engine did, or not at all.
+    # trusted key's window earlier than the Server did, or not at all.
     unverified_admission = {
         c.payload.subject.spki_sha256
         for c in checked

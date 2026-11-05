@@ -5,8 +5,8 @@
 // field. Run from this repo's root against a built verify-core checkout at the
 // version this package ports:
 //
-//   (cd ~/projects/agledger-verify-core && npm run build)
-//   node scripts/record-verify-core-exports.mjs ~/projects/agledger-verify-core
+//   (cd ../verify-core && npm run build)
+//   node scripts/record-verify-core-exports.mjs ../verify-core
 //
 // Re-record when verify-core's export walk changes, and say in the commit
 // which verify-core commit the results came from.
@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const core = resolve(process.argv[2] ?? join(process.env.HOME ?? '', 'projects', 'agledger-verify-core'));
+const core = resolve(process.argv[2] ?? '../verify-core');
 const { verifyAuditExport } = await import(pathToFileURL(join(core, 'dist', 'index.js')).href);
 const pkg = JSON.parse(readFileSync(join(core, 'package.json'), 'utf8'));
 let sha = 'unknown';
@@ -76,7 +76,7 @@ for (const v of manifest.vectors) {
   }
 }
 
-// An agledger-api 2.0 export taken after a dated VAULT_DISTRUSTED_KEYS entry
+// A Server 2.0 export taken after a dated VAULT_DISTRUSTED_KEYS entry
 // (its signingKeyWindows lists the distrusted key with distrustedFrom), pinned
 // on its anchoredFrom alone and with a distrust entry at the Server's instant,
 // a later one and an earlier one.

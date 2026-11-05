@@ -32,8 +32,8 @@ class OrgReadsCheckpointsResource:
     ) -> OrgReadsCheckpointPage:
         """List recent signed checkpoints for the calling org.
 
-        Read ``checkpointing`` before reporting missing checkpoints: the sweep
-        is time-driven, so a fresh install returns an empty ``data`` however
+        Read ``checkpointing`` before reporting missing checkpoints: checkpoints
+        are written periodically, so a fresh install returns an empty ``data`` however
         many qualifying reads it has logged. ``list_reads()`` tells the two
         apart by listing the leaves themselves.
         """
@@ -54,7 +54,7 @@ class OrgReadsCheckpointsResource:
         """List the read-transparency log leaves the checkpoints cover, oldest
         first in ``leaf_index`` order (``GET /v1/audit/org-reads``).
 
-        This is what separates "the sweep has not run yet" from "no qualifying
+        This is what separates "no checkpoint has been written yet" from "no qualifying
         read has happened": an empty checkpoint listing says nothing on its own,
         and an empty listing here means nothing was logged. Verify one leaf with
         ``proof(checkpoint_id, leaf_index)``.
@@ -161,9 +161,10 @@ class AsyncOrgReadsCheckpointsResource:
 
 
 class VaultCheckpointsResource:
-    """Vault checkpoint surface: per-record 6h signed Merkle anchors that survive
-    audit_vault TRUNCATE/DELETE. Pair with ``records.get_audit_export()`` to
-    cross-check the live chain against checkpoint anchors offline."""
+    """Vault checkpoint surface: per-record signed Merkle anchors, written
+    periodically, that survive removed or rewritten chain entries. Pair with
+    ``records.get_audit_export()`` to cross-check the live chain against
+    checkpoint anchors offline."""
 
     def __init__(self, http: HttpClient) -> None:
         self._http = http
@@ -208,8 +209,8 @@ class AuditResource:
     """Audit resource: verifiable read-trail + vault-checkpoint surface.
 
     - ``org_reads_checkpoints``: SCITT-style cross-party read proofs.
-    - ``vault_checkpoints``: per-record signed Merkle anchors used to detect
-      audit_vault truncation / out-of-band tampering offline.
+    - ``vault_checkpoints``: per-record signed Merkle anchors, written
+      periodically, used to detect removed or rewritten chain entries offline.
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -221,8 +222,8 @@ class AsyncAuditResource:
     """Audit resource: verifiable read-trail + vault-checkpoint surface.
 
     - ``org_reads_checkpoints``: SCITT-style cross-party read proofs.
-    - ``vault_checkpoints``: per-record signed Merkle anchors used to detect
-      audit_vault truncation / out-of-band tampering offline.
+    - ``vault_checkpoints``: per-record signed Merkle anchors, written
+      periodically, used to detect removed or rewritten chain entries offline.
     """
 
     def __init__(self, http: AsyncHttpClient) -> None:

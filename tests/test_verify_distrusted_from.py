@@ -344,7 +344,7 @@ FROM = "2026-10-05T23:03:51.537314Z"
 
 
 def _load() -> dict[str, Any]:
-    """An unmodified agledger-api 2.0 audit export of a record its first key K
+    """An unmodified Server 2.0 audit export of a record its first key K
     signed, taken after the Server retired K with force from its successor F
     and was restarted with VAULT_DISTRUSTED_KEYS=sha256:<K>@<instant>, an
     instant before that retirement: signingKeyWindows lists K retired at the

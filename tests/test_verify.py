@@ -408,7 +408,7 @@ def test_null_key_entry_fails_closed_under_key_policy() -> None:
 
 
 # Regression: public_keys polymorphic acceptance + TypeError on bad shape.
-# Mirrors packages/verify-core/src/__tests__/oob-key-shapes.test.ts.
+# Mirrors the out-of-band key shape tests in @agledger/verify-core.
 
 def test_oob_keys_accepts_compact_record_form() -> None:
     pub, priv = _make_keypair()

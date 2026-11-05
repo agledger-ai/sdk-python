@@ -4,6 +4,13 @@ All notable changes to the AGLedger Python SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Documentation describes what the caller observes instead of the Server's internals.
+- The source distribution contains only the package source, README, LICENSE and CHANGELOG.
+
 ## [3.1.0] - 2026-11-05
 
 ### Added

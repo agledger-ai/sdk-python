@@ -324,7 +324,7 @@ history and rejects them.
 
 A dump not scoped to one org carries the cert keys itself: each
 EPHEMERAL_CERT_ISSUED entry on the platform-ops chain signs its cert's
-publicKeyJwk (engines from 1.8.0 on), and a key is used once that chain has
+publicKeyJwk (Servers from 1.8.0 on), and a key is used once that chain has
 verified clean. An org-scoped dump leaves the platform-ops chain out, and a
 per-record /audit-export carries no cert keys, so for those pass --agent-keys.
 Where no key is at hand the agent-signature check reports "not checked" and
