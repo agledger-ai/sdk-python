@@ -81,6 +81,8 @@ class ParsedArgs:
     """``--distrusted-key`` values, one entry each, in the order given."""
     federation_keys: list[str] = field(default_factory=list[str])
     """``--federation-key`` values, ``<hubId>=<key>`` each, in the order given."""
+    federation_key_histories: list[str] = field(default_factory=list[str])
+    """``--federation-key-history`` paths, each a peer's key-history document."""
 
 
 class UsageError(Exception):
@@ -164,6 +166,14 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
             out.distrusted_keys.append(value)
         elif arg == "--distrusted-keys" or arg.startswith("--distrusted-keys="):
             raise UsageError(_PLURAL_DISTRUSTED)
+        elif arg == "--federation-key-history":
+            out.federation_key_histories.append(take_value("--federation-key-history", nxt))
+            i += 1
+        elif arg.startswith("--federation-key-history="):
+            value = arg[len("--federation-key-history=") :]
+            if not value:
+                raise UsageError("--federation-key-history requires a value")
+            out.federation_key_histories.append(value)
         elif arg == "--federation-key":
             out.federation_keys.append(take_value("--federation-key", nxt))
             i += 1
@@ -196,6 +206,7 @@ Usage:
                   [--distrusted-key sha256:<hex>[@<instant>]]...
                   [--agent-keys <file>]
                   [--federation-key <hubId>=<key>]...
+                  [--federation-key-history <file>]...
                   [--report-format text|json]
                   [--keys <file>] [--require-key-id <id>]
                   [--require-supplied-keys]
@@ -248,7 +259,22 @@ Options:
                               proves what the peer asserted from this
                               Server's export alone. A failure is
                               CHAIN_FEDERATION_WIRE_INVALID. Applies to a dump
-                              directory and to an /audit-export file.
+                              directory and to an /audit-export file. Name a
+                              hub twice to pin a second key no succession
+                              links to the first (one listed linked: false).
+  --federation-key-history    Path to a peer's key history, the JSON its
+                              GET /.well-known/agledger-federation-keys.json
+                              serves (no auth). Repeatable. Needs a
+                              --federation-key for the same hub: every key the
+                              history links to that key through successions
+                              both keys signed is trusted inside its window,
+                              so entries sealed before the peer changed its
+                              federation key verify. A message under a key
+                              activated after the receiver took it fails; one
+                              under a key retired before it is counted as
+                              after retirement, in order when the receiver's
+                              federation.peer_revoked row for the peer comes
+                              after it.
   --agent-keys                Path to a JSON file holding the Ed25519 public
                               keys of agent certs: a JWK, a list of JWKs, or a
                               {keys:[...]} JWK Set. An entry may wrap its key
@@ -421,12 +447,13 @@ _FEDERATION_KEY_SHAPE = (
 )
 
 
-def parse_federation_keys(values: Sequence[str]) -> dict[str, str] | str:
-    """``--federation-key`` values into the ``{hubId: key}`` mapping the
+def parse_federation_keys(values: Sequence[str]) -> list[dict[str, Any]] | str:
+    """``--federation-key`` values into the ``[{hubId, publicKey}]`` list the
     verifiers take, or the usage-error message. Each value is checked here,
     before any verification runs, so a bad key is reported as a bad key rather
-    than as a verdict. Mirrors ``@agledger/verify``."""
-    out: dict[str, str] = {}
+    than as a verdict. A hub named twice pins two keys. Mirrors
+    ``@agledger/verify``."""
+    out: list[dict[str, Any]] = []
     for value in values:
         hub_id, sep, key = value.partition("=")
         hub_id, key = hub_id.strip(), key.strip()
@@ -437,27 +464,69 @@ def parse_federation_keys(values: Sequence[str]) -> dict[str, str] | str:
                 f"Invalid --federation-key for hub {hub_id}: the key is not an Ed25519 public key. "
                 f"{_FEDERATION_KEY_SHAPE}"
             )
-        if hub_id in out:
-            return f"--federation-key names hub {hub_id} twice; give each peer one key."
-        out[hub_id] = key
+        out.append({"hubId": hub_id, "publicKey": key})
     return out
 
 
-def _federation_wire_summary(present: int, verified: int, failed: int, keys_given: bool) -> str:
+def attach_federation_key_histories(keys: list[dict[str, Any]], paths: Sequence[str]) -> list[dict[str, Any]] | str:
+    """Each ``--federation-key-history`` file attached to the
+    ``--federation-key`` entry for the hub it names, or the usage-error
+    message. A history needs a key for its hub: alone it is the peer's word.
+    Mirrors ``@agledger/verify``."""
+    out = [dict(k) for k in keys]
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                doc: object = json.load(fh)
+        except (OSError, ValueError) as err:
+            return f"Cannot read --federation-key-history {path}: {err}"
+        hub_id = cast("Mapping[str, Any]", doc).get("hubId") if isinstance(doc, Mapping) else None
+        if not isinstance(hub_id, str) or not hub_id:
+            return (
+                f"--federation-key-history {path} is not a key-history document naming its hub "
+                "(GET /.well-known/agledger-federation-keys.json on the peer, with federation configured)."
+            )
+        entry = next((k for k in out if k["hubId"] == hub_id and "history" not in k), None) or next(
+            (k for k in out if k["hubId"] == hub_id), None
+        )
+        if entry is None:
+            return (
+                f"--federation-key-history {path} is hub {hub_id}'s, and no --federation-key names that hub. "
+                "Give the key you hold for it (the signingPublicKey your peer row holds, or one its operator "
+                "confirmed): the history is trusted only from a key you pinned."
+            )
+        if "history" in entry:
+            out.append({"hubId": hub_id, "publicKey": entry["publicKey"], "history": doc})
+        else:
+            entry["history"] = doc
+    return out
+
+
+def _federation_wire_summary(
+    present: int, verified: int, failed: int, keys_given: bool, after_retirement: int = 0
+) -> str:
     """One line on the sealed federation messages. Each is held to its body
     hash and to its entry, then checked under the peer key given for its hub,
     if one was. ``verified`` passed under a key, ``failed`` failed a check
     (listed below), and the rest came from a hub with no key, which is not a
     failure."""
-    base = f"present={present} verified={verified} failed={failed}"
+    retired = f" after-retirement={after_retirement}" if after_retirement > 0 else ""
+    base = f"present={present} verified={verified} failed={failed}{retired}"
     if present == 0:
         return f"{base} (none on the chain)"
     no_key = present - verified - failed
+    retired_note = (
+        f"{after_retirement} signed under a key the peer had retired before the receiver took it: in order when "
+        "the receiver's federation.peer_revoked row for the peer comes after them"
+    )
     if no_key == 0 and failed == 0:
-        return f"{base} (each hashed, matched to its entry, and signed by the peer key given for its hub)"
+        every = "(each hashed, matched to its entry, and signed by the peer key given for its hub"
+        return f"{base} {every}; {retired_note})" if after_retirement > 0 else f"{base} {every})"
     parts: list[str] = []
     if failed > 0:
         parts.append(f"{failed} failed: see the failures below")
+    if after_retirement > 0:
+        parts.append(retired_note)
     if no_key > 0:
         parts.append(
             f"{no_key} hashed and matched to its entry, from a hub with no --federation-key, "
@@ -613,7 +682,7 @@ def _format_dump_text(
         f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain)}"
     )
     lines.append(
-        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, report.vault.federation_wire_failed, federation_keys_given)}"
+        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, report.vault.federation_wire_failed, federation_keys_given, report.vault.federation_wire_after_retirement)}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
@@ -674,6 +743,7 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "present": result.federation_wire.present,
             "verified": result.federation_wire.verified,
             "failed": result.federation_wire.failed,
+            "afterRetirement": result.federation_wire.after_retirement,
         },
         "unsignedProjectionFields": list(result.unsigned_projection_fields),
     }
@@ -723,7 +793,7 @@ def _format_export_text(
     )
     lines.append(
         "  peer messages     : "
-        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed, federation_keys_given)}"
+        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed, federation_keys_given, result.federation_wire.after_retirement)}"
     )
     if result.broken_at is not None:
         lines.append(
@@ -768,6 +838,12 @@ def _format_export_text(
             f"signature-covered. {attribution}"
         )
     return "\n".join(lines)
+
+
+def _federation_flag_message(message: str) -> str:
+    """A federation-key refusal, named by the flag that carried the value."""
+    message = re.sub(r"\bfederation_keys\[\d+\]\.history\b", "--federation-key-history", message)
+    return re.sub(r"\bfederation_keys\[\d+\]", "--federation-key", message)
 
 
 def _flag_message(message: str) -> str:
@@ -961,12 +1037,15 @@ def run_cli(argv: Sequence[str]) -> int:
             return _cannot_verify(loaded, report_format)
         agent_keys = loaded
 
-    federation_keys: dict[str, str] | None = None
-    if args.federation_keys:
+    federation_keys: list[dict[str, Any]] | None = None
+    if args.federation_keys or args.federation_key_histories:
         parsed_keys = parse_federation_keys(args.federation_keys)
         if isinstance(parsed_keys, str):
             return _cannot_verify(parsed_keys, report_format)
-        federation_keys = parsed_keys
+        with_history = attach_federation_key_histories(parsed_keys, args.federation_key_histories)
+        if isinstance(with_history, str):
+            return _cannot_verify(with_history, report_format)
+        federation_keys = with_history
 
     # Directory -> full-vault dump.
     if os.path.isdir(target):
@@ -989,7 +1068,7 @@ def run_cli(argv: Sequence[str]) -> int:
                 distrusted_keys=distrusted_keys,
             )
         except (DumpLoadError, TypeError) as err:
-            return _cannot_verify(str(err), report_format)
+            return _cannot_verify(_federation_flag_message(str(err)), report_format)
         report = _dump_report_with_flags(report)
         if report_format == "json":
             print(json.dumps(report.to_json(), indent=2))
@@ -1035,6 +1114,9 @@ def run_cli(argv: Sequence[str]) -> int:
             distrusted_keys=distrusted_keys,
         )
     except TypeError as err:
+        message = _federation_flag_message(str(err))
+        if message != str(err):
+            return _cannot_verify(message, report_format)
         return _cannot_verify(f"{err}\n{_KEYS_SHAPE}", report_format)
     verdict = result.verdict
     # verify_export's result, with its advice naming the flags.

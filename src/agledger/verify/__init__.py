@@ -37,7 +37,10 @@ Install via ``pip install 'agledger[verify]'``.
 
 from agledger.verify.failures import FailureCode, suggestion
 from agledger.verify.federation_wire import (
+    FEDERATION_KEY_STATEMENT_DOMAIN,
     FEDERATION_WIRE_SCHEME,
+    FederationKeyRegistry,
+    FederationTrustedKey,
     FederationWireCounts,
     FederationWireOutcome,
     build_federation_key_registry,
@@ -105,6 +108,7 @@ from agledger.verify.verify_export import (
 __all__ = [
     "ACCOUNTED_ENTRY_CODE",
     "AGENT_SIGNATURE_CONTEXT",
+    "FEDERATION_KEY_STATEMENT_DOMAIN",
     "FEDERATION_WIRE_SCHEME",
     "KEY_STATEMENT_CTY",
     "AccountedEntry",
@@ -117,6 +121,8 @@ __all__ = [
     "EntryVerificationResult",
     "Failure",
     "FailureCode",
+    "FederationKeyRegistry",
+    "FederationTrustedKey",
     "FederationWireCounts",
     "FederationWireOutcome",
     "KeyProvenance",

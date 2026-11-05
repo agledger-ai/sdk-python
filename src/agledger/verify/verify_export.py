@@ -57,6 +57,7 @@ from pydantic import BaseModel
 from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
 from agledger.verify.failures import FailureCode
 from agledger.verify.federation_wire import (
+    FederationKeyRegistry,
     FederationWireCounts,
     build_federation_key_registry,
     check_federation_wire,
@@ -2015,7 +2016,7 @@ def verify_agent_signature(
 def check_sealed_federation_wire(
     entry: Mapping[str, Any],
     result: EntryVerificationResult,
-    federation_keys: Mapping[str, str] | None,
+    federation_keys: FederationKeyRegistry | None,
     counts: FederationWireCounts,
     applied: set[str] | None,
 ) -> EntryVerificationResult:
@@ -2055,10 +2056,13 @@ def check_sealed_federation_wire(
         cast("Mapping[str, Any]", payload),
         wire,
         federation_keys,
+        row.created_at,
     )
     if outcome.outcome == "ok":
         if outcome.signature_checked:
             counts.verified += 1
+        if outcome.after_retirement:
+            counts.after_retirement += 1
         return result
     if outcome.outcome == "unchecked":
         return result
