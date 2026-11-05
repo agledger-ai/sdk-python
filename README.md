@@ -766,3 +766,5 @@ Running AGLedger in production requires a license. Get a [Developer Edition Lice
 ## SDK License
 
 Proprietary. Copyright (c) 2026 AGLedger LLC. All rights reserved.
+
+AGLedger is a trademark of AGLedger LLC, and Settlement Signal is a pending trademark of AGLedger LLC. All other trademarks are the property of their respective owners. Patent pending.
