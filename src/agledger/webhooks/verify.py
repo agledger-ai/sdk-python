@@ -126,7 +126,8 @@ def _parse_webhook_event(raw_body: str) -> dict[str, Any]:
 # ACTIVE vault key). Deliveries are signed with the Server vault key as RFC
 # 9421 HTTP Message Signatures; the receiver verifies against the published
 # public key at GET /v1/verification-keys (matched by ``keyid``) and holds no
-# secret: non-repudiation for the Settlement Signal hop. The verification
+# secret, so it can check the Server's signature on a Settlement Signal on its
+# own. The verification
 # algorithm is dispatched from the resolved key's type, never from the
 # attacker-writable ``alg`` parameter; when ``alg`` is present it is asserted
 # against the key. Covered components are exactly ``content-digest`` (RFC 9530
