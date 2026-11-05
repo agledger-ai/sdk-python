@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.1.0 @ 9a37dfd2",
+ "verifyCore": "2.1.0 @ ee0e8c3e",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
@@ -548,7 +548,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -562,7 +562,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -637,7 +637,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_LINK_BROKEN",
-     "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
+     "detail": "Expected previousHash=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."
     },
     "entries": [
      {
@@ -651,7 +651,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_LINK_BROKEN",
-      "detail": "Expected previousHash=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+      "detail": "Expected previousHash=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842, got aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
       "signature": "not-checked"
      },
      {
@@ -728,7 +728,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 762d6c49dc86c852... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -742,14 +742,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 762d6c49dc86c852... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -817,7 +817,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_HASH_MISMATCH",
-     "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
+     "detail": "sha256(cose_sign1) 762d6c49dc86c852... does not match stored payloadHash bbbbbbbbbbbbbbbb..."
     },
     "entries": [
      {
@@ -831,14 +831,14 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_HASH_MISMATCH",
-      "detail": "sha256(cose_sign1) 86e6ad3971a0a066... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
+      "detail": "sha256(cose_sign1) 762d6c49dc86c852... does not match stored payloadHash bbbbbbbbbbbbbbbb...",
       "signature": "not-checked"
      },
      {
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb).",
       "signature": "not-checked"
      }
     ],
@@ -1109,7 +1109,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -1198,7 +1198,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=8c9575299c03c6d6a437f54d259abcbe57bb95c7ebcbc28ce8ff52fed5e91d80).",
       "signature": "not-checked"
      }
     ],
@@ -1268,7 +1268,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842)."
     },
     "entries": [
      {
@@ -1282,7 +1282,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842).",
       "signature": "not-checked"
      },
      {
@@ -1357,7 +1357,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_COSE_HEADER_MISMATCH",
-     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2)."
+     "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842)."
     },
     "entries": [
      {
@@ -1371,7 +1371,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=b7911eb52cd74993a8e650375e552ef4bf495ca9c49df69c7d2ed8c68aea49d2).",
+      "detail": "Signed protected-header chain claim (position=2, prev=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc) diverges from row columns (position=2, prev=358a9992a149aabdc1c7d9e3f2969231ff8165719025d42b0c68dd02ef404842).",
       "signature": "not-checked"
      },
      {
@@ -1471,7 +1471,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=f46037fb36ea4179f7321309ef0e21b0ad2db034ff247483851e9d8a5e05797d).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=47a44d97977ed2ec721834418c20fe97408aa4e0bbc318af1b8b6be59d38d26a).",
       "signature": "not-checked"
      }
     ],
@@ -1562,7 +1562,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=86e6ad3971a0a066880416d97600c4aef58e1a07b54b6cd6413fce078471c85e) diverges from row columns (position=3, prev=f46037fb36ea4179f7321309ef0e21b0ad2db034ff247483851e9d8a5e05797d).",
+      "detail": "Signed protected-header chain claim (position=3, prev=762d6c49dc86c852b414c5d153efa8df2ddda99ef0ac960ac710743842a685a1) diverges from row columns (position=3, prev=47a44d97977ed2ec721834418c20fe97408aa4e0bbc318af1b8b6be59d38d26a).",
       "signature": "not-checked"
      }
     ],
@@ -3148,7 +3148,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 0e7ed85f-9e7c-4478-b97f-26249e980428)."
     },
     "entries": [
      {
@@ -3162,7 +3162,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 0e7ed85f-9e7c-4478-b97f-26249e980428).",
       "signature": "not-checked"
      },
      {
@@ -3239,7 +3239,7 @@
     "brokenAt": {
      "position": 2,
      "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb)."
+     "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 0e7ed85f-9e7c-4478-b97f-26249e980428)."
     },
     "entries": [
      {
@@ -3253,7 +3253,7 @@
       "position": 2,
       "valid": false,
       "code": "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
-      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 976990c9-a7b5-4396-a420-797d387bdcfb).",
+      "detail": "Row actor columns diverge from the signature-covered actor claim (actorOwnerId=a77acce4-0000-4000-8000-feedfacecafe vs signed 0e7ed85f-9e7c-4478-b97f-26249e980428).",
       "signature": "not-checked"
      },
      {
@@ -4005,14 +4005,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 1083cf77-6932-458a-8288-5e0a0ed19a74 does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 1083cf77-6932-458a-8288-5e0a0ed19a74 does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -4083,14 +4083,14 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-     "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
+     "detail": "Sealed agent_signature for cert 1083cf77-6932-458a-8288-5e0a0ed19a74 does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_AGENT_SIGNATURE_INVALID",
-      "detail": "Sealed agent_signature for cert 2b9ddf6d-ef1e-44ff-93b2-1e22a202bc2e does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
+      "detail": "Sealed agent_signature for cert 1083cf77-6932-458a-8288-5e0a0ed19a74 does not verify under the supplied key with thumbprint sha256:cb9e20283b92fa688518d1b8b587967052cbe6f22c81b0d518fca968dc690562.",
       "signature": "ok"
      }
     ],
@@ -5213,21 +5213,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z."
+     "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.004Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.004Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.740Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.023Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z.",
       "signature": "not-checked"
      }
     ],
@@ -5295,21 +5295,21 @@
     "brokenAt": {
      "position": 1,
      "code": "CHAIN_ENTRY_UNSIGNED",
-     "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z."
+     "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.004Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z."
     },
     "entries": [
      {
       "position": 1,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.734Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.004Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z.",
       "signature": "not-checked"
      },
      {
       "position": 2,
       "valid": false,
       "code": "CHAIN_ENTRY_UNSIGNED",
-      "detail": "Entry has no signingKeyId but was written 2026-10-05T01:12:14.740Z, at or after the earliest signing key activation 2026-10-05T01:12:11.954Z.",
+      "detail": "Entry has no signingKeyId but was written 2026-11-05T15:58:21.023Z, at or after the earliest signing key activation 2026-11-05T15:58:11.187Z.",
       "signature": "not-checked"
      }
     ],
@@ -5580,7 +5580,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=c9d981bc6508183f8ecde27aa35c2ee88aa0b4526ad7ac54c2af0feb0fbe11da) diverges from row columns (position=3, prev=9edee428916bc881e4a8ee2a0ddce840581a1ead4f4a8e8b3c36221341da55ef).",
+      "detail": "Signed protected-header chain claim (position=3, prev=aa19033bc7b7f52b4ac372e5bfcddb60737b1fc6da68de8351b29c0613823ad6) diverges from row columns (position=3, prev=1ddca157249236ecc5c73133b98149aa95174bd4b0d28168b21f4abe0ea99311).",
       "signature": "not-checked"
      }
     ],
@@ -5671,7 +5671,7 @@
       "position": 3,
       "valid": false,
       "code": "CHAIN_COSE_HEADER_MISMATCH",
-      "detail": "Signed protected-header chain claim (position=3, prev=c9d981bc6508183f8ecde27aa35c2ee88aa0b4526ad7ac54c2af0feb0fbe11da) diverges from row columns (position=3, prev=9edee428916bc881e4a8ee2a0ddce840581a1ead4f4a8e8b3c36221341da55ef).",
+      "detail": "Signed protected-header chain claim (position=3, prev=aa19033bc7b7f52b4ac372e5bfcddb60737b1fc6da68de8351b29c0613823ad6) diverges from row columns (position=3, prev=1ddca157249236ecc5c73133b98149aa95174bd4b0d28168b21f4abe0ea99311).",
       "signature": "not-checked"
      }
     ],
