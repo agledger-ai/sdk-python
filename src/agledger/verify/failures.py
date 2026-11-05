@@ -14,17 +14,16 @@ problem-detail codes, namespaced by sub-system:
 Every code carries an actionable next step (:func:`suggestion`) so a result is a
 directive, not just a verdict.
 
-Mirrors ``packages/verify-core/src/failures.ts`` exactly: the export verifier
+Mirrors ``@agledger/verify-core``'s ``failures`` exactly: the export verifier
 emits the subset reachable on the ``/audit-export`` wire; the dump verifier
 emits the full set.
 
-Server-side cert re-checks are not mirrored here. The engine's chain
+Server-side cert re-checks are not mirrored here. The Server's chain
 verification also reports ``cert_missing``, ``cert_actor_drift``,
 ``cert_window_drift``, ``cert_expired`` and ``agent_signature_invalid``, by
-comparing what an entry sealed in ``predicate.on_behalf_of.cert`` against the
-live ``ephemeral_certs`` row. Neither the export nor the dump carries that
-table, so an offline verifier cannot reproduce those comparisons, and it does
-not need to: it trusts only the signed bytes, which already fix the sealed cert
+comparing what an entry sealed in ``predicate.on_behalf_of.cert`` against its
+own cert record. Neither the export nor the dump carries that record, so an
+offline verifier cannot reproduce those comparisons, and it does not need to: it trusts only the signed bytes, which already fix the sealed cert
 id, thumbprint and expiry. The one cert-related check that can run offline is
 the agent signature, and only when the caller supplies the cert's public key
 (``CHAIN_AGENT_SIGNATURE_INVALID``).
@@ -98,8 +97,8 @@ FailureCode = Literal[
 _SUGGESTIONS: dict[str, str] = {
     "UNSUPPORTED_FORMAT": (
         "This verifier reads exportFormatVersion 2.0 / RFC8949-CDE canonicalization. "
-        "Re-export the chain from a current AGLedger instance, or upgrade the verifier to"
-        " match the producing engine."
+        "Re-export the chain from a current AGLedger instance, or upgrade the verifier to "
+        "match the producing Server."
     ),
     "CHAIN_EMPTY": (
         "No entries were present to verify. Confirm the record id / dump directory is "
@@ -125,11 +124,11 @@ _SUGGESTIONS: dict[str, str] = {
         "tampered with."
     ),
     "CHAIN_MALFORMED_ENTRY": (
-        "An entry is missing a field the engine writes on every entry (coseSign1, payloadHash, "
-        "or a parseable createdAt where a key window or the start of signing needs one), or "
-        "carries it as another type. The export/dump is incomplete or was edited, and an entry "
-        "the verifier cannot place is never read as early unsigned history. Regenerate the "
-        "export/dump from the operator and re-run."
+        "An entry is missing a field the Server writes on every entry (coseSign1, "
+        "payloadHash, or a parseable createdAt where a key window or the start of signing "
+        "needs one), or carries it as another type. The export/dump is incomplete or was "
+        "edited, and an entry the verifier cannot place is never read as early unsigned "
+        "history. Regenerate the export/dump from the operator and re-run."
     ),
     "CHAIN_COSE_DECODE_FAILED": (
         "The COSE_Sign1 envelope did not decode as a tagged 4-element structure. The "
@@ -207,12 +206,11 @@ _SUGGESTIONS: dict[str, str] = {
         "the operator."
     ),
     "CHAIN_AGENT_SIGNATURE_INVALID": (
-        "The agent signature sealed in predicate.on_behalf_of.agent_signature does not "
-        "verify under the supplied key whose RFC 7638 thumbprint the entry itself names, "
-        "or is sealed in a shape nothing can verify. The engine checks this signature at "
-        "intake and the envelope signature says the engine wrote it, so this is not a "
-        "caller mistake: treat the agent attribution of this entry as unproven and "
-        "escalate to the operator."
+        "The agent signature sealed in predicate.on_behalf_of.agent_signature does not verify"
+        " under the supplied key whose RFC 7638 thumbprint the entry itself names, or is "
+        "sealed in a shape nothing can verify. The Server checks this signature at intake and"
+        " the envelope signature says the Server wrote it, so this is not a caller mistake: "
+        "treat the agent attribution of this entry as unproven and escalate to the operator."
     ),
     "CHAIN_FEDERATION_WIRE_INVALID": (
         "The federation message sealed in payload.wire does not hold: its body no longer "
@@ -349,8 +347,8 @@ _SUGGESTIONS: dict[str, str] = {
         "intact envelope. Trust the signed claim and treat the tree-head row as tampered."
     ),
     "TENANT_CHECKPOINT_FORK": (
-        "Two signed tree heads at the same tree_size carry different roots. This is an "
-        "engine fork or signing-key compromise. Escalate immediately."
+        "Two signed tree heads at the same tree_size carry different roots. This is a Server "
+        "fork or signing-key compromise. Escalate immediately."
     ),
     "KEY_STATEMENT_INVALID": (
         "A key statement does not verify, disagrees with the columns it was stored under,"
