@@ -1,6 +1,6 @@
 {
   "generatedFrom": "components.schemas",
-  "apiVersion": "2.0.0",
+  "apiVersion": "2.2.0",
   "schemaCount": 15,
   "schemas": {
     "Completion": [
@@ -82,6 +82,7 @@
       "existingId",
       "expected",
       "hint",
+      "inapplicableFields",
       "incomingDigest",
       "instance",
       "jobId",
@@ -177,6 +178,7 @@
       "existingId",
       "expected",
       "hint",
+      "inapplicableFields",
       "incomingDigest",
       "instance",
       "jobId",

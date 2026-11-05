@@ -37,6 +37,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from agledger._http import SDK_VERSION
 from agledger.verify.failures import suggestion
 from agledger.verify.federation_wire import normalize_federation_key
 from agledger.verify.key_statements import (
@@ -69,6 +70,7 @@ class ParsedArgs:
     target: str | None = None
     report_format: str = "text"
     show_help: bool = False
+    show_version: bool = False
     keys: str | None = None
     require_key_id: str | None = None
     require_supplied_keys: bool = False
@@ -111,6 +113,8 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
             pass
         elif arg in ("--help", "-h"):
             out.show_help = True
+        elif arg in ("--version", "-V"):
+            out.show_version = True
         elif arg in ("--report-format", "-f"):
             if nxt not in ("json", "text"):
                 raise UsageError(f'--report-format must be "json" or "text" (got {nxt if nxt is not None else "nothing"})')
@@ -273,6 +277,7 @@ Options:
                               whose only key is the export's own fails. This
                               says where a key came from, not that it is
                               trusted; pin --trust-anchor for that.
+  --version, -V               Print this verifier's version.
   --help, -h                  Show this help.
 
 Without --trust-anchor no key is anchored. Every key is taken from the
@@ -916,6 +921,10 @@ def run_cli(argv: Sequence[str]) -> int:
         return _usage(str(err))
     if args.show_help:
         print(HELP_TEXT, end="")
+        return _EXIT_OK
+    if args.show_version:
+        # Names the verifier for the audit record.
+        print(f"agledger-verify {SDK_VERSION} (agledger, Python)")
         return _EXIT_OK
     if args.target is None:
         return _usage("Missing <target>.")

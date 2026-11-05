@@ -8,6 +8,25 @@ from agledger._http import AsyncHttpClient, HttpClient
 from agledger.types import Page, SchemaVersionUpdate
 
 
+def _import_body(
+    source: dict[str, Any], org_id: str | None, manifest_digest: str | None, options: dict[str, Any]
+) -> dict[str, Any]:
+    """Body for ``POST /v1/schemas/import`` from a bare manifest or a whole
+    ``get_manifest()`` response (``{"manifest", "manifestDigest", ...}``)."""
+    if "manifest" in source and "manifestVersion" not in source:
+        body: dict[str, Any] = {"manifest": source["manifest"]}
+        if source.get("manifestDigest") is not None:
+            body["manifestDigest"] = source["manifestDigest"]
+    else:
+        body = {"manifest": source}
+    body.update(options)
+    if manifest_digest is not None:
+        body["manifestDigest"] = manifest_digest
+    if org_id is not None:
+        body["orgId"] = org_id
+    return body
+
+
 def _scope(publisher: str | None) -> dict[str, Any] | None:
     """The publisher scope as a query param, or None when unpinned.
 
@@ -55,8 +74,9 @@ class SchemasResource:
         """Get this Server's canonical manifest for a Type.
 
         Returns ``{"manifest": ..., "manifestDigest": ...}``, shaped exactly as
-        ``import_()`` accepts. The bytes are JCS-canonicalized before hashing, so
-        the digest matches what a peer computes on import.
+        ``import_()`` accepts: pass it whole to a peer's ``import_()`` and the
+        peer's Server checks the digest. The bytes are JCS-canonicalized before
+        hashing, so the digest matches what a peer computes on import.
         """
         return self._http.get(f"/v1/schemas/{type}/manifest", params=_scope(publisher))
 
@@ -134,24 +154,28 @@ class SchemasResource:
         manifest: dict[str, Any],
         *,
         org_id: str | None = None,
+        manifest_digest: str | None = None,
         **options: Any,
     ) -> dict[str, Any]:
-        """Import a third-party schema manifest (DESIGN-SCHEMA-CATALOG.md §4).
+        """Import a third-party schema manifest.
 
-        ``manifest`` requires ``manifestVersion``, ``publisher``, ``type``,
-        ``version`` and ``recordSchema``. Row-only metadata options
-        (``federatable``, ``defaultShare``, ``defaultGateMode``,
-        ``coSignRequired``, ``flipRecordStatusOnDispute``,
+        ``manifest`` is the bare manifest (``manifestVersion``, ``publisher``,
+        ``type``, ``version`` and ``recordSchema`` required) or a peer's whole
+        ``get_manifest()`` response, whose ``manifestDigest`` is sent with it.
+        With a digest, from either source (``manifest_digest`` wins), the
+        Server refuses the import with 400 before writing anything when the
+        manifest does not hash to it; sending one needs a Server 2.2 or later.
+        Row-only metadata options (``federatable``, ``defaultShare``,
+        ``defaultGateMode``, ``coSignRequired``, ``flipRecordStatusOnDispute``,
         ``federateDisputes``) ride alongside the manifest in the body.
         Idempotent on full-tuple match (publisher, type, version, org,
         digest): re-posting the same manifest returns the existing row (HTTP
         200 instead of 201); same identity with different bytes is a 409.
         Requires the ``schemas:admin`` scope.
         """
-        body: dict[str, Any] = {"manifest": manifest, **options}
-        if org_id is not None:
-            body["orgId"] = org_id
-        return self._http.post("/v1/schemas/import", json=body)
+        return self._http.post(
+            "/v1/schemas/import", json=_import_body(manifest, org_id, manifest_digest, options)
+        )
 
     def register(self, schema_input: dict[str, Any]) -> dict[str, Any]:
         """Register a new custom Type schema.
@@ -290,13 +314,13 @@ class AsyncSchemasResource:
         manifest: dict[str, Any],
         *,
         org_id: str | None = None,
+        manifest_digest: str | None = None,
         **options: Any,
     ) -> dict[str, Any]:
         """Import a third-party schema manifest: see the sync ``import_`` docstring."""
-        body: dict[str, Any] = {"manifest": manifest, **options}
-        if org_id is not None:
-            body["orgId"] = org_id
-        return await self._http.post("/v1/schemas/import", json=body)
+        return await self._http.post(
+            "/v1/schemas/import", json=_import_body(manifest, org_id, manifest_digest, options)
+        )
 
     async def register(self, schema_input: dict[str, Any]) -> dict[str, Any]:
         return await self._http.post("/v1/schemas", json=schema_input)

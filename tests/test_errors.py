@@ -333,3 +333,22 @@ def test_the_404_hint_and_the_422_attempted_action_are_kept():
     assert refused.value.attempted_action == "cancel"
     assert refused.value.attempted_transition == "CANCELLED"
     assert refused.value.attempted_state == "CANCELLED"
+
+
+@respx.mock
+def test_a_notarize_only_refusal_names_its_inapplicable_fields():
+    respx.post("https://agledger.example.com/v1/records").mock(
+        return_value=httpx.Response(
+            422,
+            json={
+                "error": "VALIDATION_ERROR",
+                "detail": "notarize-generic-v1 has no completion phase",
+                "reason": "notarize_only_field",
+                "inapplicableFields": ["maxRevisions", "deadline"],
+            },
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test", max_retries=0)
+    with pytest.raises(UnprocessableError) as exc_info:
+        client.records.create(type="notarize-generic-v1", criteria={"summary": "x"}, max_revisions=2)
+    assert exc_info.value.inapplicable_fields == ["maxRevisions", "deadline"]

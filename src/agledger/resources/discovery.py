@@ -37,6 +37,19 @@ class DiscoveryResource:
         """
         return ConformanceResponse.model_validate(self._http.get("/v1/conformance"))
 
+    def get_federation_keys(self) -> dict[str, Any]:
+        """Return this Server's federation key history
+        (``GET /.well-known/agledger-federation-keys.json``, no auth).
+
+        ``{"hubId", "anchoredFrom", "statementDomain", "keys", "statements"}``:
+        every federation signing key the Server has held, newest first, with
+        its ``activatedAt`` / ``retiredAt`` window, and the signed genesis and
+        succession statements linking them. A receiver uses it to verify an
+        entry sealed under the publisher's earlier key. ``keys`` is empty while
+        federation is not configured. Needs a Server 2.2 or later.
+        """
+        return self._http.get("/.well-known/agledger-federation-keys.json")
+
     def get_lifecycle(self) -> dict[str, Any]:
         """Return the lifecycle definitions: ``{"record": ..., "dispute": ...}``,
         each with its ``states`` (valid transitions, actions, terminal)."""
@@ -54,6 +67,10 @@ class AsyncDiscoveryResource:
     async def get_conformance(self) -> ConformanceResponse:
         """Return conformance metadata (version, capabilities, contract types, limits)."""
         return ConformanceResponse.model_validate(await self._http.get("/v1/conformance"))
+
+    async def get_federation_keys(self) -> dict[str, Any]:
+        """Return this Server's federation key history: see the sync docstring."""
+        return await self._http.get("/.well-known/agledger-federation-keys.json")
 
     async def get_lifecycle(self) -> dict[str, Any]:
         """Return the Record lifecycle definition."""
