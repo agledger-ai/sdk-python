@@ -226,8 +226,8 @@ def _api_key_filters(
     """Build the ``GET /v1/admin/api-keys`` querystring from snake_case kwargs.
 
     The route is ``additionalProperties: false``, so a snake_case key on the
-    wire is a 400 and not a silently ignored filter. Only ``role`` survived the
-    passthrough these methods used to be, because it is a single word.
+    wire is a 400 and not a silently ignored filter. This builder converts each
+    snake_case kwarg to its camelCase wire name.
     """
     params: dict[str, Any] = {}
     if owner_id is not None:
@@ -535,7 +535,7 @@ class AdminResource:
         """Create a new agent.
 
         ``display_name`` is the agent's name and is unique within the org; the
-        route is ``additionalProperties: false`` and no longer accepts a
+        route is ``additionalProperties: false`` and accepts no
         separate ``name``, so passing one is a 400 rather than an ignored field.
 
         Set ``oidc_iss`` and ``oidc_sub`` together to bind the agent to an

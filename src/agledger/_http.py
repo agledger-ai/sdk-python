@@ -251,8 +251,8 @@ def build_error(response: httpx.Response) -> APIError:
         "refresh_url": body.get("refreshUrl"),
         "deadline": body.get("deadline"),
         # RFC 9457 problem URI + the ambiguous-publisher candidate list. Both
-        # were dropped here, which left the 422 unactionable in code: the
-        # recovery hint named a list the caller had no way to read.
+        # are kept: the recovery hint names a list the caller must be able to
+        # read.
         "type": body.get("type"),
         "publishers": body.get("publishers"),
         "registry_version": body.get("registryVersion"),

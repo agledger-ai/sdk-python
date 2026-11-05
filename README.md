@@ -29,7 +29,7 @@ import time
 
 from agledger import AgledgerClient
 
-base_url = os.environ["AGLEDGER_EXTERNAL_URL"]  # your AGLedger instance URL
+base_url = os.environ["AGLEDGER_API_URL"]  # your AGLedger instance URL
 principal = AgledgerClient(api_key=os.environ["AGLEDGER_API_KEY"], base_url=base_url)
 performer = AgledgerClient(api_key=os.environ["AGLEDGER_PERFORMER_API_KEY"], base_url=base_url)
 
@@ -38,18 +38,30 @@ performer = AgledgerClient(api_key=os.environ["AGLEDGER_PERFORMER_API_KEY"], bas
 record = principal.records.create(
     type="principal-gate-generic-v1",
     contract_version="1",
-    platform="internal",
+    platform="internal-etl",
     # Agent ids are uuids of agents you provisioned, so there is no id you can
     # invent here: read one from your config.
     performer_agent_id=os.environ["AGLEDGER_PERFORMER_AGENT_ID"],
     auto_activate=True,
-    criteria={"summary": "Procure 100 widgets", "amount": 500, "currency": "USD"},
+    criteria={
+        # `summary` is the one field the seeded contract requires. The schema is
+        # permissive, so your own domain fields ride alongside it.
+        "summary": "Nightly warehouse export",
+        "output_format": "parquet",
+        "row_count_min": 500_000,
+    },
 )
 
-# The performer submits the completion.
+# The performer submits the completion (what it reports back).
 completion = performer.completions.submit(
     record.id,
-    evidence={"summary": "Delivered 95 widgets", "evidenceUrl": "https://files.example.com/out.pdf"},
+    evidence={
+        # `summary` is required by the seeded completion schema; the rest is yours.
+        "summary": "Exported 512,408 rows to the nightly parquet target",
+        "deliverable": "/data/exports/2026-03-10.parquet",
+        "deliverable_type": "file_ref",
+        "row_count": 512_408,
+    },
 )
 
 # The Server validates the completion, then holds the Record at PROCESSING
@@ -59,7 +71,8 @@ for _ in range(30):
         break
     time.sleep(1)
 
-# Principal verdict
+# The principal decides whether to accept. AGLedger records the verdict and
+# does not inspect the evidence.
 verdict = principal.records.submit_verdict(record.id, completion_id=completion.id, verdict="accept")
 print(verdict.record_status)  # FULFILLED
 ```
@@ -68,7 +81,7 @@ print(verdict.record_status)  # FULFILLED
 
 ```python
 client = AgledgerClient(
-    api_key="agl_agt_...",                              # or set AGLEDGER_API_KEY env var
+    api_key="agl_agt_...",                              # omit to read the AGLEDGER_API_KEY env var
     base_url="https://agledger.internal.example.com",   # your instance URL. Required.
     max_retries=3,                                      # default: 3. A 429's retry-after is waited out in full
     timeout=30.0,                                       # default: 30s
@@ -79,8 +92,10 @@ client = AgledgerClient(
 `base_url` is required: every AGLedger deployment is self-hosted, so there is no
 default server to call. Omitting it raises `ConfigurationError` at construction,
 where the mistake is, rather than failing every subsequent call against a host
-you never named. `api_key` is the one option that falls back to an environment
-variable (`AGLEDGER_API_KEY`).
+you never named. The client falls back to the `AGLEDGER_API_KEY` environment variable
+when neither `api_key` nor `bearer_token` is passed. Pass `base_url` yourself,
+for example `base_url=os.environ["AGLEDGER_API_URL"]`. The examples below use `client` for a
+client built this way.
 
 Pass `bearer_token=` instead of `api_key=` to authenticate with a token your
 identity provider issued. It takes a string, a function the client calls before
@@ -116,7 +131,7 @@ def read_token() -> str:
     return Path(os.environ["AGLEDGER_OIDC_TOKEN_FILE"]).read_text().strip()
 
 credential = oidc_cert_credential(get_oidc_token=read_token)
-client = AgledgerClient(bearer_token=credential, base_url=os.environ["AGLEDGER_EXTERNAL_URL"])
+client = AgledgerClient(bearer_token=credential, base_url=os.environ["AGLEDGER_API_URL"])
 
 me = client.auth.get_me()
 print(me.auth_type, me.owner_id)  # ephemeral_cert <agent id>
@@ -163,7 +178,7 @@ from agledger import AsyncAgledgerClient
 async def main() -> None:
     async with AsyncAgledgerClient(
         api_key=os.environ["AGLEDGER_API_KEY"],
-        base_url=os.environ["AGLEDGER_EXTERNAL_URL"],
+        base_url=os.environ["AGLEDGER_API_URL"],
     ) as client:
         record = await client.records.create(
             type="notarize-generic-v1",
@@ -188,7 +203,7 @@ asyncio.run(main())
 
 ### When two publishers offer the same Type
 
-Importing a peer's manifest (`schemas.import_()`) can leave your org with two registrations of one `type`: theirs and your local one. That is supported, and it means a bare `type` no longer names a schema. The API refuses to guess, because the guess would change the moment the other publisher shipped a higher version:
+Importing a peer's manifest (`schemas.import_()`) can leave your org with two registrations of one `type`: theirs and your local one. `import_()` also takes the peer's `manifest_digest`, and the Server refuses a manifest that does not hash to it. Needs a Server 2.2 or later. That is supported, and it means a bare `type` no longer names a schema. The API refuses to guess, because the guess would change the moment the other publisher shipped a higher version:
 
 ```python
 from agledger import AgledgerClient, UnprocessableError
@@ -226,7 +241,17 @@ Single-publisher orgs, which is nearly every install, never pass `publisher` and
 `client.disputes` lists, files, resolves and withdraws disputes. Filing, withdrawing, reading and submitting evidence all take the **record** id. Resolving takes the **dispute** id, because the outcome is rendered on the dispute itself. Each call is made by the party the Server expects: here the principal has rejected the completion (the Quick Start with `verdict="reject"`), the performer disputes that verdict, the principal renders the outcome, and the org-wide listing takes an org admin key:
 
 ```python
+import os
+import sys
+
+from agledger import AgledgerClient
+
+base_url = os.environ["AGLEDGER_API_URL"]
+principal = AgledgerClient(api_key=os.environ["AGLEDGER_API_KEY"], base_url=base_url)
+performer = AgledgerClient(api_key=os.environ["AGLEDGER_PERFORMER_API_KEY"], base_url=base_url)
 admin = AgledgerClient(api_key=os.environ["AGLEDGER_ADMIN_API_KEY"], base_url=base_url)
+
+record = principal.records.get(sys.argv[1])  # the id of a Record the principal rejected
 
 filed = performer.disputes.create(record.id, grounds="quality_issue")
 
@@ -256,8 +281,8 @@ is_valid = verify_signature(raw_body, request.headers["x-agledger-signature"], w
 
 **Asymmetric** (`signing_alg="ed25519"` or `"ecdsa-p256-sha256"`) is RFC 9421
 HTTP Message Signatures signed with the Server's vault key. The receiver holds
-no secret and verifies against the Server's published public key, giving
-non-repudiation for the Settlement Signal hop. Settlement-event subscriptions
+no secret and verifies against the Server's published public key, so the
+receiver can verify the Server's signature without holding a shared secret. Settlement-event subscriptions
 default to this when the Server has a vault signing key. The wire `alg`
 reflects the Server's active key; `verify_rfc9421` handles both.
 
@@ -304,7 +329,8 @@ it was legitimate.
 
 ## Offline Audit Export Verification
 
-Verify a Record's hash-chained, signed audit export without calling the API:
+Verify a Record's hash-chained, signed audit export without calling the API. The
+examples here use `client` from Configuration and `record` from the Quick Start.
 
 ```python
 from agledger.verify import verify_export
@@ -327,9 +353,25 @@ those too; without it they are counted in `result.agent_signatures.present` and
 left unchecked:
 
 ```python
+import os
+from pathlib import Path
+
+from agledger import AgledgerClient, oidc_cert_credential
 from agledger.verify import verify_export
 
-export_data = client.records.get_audit_export(record.id)
+
+def read_token() -> str:
+    return Path(os.environ["AGLEDGER_OIDC_TOKEN_FILE"]).read_text().strip()
+
+
+credential = oidc_cert_credential(get_oidc_token=read_token)
+agent = AgledgerClient(bearer_token=credential, base_url=os.environ["AGLEDGER_API_URL"])
+written = agent.records.create(
+    type="notarize-generic-v1",
+    criteria={"summary": "Rotated the staging database credentials"},
+)
+
+export_data = agent.records.get_audit_export(written.id)
 result = verify_export(
     export_data,
     agent_keys=[credential.public_key_jwk],  # the JWK sent at cert exchange
@@ -347,7 +389,8 @@ so a key for another certificate is simply never used.
 A vault key the Server publishes comes from its database, and anything with
 write access to that database can add a key row and entries signed with it.
 What it cannot add is a key statement: a COSE_Sign1 signed by a key the Server
-already trusted (and, for a new key, by the new key too). Pass the SPKI digest
+already trusted (and, for a new key, by the new key too), unless it also holds
+the private half of a key you trust. Pass the SPKI digest
 of a vault key you hold or took out of band as `trust_anchors`, and the
 verifier walks the statements from it. The installer prints the digest of the
 first vault key, and the Server's `signing-key-digest.js` derives one from any
@@ -474,7 +517,7 @@ is `agledger.verify.compute_key_trust`, with
 
 `broken_at.code` is a canonical SCREAMING_SNAKE `FailureCode` (e.g.
 `CHAIN_HASH_MISMATCH`, `CHAIN_SIGNATURE_INVALID`) shared with the TypeScript
-verification core, so both languages report identical verdicts over the shared
+verification core, so both languages report the same verdict on every vector of the shared
 conformance corpus.
 
 Requires `cbor2` (for COSE_Sign1 decoding) and `cryptography` (for signature
@@ -486,7 +529,7 @@ pip install 'agledger[verify]'
 
 Decodes canonical COSE_Sign1 envelopes (RFC 9052), walks the hash chain, and
 verifies each signature under the algorithm the verification key commits to
-(Ed25519 or ES256). Format 2.0 (1.0 was JCS + detached Ed25519). Pass `public_keys={...}` to supply keys yourself (these override the
+(Ed25519 or ES256). Format 2.0. Pass `public_keys={...}` to supply keys yourself (these override the
 export's embedded keys), `require_key_id="key-id"` to reject exports signed by an
 unexpected key, or `require_supplied_keys=True` to refuse the export's own
 embedded keys. `result.key_provenance` reports how many signatures were checked
@@ -581,14 +624,14 @@ operator gives it (base64 SPKI DER, or base64 of the raw 32 bytes), once per
 peer. A receiving Server seals each peer message it accepts on the chain entry
 it writes (`payload.wire`), as the peer signed it; every sealed message is held
 to its body hash and to its entry, and one from a hub you gave a key for also
-has its signature re-verified, which proves what the peer asserted from this
+has its signature re-verified, which checks the peer's signature over what it asserted, from this
 Server's export alone. A failure is `CHAIN_FEDERATION_WIRE_INVALID`; the
 reports count them under `federation_wire`. In code, pass `federation_keys=`
 (`{hub_id: key}` or `[{"hubId": ..., "publicKey": ...}]`) to `verify_dump` or
 `verify_export`. After a peer changes its federation key, give the peer's key
 history (`discovery.get_federation_keys()` on the peer, or
 `--federation-key-history <file>`) beside the key you pinned; each message is
-placed in its key's window by its signed `wire.timestamp`.
+placed in its key's window by its signed `wire.timestamp`. Needs a Server 2.2 or later.
 
 On an `/audit-export` taken with `evidence=True`, `verify_export` hashes each
 inlined evidence body (SHA-256 over its RFC 8785 form) against the
@@ -648,7 +691,7 @@ rejects them. In code they are the `public_keys`, `require_supplied_keys` and
 Every failure carries an actionable next step
 via `agledger.verify.suggestion(code)`. The dump verifier emits the same
 canonical `FailureCode` taxonomy as the TypeScript `@agledger/verify` and is held
-to the same shared conformance corpus, so the two agree verdict-for-verdict.
+to the same shared conformance corpus, so the two agree on every vector of the shared conformance corpus.
 
 ## SCITT / SCRAPI
 
@@ -702,7 +745,18 @@ The Server periodically writes per-record signed Merkle anchors, letting an
 auditor detect removed or rewritten chain entries offline. Listing them takes an org admin key:
 
 ```python
-checkpoints = admin.audit.vault_checkpoints.list(record_id=record.id)
+import os
+import sys
+
+from agledger import AgledgerClient
+
+admin = AgledgerClient(
+    api_key=os.environ["AGLEDGER_ADMIN_API_KEY"],
+    base_url=os.environ["AGLEDGER_API_URL"],
+)
+record_id = sys.argv[1]  # the id of a Record
+
+checkpoints = admin.audit.vault_checkpoints.list(record_id=record_id)
 ```
 
 ## Licensing

@@ -812,10 +812,9 @@ the dispute waiting on the record principal to render an outcome through
 transaction that opens a dispute and never commits a row at it, so it is not
 externally observable and is not a member here.
 
-The tier ladder is gone: ``TIER_2_REVIEW``, ``ESCALATED`` and
-``TIER_3_ARBITRATION`` were members of this union and are no longer values the
-Server serves or any filter accepts. A dispute that would have escalated now
-sits at ``PENDING_RESOLUTION``.
+There is no tier ladder: ``TIER_2_REVIEW``, ``ESCALATED`` and
+``TIER_3_ARBITRATION`` are not values the Server serves or any filter accepts.
+A dispute that would have escalated sits at ``PENDING_RESOLUTION``.
 
 Models widen this to ``DisputeStatus | str`` where the value is read off a
 response, so a status added by a newer Server parses rather than raising.
@@ -1401,9 +1400,9 @@ class AuditExportMetadata(BaseModel):
         | None
     ) = Field(None, alias="integrityLevel")
     export_format_version: str = Field(alias="exportFormatVersion")
-    """`2.0` since the COSE_Sign1 cutover."""
+    """`2.0`: the COSE_Sign1 export format."""
     canonicalization: str
-    """`RFC8949-CDE` since 2.0: deterministic CBOR per RFC 8949 §4.2.1."""
+    """`RFC8949-CDE`: deterministic CBOR per RFC 8949 §4.2.1."""
     signing_public_key: str | None = Field(None, alias="signingPublicKey")
     signing_public_keys: dict[str, str] | None = Field(None, alias="signingPublicKeys")
     signing_key_windows: dict[str, dict[str, Any]] | None = Field(
@@ -1440,7 +1439,7 @@ class VaultCheckpoint(BaseModel):
     #: Which chain this row anchors (API v1.3.4). ``record`` is the
     #: per-record chain, ``schema`` an org's schema-registration chain
     #: (record-less), ``admin`` the platform-ops chain. All three are the same
-    #: signed-checkpoint construction. None on a pre-1.3.4 server.
+    #: signed-checkpoint construction. None on a Server that predates the field.
     chain: VaultCheckpointChain | None = None
     chain_position: int = Field(alias="chainPosition")
     payload_hash: str = Field(alias="payloadHash")
@@ -2130,7 +2129,7 @@ class AgentHistoryEntry(BaseModel):
     type: str
     status: RecordStatus | str
     """Record status at the time of the read. The Server types this as the record
-    status enum now, where it used to be a bare string."""
+    status enum."""
     role: Literal["performer", "principal", "both"]
     """The structural role this agent held on the record: ``performer`` it was
     assigned the work, ``principal`` it registered the work, ``both`` it is on
@@ -2185,7 +2184,7 @@ class AccountProfile(BaseModel):
     api_key_id: str = Field(alias="apiKeyId")
     role: ApiKeyRole | str
     owner_id: str = Field(alias="ownerId")
-    """Owner of the key. When ``owner_type == "agent"`` this IS the agent id; when it is ``"org"`` this is the org id. There is no separate ``agentId`` field: one was declared here through 1.7.0 and ``/v1/auth/me`` has never returned it, so reading it always yielded ``None``."""
+    """Owner of the key. When ``owner_type == "agent"`` this IS the agent id; when it is ``"org"`` this is the org id. There is no separate ``agentId`` field: ``/v1/auth/me`` returns none."""
     owner_type: str = Field(alias="ownerType")
     scopes: list[str] | None = None
     org_id: str | None = Field(None, alias="orgId")
@@ -2582,11 +2581,11 @@ class ComplianceExport(BaseModel):
     #: before treating this as the size of the match set.
     record_count: int | None = Field(None, alias="recordCount")
     #: True when the filters matched more than the 10000-row export cap, so the
-    #: export holds only the newest 10000 rows (API v1.3.4). Window
+    #: export holds only the newest 10000 rows. Window
     #: with ``filters.from`` / ``filters.to`` to cover the rest. On a download
     #: the same answer rides the ``X-AGLedger-Export-Truncated`` response
     #: header, the only carrier for a ``csv`` download (the body is raw rows,
-    #: and a notice line would corrupt the parse). None on a pre-1.3.4 server.
+    #: and a notice line would corrupt the parse). None on a Server that predates the field.
     truncated: bool | None = None
     #: Total rows the filters matched at creation time, before the cap. Equals
     #: ``record_count`` unless ``truncated``. Header twin on a download:

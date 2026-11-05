@@ -9,7 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 
 - Documentation describes what the caller observes instead of the Server's internals.
-- The source distribution contains only the package source, README, LICENSE and CHANGELOG.
+- The README names the environment variable the client falls back to (`AGLEDGER_API_KEY`), and says that federation key history and schema import with a manifest digest need a Server 2.2 or later.
+- The source distribution contains only the package source and its README, LICENSE and CHANGELOG.
 
 ## [3.1.0] - 2026-11-05
 
@@ -39,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [3.0.0] - 2026-10-05
 
 Targets AGLedger API 2.0 only; 1.x wire shapes are not supported. Breaking changes are under Removed and Changed.
+
+There is no 2.x release of this package.
 
 ### Removed
 
