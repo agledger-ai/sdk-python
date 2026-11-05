@@ -71,8 +71,8 @@ for _ in range(30):
         break
     time.sleep(1)
 
-# The principal decides whether to accept. AGLedger records the verdict and
-# does not inspect the evidence.
+# The principal decides whether to accept, and AGLedger records the verdict
+# beside the evidence it was given.
 verdict = principal.records.submit_verdict(record.id, completion_id=completion.id, verdict="accept")
 print(verdict.record_status)  # FULFILLED
 ```
