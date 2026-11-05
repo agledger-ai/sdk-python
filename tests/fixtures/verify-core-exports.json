@@ -1,5 +1,5 @@
 {
- "verifyCore": "2.1.0 @ 1cd62127",
+ "verifyCore": "2.1.0 @ 9a37dfd2",
  "runs": {
   "export/valid.json|keysFile": {
    "file": "export/valid.json",
@@ -52,11 +52,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -132,11 +139,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -216,11 +230,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -298,11 +319,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -382,11 +410,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -464,11 +499,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -548,11 +590,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -630,11 +679,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -714,11 +770,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -796,11 +859,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -880,11 +950,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -962,11 +1039,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1046,11 +1130,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1128,11 +1219,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1212,11 +1310,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1294,11 +1399,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1380,11 +1492,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1464,11 +1583,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1548,11 +1674,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1630,11 +1763,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -1700,11 +1840,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [],
     "keyTrust": {
@@ -1764,11 +1911,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [],
     "keyTrust": {
@@ -1826,11 +1980,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [],
     "keyTrust": {
@@ -1890,11 +2051,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [],
     "keyTrust": {
@@ -1944,11 +2112,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2004,11 +2179,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "not_checked",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2091,11 +2273,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2176,11 +2365,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "not_checked",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2256,11 +2452,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2338,11 +2541,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2427,11 +2637,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2512,11 +2729,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2598,11 +2822,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2680,11 +2911,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2768,11 +3006,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2852,11 +3097,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -2938,11 +3190,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3022,11 +3281,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3097,11 +3363,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3170,11 +3443,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3252,11 +3532,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3332,11 +3619,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3418,11 +3712,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3502,11 +3803,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3571,11 +3879,18 @@
      "key_temporal": "applied",
      "agent_signature": "applied",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 1
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3638,11 +3953,18 @@
      "key_temporal": "applied",
      "agent_signature": "applied",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 1
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3701,7 +4023,7 @@
      "total": 1
     },
     "keyProvenance": {
-     "supplied": 0,
+     "supplied": 1,
      "embedded": 0
     },
     "optionalChecks": {
@@ -3711,11 +4033,18 @@
      "key_temporal": "applied",
      "agent_signature": "applied",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3772,7 +4101,7 @@
      "total": 1
     },
     "keyProvenance": {
-     "supplied": 0,
+     "supplied": 1,
      "embedded": 0
     },
     "optionalChecks": {
@@ -3782,11 +4111,18 @@
      "key_temporal": "applied",
      "agent_signature": "applied",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3854,11 +4190,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3924,11 +4267,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "not_checked",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -3992,11 +4342,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4058,11 +4415,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 1,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4126,11 +4490,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4192,11 +4563,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4264,11 +4642,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4334,11 +4719,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "not_checked",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4416,11 +4808,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4494,11 +4893,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4574,11 +4980,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4660,11 +5073,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4744,11 +5164,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4821,11 +5248,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4896,11 +5330,18 @@
      "key_temporal": "skipped_no_input",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "not_checked",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -4978,11 +5419,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5058,11 +5506,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5146,11 +5601,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5230,11 +5692,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5318,11 +5787,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "skipped_no_input",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5402,11 +5878,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5477,11 +5960,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5554,11 +6044,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5628,11 +6125,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5705,11 +6209,18 @@
      "key_temporal": "applied",
      "agent_signature": "skipped_no_input",
      "key_anchoring": "applied",
-     "federation_wire": "skipped_no_input"
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "skipped_no_input"
     },
     "agentSignatures": {
      "present": 0,
      "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 0,
+     "verified": 0,
+     "clientHashed": 0,
+     "failed": 0
     },
     "unsignedProjectionFields": [
      "actorDisplayName",
@@ -5739,6 +6250,1101 @@
        "detail": "distrustedKeys gives b649db0ec7c5c0fd the instant 2026-10-05T23:03:48.000000Z, and the listing says the Server distrusts it from 2026-10-05T23:03:51.537314Z (distrustedFrom, VAULT_DISTRUSTED_KEYS): the auditor's entry and the one the listing gives disagree, so what the key signed between the two instants is graded differently here than on the Server. Confirm the instant with the Server's operator."
       }
      ],
+     "accounted": []
+    }
+   }
+  }
+ },
+ "evidence": {
+  "cleartext, unedited": {
+   "file": "export-evidence.json",
+   "edit": null,
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 13,
+    "verifiedEntries": 13,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 2,
+     "verified": 2,
+     "clientHashed": 0,
+     "failed": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "completion body edited": {
+   "file": "export-evidence.json",
+   "edit": {
+    "at": "COMPLETION_SUBMITTED",
+    "merge": {
+     "summary": "edited"
+    }
+   },
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 13,
+    "verifiedEntries": 12,
+    "brokenAt": {
+     "position": 4,
+     "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+     "detail": "The inlined evidence body hashes to c086fba8205e068b5bba53be050452970fe82b405d97c803b6f699861f2e5b1a under RFC 8785 and SHA-256, and the entry signs payload.evidenceHash 4239b6d5af08f2f4ac2b6f194922f147375c04326b23a6c53689a2a43a1954f1: the body was edited after export, or is not the one submitted."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": false,
+      "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+      "detail": "The inlined evidence body hashes to c086fba8205e068b5bba53be050452970fe82b405d97c803b6f699861f2e5b1a under RFC 8785 and SHA-256, and the entry signs payload.evidenceHash 4239b6d5af08f2f4ac2b6f194922f147375c04326b23a6c53689a2a43a1954f1: the body was edited after export, or is not the one submitted.",
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 2,
+     "verified": 1,
+     "clientHashed": 0,
+     "failed": 1
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "dispute body edited": {
+   "file": "export-evidence.json",
+   "edit": {
+    "at": "DISPUTE_EVIDENCE",
+    "merge": {
+     "doc": "invoice-999"
+    }
+   },
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 13,
+    "verifiedEntries": 12,
+    "brokenAt": {
+     "position": 11,
+     "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+     "detail": "The inlined evidence body hashes to a258c6676b5d4537d1640c44d4b0cef548ad6b739970264901ff4687ebf24202 under RFC 8785 and SHA-256, and the entry signs payload.payloadHash 32a496a04303d4b7061eaee6c566b6863209bc5405ccf63ebdc64d166d43cb2c: the body was edited after export, or is not the one submitted."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": false,
+      "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+      "detail": "The inlined evidence body hashes to a258c6676b5d4537d1640c44d4b0cef548ad6b739970264901ff4687ebf24202 under RFC 8785 and SHA-256, and the entry signs payload.payloadHash 32a496a04303d4b7061eaee6c566b6863209bc5405ccf63ebdc64d166d43cb2c: the body was edited after export, or is not the one submitted.",
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 2,
+     "verified": 1,
+     "clientHashed": 0,
+     "failed": 1
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "body on an entry that binds none": {
+   "file": "export-evidence.json",
+   "edit": {
+    "at": 0,
+    "set": {
+     "summary": "attached where nothing signs it"
+    }
+   },
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 13,
+    "verifiedEntries": 12,
+    "brokenAt": {
+     "position": 1,
+     "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+     "detail": "A RECORD_CREATED entry inlines an evidence body. The Server inlines evidence only on COMPLETION_SUBMITTED and DISPUTE_EVIDENCE entries, and nothing this entry signs binds a body."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": false,
+      "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+      "detail": "A RECORD_CREATED entry inlines an evidence body. The Server inlines evidence only on COMPLETION_SUBMITTED and DISPUTE_EVIDENCE entries, and nothing this entry signs binds a body.",
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 3,
+     "verified": 2,
+     "clientHashed": 0,
+     "failed": 1
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "body is an array": {
+   "file": "export-evidence.json",
+   "edit": {
+    "at": "DISPUTE_EVIDENCE",
+    "set": [
+     "x"
+    ]
+   },
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 13,
+    "verifiedEntries": 12,
+    "brokenAt": {
+     "position": 11,
+     "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+     "detail": "The inlined evidence is an array, not the JSON object the entry's payload.payloadHash was computed over."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": false,
+      "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+      "detail": "The inlined evidence is an array, not the JSON object the entry's payload.payloadHash was computed over.",
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 2,
+     "verified": 1,
+     "clientHashed": 0,
+     "failed": 1
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "body is a string": {
+   "file": "export-evidence.json",
+   "edit": {
+    "at": "COMPLETION_SUBMITTED",
+    "set": "x"
+   },
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": false,
+    "totalEntries": 13,
+    "verifiedEntries": 12,
+    "brokenAt": {
+     "position": 4,
+     "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+     "detail": "The inlined evidence is string, not the JSON object the entry's payload.evidenceHash was computed over."
+    },
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": false,
+      "code": "CHAIN_EVIDENCE_BINDING_MISMATCH",
+      "detail": "The inlined evidence is string, not the JSON object the entry's payload.evidenceHash was computed over.",
+      "signature": "ok"
+     },
+     {
+      "position": 5,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 6,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 7,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 8,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 9,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 10,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 11,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 12,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 13,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 13,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 13
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 13
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 2,
+     "verified": 1,
+     "clientHashed": 0,
+     "failed": 1
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
+     "accounted": []
+    }
+   }
+  },
+  "encrypted-mode completion": {
+   "file": "export-encrypted-evidence.json",
+   "edit": null,
+   "trustAnchors": [
+    "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+   ],
+   "result": {
+    "valid": true,
+    "totalEntries": 4,
+    "verifiedEntries": 4,
+    "brokenAt": null,
+    "entries": [
+     {
+      "position": 1,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 2,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 3,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     },
+     {
+      "position": 4,
+      "valid": true,
+      "code": null,
+      "detail": null,
+      "signature": "ok"
+     }
+    ],
+    "signatureCoverage": {
+     "signed": 4,
+     "unsigned": 0,
+     "skipped": 0,
+     "total": 4
+    },
+    "keyProvenance": {
+     "supplied": 0,
+     "embedded": 4
+    },
+    "optionalChecks": {
+     "payload_binding": "applied",
+     "oidc_actor": "applied",
+     "actor_attribution": "applied",
+     "key_temporal": "applied",
+     "agent_signature": "skipped_no_input",
+     "key_anchoring": "applied",
+     "federation_wire": "skipped_no_input",
+     "evidence_binding": "applied"
+    },
+    "agentSignatures": {
+     "present": 0,
+     "verified": 0
+    },
+    "evidenceBinding": {
+     "present": 1,
+     "verified": 0,
+     "clientHashed": 1,
+     "failed": 0
+    },
+    "unsignedProjectionFields": [
+     "actorDisplayName",
+     "actorOwnerType",
+     "humanReadableLabel"
+    ],
+    "keyTrust": {
+     "status": "walked",
+     "detail": "Every key is linked by signed key statements to sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c.",
+     "anchors": [
+      "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c"
+     ],
+     "anchoredFrom": "sha256:651b8ed22effbc65f62a8de9d8dcf0830c75773beedf007ea66ae550048dc46c",
+     "anchoredFromPinned": true,
+     "order": "written",
+     "anchoredKeyIds": [
+      "651b8ed22effbc65"
+     ],
+     "unanchoredKeyIds": [],
+     "undecidedKeyIds": [],
+     "findings": [],
+     "notes": [],
      "accounted": []
     }
    }

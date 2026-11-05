@@ -52,6 +52,7 @@ from agledger.verify.verify_dump import verify_dump
 from agledger.verify.verify_export import (
     AgentSignatureCounts,
     CheckApplicability,
+    EvidenceBindingCounts,
     VerifyExportResult,
     build_agent_key_registry,
     verify_export,
@@ -261,7 +262,8 @@ Options:
                               CHAIN_FEDERATION_WIRE_INVALID. Applies to a dump
                               directory and to an /audit-export file. Name a
                               hub twice to pin a second key no succession
-                              links to the first (one listed linked: false).
+                              links to the first: one listed linked: false, or
+                              one its history does not list at all.
   --federation-key-history    Path to a peer's key history, the JSON its
                               GET /.well-known/agledger-federation-keys.json
                               serves (no auth). Repeatable. Needs a
@@ -269,10 +271,12 @@ Options:
                               history links to that key through successions
                               both keys signed is trusted inside its window,
                               so entries sealed before the peer changed its
-                              federation key verify. A message under a key
-                              activated after the receiver took it fails; one
-                              under a key retired before it is counted as
-                              after retirement, in order when the receiver's
+                              federation key verify. Each message is placed
+                              by its signed wire.timestamp, never by the
+                              unsigned createdAt. One signed under a key
+                              before the key's activation fails; one signed
+                              after its retirement is counted as after
+                              retirement, in order when the receiver's
                               federation.peer_revoked row for the peer comes
                               after it.
   --agent-keys                Path to a JSON file holding the Ed25519 public
@@ -502,8 +506,42 @@ def attach_federation_key_histories(keys: list[dict[str, Any]], paths: Sequence[
     return out
 
 
+#: Said on a failed run: the walk reads every entry past a break, and each
+#: count covers the entries that passed every other check, not the chain.
+_COUNTED_ON_SOUND_ENTRIES = ", counted on the entries that passed every other check"
+
+
+def _evidence_binding_summary(counts: EvidenceBindingCounts, run_failed: bool = False) -> str:
+    """One line on the evidence bodies an ``?evidence=true`` export inlines,
+    worded so an export taken without them never reads as evidence that was
+    checked."""
+    hashed = f" client-hashed={counts.client_hashed}" if counts.client_hashed > 0 else ""
+    base = f"present={counts.present} verified={counts.verified} failed={counts.failed}{hashed}"
+    base += _COUNTED_ON_SOUND_ENTRIES if run_failed else ""
+    if counts.present == 0:
+        if run_failed:
+            return f"{base} (none among them)"
+        return f"{base} (none inlined: the export was taken without ?evidence=true, so it carries hashes only)"
+    parts: list[str] = []
+    if counts.verified > 0:
+        parts.append(f"{counts.verified} hashed (RFC 8785, SHA-256) to the evidenceHash or payloadHash its entry signs")
+    if counts.client_hashed > 0:
+        parts.append(
+            f"{counts.client_hashed} on an encrypted-mode completion, whose signed hash covers a cleartext this "
+            "export does not carry, so it was NOT re-bound"
+        )
+    if counts.failed > 0:
+        parts.append(f"{counts.failed} failed: see the failures below")
+    return f"{base} ({'; '.join(parts)})"
+
+
 def _federation_wire_summary(
-    present: int, verified: int, failed: int, keys_given: bool, after_retirement: int = 0
+    present: int,
+    verified: int,
+    failed: int,
+    keys_given: bool,
+    after_retirement: int = 0,
+    run_failed: bool = False,
 ) -> str:
     """One line on the sealed federation messages. Each is held to its body
     hash and to its entry, then checked under the peer key given for its hub,
@@ -512,11 +550,12 @@ def _federation_wire_summary(
     failure."""
     retired = f" after-retirement={after_retirement}" if after_retirement > 0 else ""
     base = f"present={present} verified={verified} failed={failed}{retired}"
+    base += _COUNTED_ON_SOUND_ENTRIES if run_failed else ""
     if present == 0:
-        return f"{base} (none on the chain)"
+        return f"{base} (none among them)" if run_failed else f"{base} (none on the chain)"
     no_key = present - verified - failed
     retired_note = (
-        f"{after_retirement} signed under a key the peer had retired before the receiver took it: in order when "
+        f"{after_retirement} signed by the peer under a key it had already retired: in order when "
         "the receiver's federation.peer_revoked row for the peer comes after them"
     )
     if no_key == 0 and failed == 0:
@@ -543,6 +582,7 @@ def _agent_signature_summary(
     check: CheckApplicability,
     keys_given: bool,
     keys_from_chain: int = 0,
+    run_failed: bool = False,
 ) -> str:
     """One line on the agent-signature check. ``present > verified`` on a
     passing report means some signatures were not re-checked, never that they
@@ -550,6 +590,7 @@ def _agent_signature_summary(
     ``keys_from_chain`` counts the cert keys a dump signs itself (always 0 for
     an export)."""
     base = f"present={counts.present} verified={counts.verified}"
+    base += _COUNTED_ON_SOUND_ENTRIES if run_failed else ""
     on_chain = f"{keys_from_chain} cert key{'' if keys_from_chain == 1 else 's'} the dump signs"
     if check == "applied":
         if counts.present > counts.verified:
@@ -563,7 +604,7 @@ def _agent_signature_summary(
         against = f"the supplied keys and the {on_chain}" if keys_given else f"the {on_chain}"
         return f"{base} (checked against {against})"
     if counts.present == 0:
-        return f"{base} (none on the chain)"
+        return f"{base} (none among them)" if run_failed else f"{base} (none on the chain)"
     if keys_given:
         extra = f" or the {on_chain}" if keys_from_chain else ""
         return (
@@ -675,14 +716,11 @@ def _format_dump_text(
     lines.append(f"  records     : {report.vault.record_count}")
     lines.append(f"  entries     : {report.vault.entry_count}")
     lines.append(f"  checkpoints : {report.vault.checkpoint_count}")
-    vault_counts = AgentSignatureCounts(
-        report.vault.agent_signatures_present, report.vault.agent_signatures_verified
+    lines.append(
+        f"  agent sigs  : {_agent_signature_summary(report.vault.agent_signatures, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain, run_failed=bool(report.vault.failures))}"
     )
     lines.append(
-        f"  agent sigs  : {_agent_signature_summary(vault_counts, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain)}"
-    )
-    lines.append(
-        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire_present, report.vault.federation_wire_verified, report.vault.federation_wire_failed, federation_keys_given, report.vault.federation_wire_after_retirement)}"
+        f"  peer msgs   : {_federation_wire_summary(report.vault.federation_wire.present, report.vault.federation_wire.verified, report.vault.federation_wire.failed, federation_keys_given, report.vault.federation_wire.after_retirement, run_failed=bool(report.vault.failures))}"
     )
     lines.append(f"  failures    : {len(report.vault.failures)}")
     for f in report.vault.failures:
@@ -745,6 +783,12 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "failed": result.federation_wire.failed,
             "afterRetirement": result.federation_wire.after_retirement,
         },
+        "evidenceBinding": {
+            "present": result.evidence_binding.present,
+            "verified": result.evidence_binding.verified,
+            "clientHashed": result.evidence_binding.client_hashed,
+            "failed": result.evidence_binding.failed,
+        },
         "unsignedProjectionFields": list(result.unsigned_projection_fields),
     }
     if result.broken_at is not None:
@@ -789,12 +833,13 @@ def _format_export_text(
     lines.extend(_key_trust_lines(result.key_trust))
     lines.append(
         "  agent signatures  : "
-        f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given)}"
+        f"{_agent_signature_summary(result.agent_signatures, result.agent_signature_check, keys_given, run_failed=not result.valid)}"
     )
     lines.append(
         "  peer messages     : "
-        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed, federation_keys_given, result.federation_wire.after_retirement)}"
+        f"{_federation_wire_summary(result.federation_wire.present, result.federation_wire.verified, result.federation_wire.failed, federation_keys_given, result.federation_wire.after_retirement, run_failed=not result.valid)}"
     )
+    lines.append(f"  evidence bodies   : {_evidence_binding_summary(result.evidence_binding, run_failed=not result.valid)}")
     if result.broken_at is not None:
         lines.append(
             f"  broken at pos {result.broken_at.position}: [{result.broken_at.code}] "

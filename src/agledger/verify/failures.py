@@ -62,6 +62,7 @@ FailureCode = Literal[
     "CHAIN_ACTOR_ATTRIBUTION_MISMATCH",
     "CHAIN_AGENT_SIGNATURE_INVALID",
     "CHAIN_FEDERATION_WIRE_INVALID",
+    "CHAIN_EVIDENCE_BINDING_MISMATCH",
     "CHAIN_ENTRY_UNSIGNED",
     "CHAIN_SIGNING_KEY_UNANCHORED",
     "CHAIN_KEY_WINDOW_DRIFT",
@@ -221,6 +222,14 @@ _SUGGESTIONS: dict[str, str] = {
         "senderPublicKey is not that key. The receiving Server verified the message at intake "
         "and signed this entry, so this is not a caller mistake: treat what the entry says the "
         "peer asserted as unproven and escalate to both operators."
+    ),
+    "CHAIN_EVIDENCE_BINDING_MISMATCH": (
+        "An evidence body inlined in the export (entries[].evidence, from ?evidence=true) "
+        "does not hash to the payload.evidenceHash or payload.payloadHash its entry signs, or "
+        "sits on an entry that signs no such hash. The body is an unsigned projection whose "
+        "only authority is that hash, so it was edited after export or attached where it does "
+        "not belong. Trust the signed hash, not the body: re-obtain the evidence from the "
+        "operator and re-bind it (SHA-256 over its RFC 8785 form)."
     ),
     "CHAIN_ENTRY_UNSIGNED": (
         "The entry carries no signing key id where the install could not have written an "

@@ -60,6 +60,7 @@ from agledger.verify.federation_wire import (
     FederationKeyRegistry,
     FederationWireCounts,
     build_federation_key_registry,
+    canonicalize_json,
     check_federation_wire,
     extract_federation_wire,
 )
@@ -83,6 +84,7 @@ from agledger.verify.key_statements import (
     settle_key_trust,
     spki_sha256,
 )
+from agledger.verify.types import AgentSignatureCounts as AgentSignatureCounts
 
 try:
     import cbor2 as _cbor2
@@ -380,6 +382,7 @@ OPTIONAL_CHECKS = (
     "agent_signature",
     "key_anchoring",
     "federation_wire",
+    "evidence_binding",
 )
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
@@ -397,18 +400,24 @@ def optional_checks_report(applied: set[str], walked: bool = False) -> dict[str,
 
 
 @dataclass
-class AgentSignatureCounts:
-    """Agent signatures on the chain.
+class EvidenceBindingCounts:
+    """Evidence bodies an ``?evidence=true`` export inlines
+    (``entries[].evidence`` on COMPLETION_SUBMITTED and DISPUTE_EVIDENCE).
 
-    ``present`` counts entries that passed every other check and whose signed
-    payload carries ``predicate.on_behalf_of.agent_signature``; ``verified``
-    counts those re-checked against a key passed as ``agent_keys`` and found
-    good. ``present > verified`` on a valid chain means some were not checked
-    (no key supplied, or the identity was a caller assertion), never that they
-    failed."""
+    ``present`` counts entries that passed every other check and carry one;
+    ``verified`` those whose body hashes, under RFC 8785 and SHA-256, to the
+    signed ``payload.evidenceHash`` or ``payload.payloadHash``;
+    ``client_hashed`` those on an encrypted-mode completion
+    (``payload.verifiedBy == "client"``), whose signed hash covers a cleartext
+    the export does not carry, so the inlined ciphertext cannot be re-bound
+    offline; ``failed`` those that did not hash to it, or sit where nothing
+    signed binds a body. Mirrors ``evidenceBinding`` in
+    ``@agledger/verify-core``."""
 
     present: int = 0
     verified: int = 0
+    client_hashed: int = 0
+    failed: int = 0
 
 
 @dataclass
@@ -428,6 +437,10 @@ class VerifyExportResult:
     #: key was supplied for those senders, never that they failed. Mirrors
     #: ``federationWire`` in ``@agledger/verify-core``.
     federation_wire: FederationWireCounts = field(default_factory=FederationWireCounts)
+    #: Inlined evidence bodies (``?evidence=true``) vs re-bound to the hash
+    #: their entry signs. A body that does not hash to it fails
+    #: ``CHAIN_EVIDENCE_BINDING_MISMATCH``. See :class:`EvidenceBindingCounts`.
+    evidence_binding: EvidenceBindingCounts = field(default_factory=EvidenceBindingCounts)
     #: ``applied`` only when ``agent_keys`` supplied the cert key for at least
     #: one engine-validated agent signature on the chain. Mirrors
     #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
@@ -646,6 +659,7 @@ def verify_export(
     agent_counts = AgentSignatureCounts()
     agent_check: list[CheckApplicability] = ["skipped_no_input"]
     wire_counts = FederationWireCounts()
+    evidence_counts = EvidenceBindingCounts()
     applied: set[str] = set()
     verified = 0
     broken_at: BrokenAt | None = None
@@ -672,6 +686,8 @@ def verify_export(
             result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
         if result.valid:
             result = check_sealed_federation_wire(entry, result, federation_registry, wire_counts, applied)
+        if result.valid:
+            result = check_inlined_evidence(entry, result, evidence_counts, applied)
         entry_results.append(result)
         if result.valid:
             verified += 1
@@ -709,6 +725,7 @@ def verify_export(
         key_provenance=provenance,
         agent_signatures=agent_counts,
         federation_wire=wire_counts,
+        evidence_binding=evidence_counts,
         agent_signature_check=agent_check[0],
         optional_checks=optional_checks_report(
             applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
@@ -2056,7 +2073,6 @@ def check_sealed_federation_wire(
         cast("Mapping[str, Any]", payload),
         wire,
         federation_keys,
-        row.created_at,
     )
     if outcome.outcome == "ok":
         if outcome.signature_checked:
@@ -2075,6 +2091,90 @@ def check_sealed_federation_wire(
         signature=result.signature,
         key_source=result.key_source,
     )
+
+
+#: The payload field each entry type signs an inlined evidence body's hash under.
+_EVIDENCE_HASH_FIELD = {"COMPLETION_SUBMITTED": "evidenceHash", "DISPUTE_EVIDENCE": "payloadHash"}
+_HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def _json_kind(value: object) -> str:
+    """How verify-core's message names a value that is not an object."""
+    if isinstance(value, list):
+        return "an array"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    return type(value).__name__
+
+
+def check_inlined_evidence(
+    entry: Mapping[str, Any],
+    result: EntryVerificationResult,
+    counts: EvidenceBindingCounts,
+    applied: set[str] | None,
+) -> EntryVerificationResult:
+    """Re-bind an inlined evidence body to the hash its entry signs, on an
+    export entry that already passed every other check (so its payload is
+    what the Server signed): SHA-256 hex over the RFC 8785 form of the body
+    against ``payload.evidenceHash`` (completion) or ``payload.payloadHash``
+    (dispute evidence). An encrypted-mode completion signs a hash its
+    submitter computed over the cleartext, and the export inlines the
+    ciphertext, so it is counted and left unbound. A null ``evidence`` is no
+    body. Mirrors verify-core's ``checkInlinedEvidence``."""
+    if DUMP_ROW in entry or entry.get("evidence") is None:
+        return result
+    body: object = entry["evidence"]
+    if applied is not None:
+        applied.add("evidence_binding")
+    counts.present += 1
+
+    def failed(detail: str) -> EntryVerificationResult:
+        counts.failed += 1
+        return EntryVerificationResult(
+            position=result.position,
+            valid=False,
+            code="CHAIN_EVIDENCE_BINDING_MISMATCH",
+            detail=detail,
+            signature=result.signature,
+            key_source=result.key_source,
+        )
+
+    row = chain_row(entry)
+    if row.binding is None or not isinstance(row.binding[2], Mapping):
+        return failed(
+            "The entry inlines an evidence body but carries no payload, so no signed hash binds the body to the chain."
+        )
+    _record_id, entry_type, raw_payload = row.binding
+    payload = cast("Mapping[str, Any]", raw_payload)
+    hash_field = _EVIDENCE_HASH_FIELD.get(str(entry_type))
+    if hash_field is None:
+        return failed(
+            f"A {entry_type} entry inlines an evidence body. The Server inlines evidence only on "
+            "COMPLETION_SUBMITTED and DISPUTE_EVIDENCE entries, and nothing this entry signs binds a body."
+        )
+    if not isinstance(body, Mapping):
+        return failed(
+            f"The inlined evidence is {_json_kind(body)}, not the JSON object the entry's payload.{hash_field} "
+            "was computed over."
+        )
+    signed = payload.get(hash_field)
+    if not isinstance(signed, str) or not _HEX64.match(signed):
+        return failed(f"The entry inlines an evidence body but signs no payload.{hash_field} to bind it to.")
+    if entry_type == "COMPLETION_SUBMITTED" and payload.get("verifiedBy") == "client":
+        counts.client_hashed += 1
+        return result
+    digest = hashlib.sha256(canonicalize_json(cast("Mapping[str, Any]", body)).encode("utf-8")).hexdigest()
+    if digest != signed.lower():
+        return failed(
+            f"The inlined evidence body hashes to {digest} under RFC 8785 and SHA-256, and the entry signs "
+            f"payload.{hash_field} {signed.lower()}: the body was edited after export, or is not the one submitted."
+        )
+    counts.verified += 1
+    return result
 
 
 def check_agent_signature(
@@ -2135,6 +2235,7 @@ def check_agent_signature(
             # Failed on the agent signature, the entry no longer counts toward
             # key provenance, as verify-core tallies it.
             signature=result.signature,
+            key_source=result.key_source,
         )
     detail = (
         f"Sealed agent_signature for cert {label} has a shape nothing can verify (alg must "
@@ -2149,6 +2250,7 @@ def check_agent_signature(
         code="CHAIN_AGENT_SIGNATURE_INVALID",
         detail=detail,
         signature=result.signature,
+        key_source=result.key_source,
     )
 
 

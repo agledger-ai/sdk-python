@@ -584,7 +584,17 @@ has its signature re-verified, which proves what the peer asserted from this
 Server's export alone. A failure is `CHAIN_FEDERATION_WIRE_INVALID`; the
 reports count them under `federation_wire`. In code, pass `federation_keys=`
 (`{hub_id: key}` or `[{"hubId": ..., "publicKey": ...}]`) to `verify_dump` or
-`verify_export`.
+`verify_export`. After a peer changes its federation key, give the peer's key
+history (`discovery.get_federation_keys()` on the peer, or
+`--federation-key-history <file>`) beside the key you pinned; each message is
+placed in its key's window by its signed `wire.timestamp`.
+
+On an `/audit-export` taken with `evidence=True`, `verify_export` hashes each
+inlined evidence body (SHA-256 over its RFC 8785 form) against the
+`evidenceHash` or `payloadHash` its entry signs. An edited body fails
+`CHAIN_EVIDENCE_BINDING_MISMATCH`; `evidence_binding` counts them, and an
+encrypted-mode completion, whose signed hash covers a cleartext the export
+does not carry, is counted as `client_hashed`.
 A dump not scoped to one org carries the certificate keys itself: each
 `EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its
 certificate's `publicKeyJwk` (engines from 1.8.0 on), and a key is used once

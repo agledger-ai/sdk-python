@@ -330,14 +330,26 @@ def _trusted_keys_from_history(
         if st.retired_at is not None:
             retired_at.setdefault(st.predecessor_digest, st.retired_at)
 
+    # A pin the histories list roots a walk through its successions. A pin they
+    # do not list (a key from before a change made with neither predecessor
+    # setting, which no history names) is trusted on its own, at any time, as a
+    # pin is without a history. At least one pin must be listed, or nothing
+    # links the histories to a key you hold.
+    if not any(_spki_sha256(spki) in public_key_of for spki, _ in pins):
+        named = ", ".join(f"{label} ({_spki_sha256(spki)[:16]})" for spki, label in pins)
+        raise TypeError(
+            f"{', '.join(label for _, label in histories)}: no key pinned for hub {hub_id} appears in the key "
+            f"history given for it ({named}), so the history is not linked to anything you hold. Pin a key the "
+            "history lists: its current key, or one you held before the change."
+        )
     trusted: list[str] = []
-    for spki, label in pins:
+    standalone: list[str] = []
+    for spki, _label in pins:
         digest = _spki_sha256(spki)
         if digest not in public_key_of:
-            raise TypeError(
-                f"{label}: the key pinned for hub {hub_id} appears in none of the key histories given for it, "
-                "so the history is not linked to anything you hold."
-            )
+            if spki not in standalone:
+                standalone.append(spki)
+            continue
         queue = [digest]
         while queue:
             k = queue.pop()
@@ -352,7 +364,7 @@ def _trusted_keys_from_history(
             retired_at=retired_at.get(d),
         )
         for d in trusted
-    ]
+    ] + [FederationTrustedKey(public_key=spki, activated_at=None, retired_at=None) for spki in standalone]
 
 
 def build_federation_key_registry(
@@ -455,7 +467,7 @@ class FederationWireCounts:
     (the body hash, the entry, or the signature under the hub's key).
     ``present - verified - failed`` is the messages from a hub with no key
     supplied. ``after_retirement`` counts verified ones sealed under a key the
-    sender's history retired before the receiver wrote the entry."""
+    sender's history retired before the sender signed the message."""
 
     present: int = 0
     verified: int = 0
@@ -488,14 +500,16 @@ def check_federation_wire(
     payload: Mapping[str, Any],
     wire: Mapping[str, Any],
     keys: FederationKeyRegistry | None,
-    received_at: object = None,
 ) -> FederationWireOutcome:
     """Check one sealed message against the entry that carries it, and under
     the sender's key when ``keys`` has one for ``wire["senderHubId"]``. Runs on
     an entry that already passed every other check, so ``payload`` is what the
-    receiver signed. ``received_at`` is the entry's ``createdAt`` on the
-    receiver's chain, which places the message in its key's window when the
-    sender's keys came with a history."""
+    receiver signed. When the sender's keys came with a history, the message is
+    placed in a key's window by ``wire["timestamp"]``: the sender signed it, the
+    receiver sealed it under its own signature after holding it to its
+    clock-skew allowance, and it is read from the sender's clock, the clock the
+    history's windows are written by. The entry's ``createdAt`` is a column no
+    signature covers, so it places nothing."""
     if wire["scheme"] != FEDERATION_WIRE_SCHEME:
         return FederationWireOutcome(
             "invalid", f"Sealed message scheme is {json.dumps(wire['scheme'])}, not {FEDERATION_WIRE_SCHEME}."
@@ -551,19 +565,19 @@ def check_federation_wire(
         )
     after_retirement = False
     if key.activated_at is not None or key.retired_at is not None:
-        at = rfc3339_ms(received_at)
+        at = rfc3339_ms(wire["timestamp"])
         if at is None:
             return FederationWireOutcome(
                 "invalid",
-                f"Entry has no parseable createdAt, so the sealed message from {wire['senderHubId']} cannot be "
-                "placed in its key's window.",
+                f"Sealed message from {wire['senderHubId']} carries timestamp {json.dumps(wire['timestamp'])}, "
+                "which is not an RFC 3339 instant, so it cannot be placed in its key's window.",
             )
         activated = rfc3339_ms(key.activated_at)
         if activated is not None and at < activated:
             return FederationWireOutcome(
                 "invalid",
-                f"Entry written {received_at} seals a message from {wire['senderHubId']} under a federation key "
-                f"its history activates at {key.activated_at}, after the receiver says it took the message.",
+                f"Sealed message from {wire['senderHubId']} is signed at {wire['timestamp']} under a federation "
+                f"key its history activates at {key.activated_at}, after the sender signed it.",
             )
         retired = rfc3339_ms(key.retired_at)
         after_retirement = retired is not None and at > retired

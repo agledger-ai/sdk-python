@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agledger.verify.failures import FailureCode
+from agledger.verify.federation_wire import FederationWireCounts
 from agledger.verify.key_statements import KeyTrustReport, no_anchor_report
 
 #: One loaded dump row, keyed by DB column name (snake_case), as parsed from
@@ -114,6 +115,21 @@ class AccountedEntry:
 
 
 @dataclass
+class AgentSignatureCounts:
+    """Agent signatures on the chain.
+
+    ``present`` counts entries that passed every other check and whose signed
+    payload carries ``predicate.on_behalf_of.agent_signature``; ``verified``
+    counts those re-checked against a key passed as ``agent_keys`` and found
+    good. ``present > verified`` on a valid chain means some were not checked
+    (no key supplied, or the identity was a caller assertion), never that they
+    failed."""
+
+    present: int = 0
+    verified: int = 0
+
+
+@dataclass
 class VaultChainsReport:
     record_count: int = 0
     entry_count: int = 0
@@ -131,21 +147,15 @@ class VaultChainsReport:
     """Of those, the ones re-checked against a key passed as ``agent_keys`` and
     found good. ``present > verified`` on a clean report means some were not
     checked (no key for their cert, or a caller-asserted identity)."""
-    federation_wire_present: int = 0
+    federation_wire: FederationWireCounts = field(default_factory=FederationWireCounts)
     """Federation messages sealed on the vault (``payload.wire`` on a receiving
-    Server's FEDERATION_* entries) on entries that passed every other check,
-    each held to its body hash and to its entry."""
-    federation_wire_verified: int = 0
-    """Of those, the ones whose signature was also re-checked under a
-    ``federation_keys`` entry for the sending hub and found good."""
-    federation_wire_failed: int = 0
-    """Of those, the ones that failed a check (the body hash, the entry, or
-    the signature under the hub's key). ``present - verified - failed`` is the
-    messages from a hub no key was supplied for."""
-    federation_wire_after_retirement: int = 0
-    """Of the verified ones, those sealed under a key the sender's history
-    retired before the receiver wrote the entry: in order when the receiver's
-    ``federation.peer_revoked`` audit row for the sender comes after them."""
+    Server's FEDERATION_* entries), the shape ``verify_export`` reports:
+    ``present`` on entries that passed every other check, each held to its body
+    hash and to its entry; ``verified`` also re-checked under a
+    ``federation_keys`` entry for the sending hub; ``failed`` those that failed
+    a check; ``after_retirement`` verified ones the sender signed under a key
+    its history had retired. ``present - verified - failed`` is the messages
+    from a hub no key was supplied for."""
     cert_keys_from_chain: int = 0
     """Agent cert public keys taken from the dump itself: the ``publicKeyJwk``
     each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
@@ -167,6 +177,7 @@ class VaultChainsReport:
                 "agent_signature",
                 "key_anchoring",
                 "federation_wire",
+                "evidence_binding",
             ),
             "skipped_no_input",
         )
@@ -175,7 +186,14 @@ class VaultChainsReport:
     ``actor_attribution``, ``key_temporal``, ``agent_signature`` and
     ``key_anchoring``, each ``applied`` once it ran on any chain, so "not
     checked anywhere" never reads as "passed". Mirrors the ``@agledger/verify``
-    report."""
+    report. ``evidence_binding`` stays ``skipped_no_input``: a dump carries no
+    inlined evidence."""
+
+    @property
+    def agent_signatures(self) -> AgentSignatureCounts:
+        """``agent_signatures_present`` and ``agent_signatures_verified`` in the
+        shape ``verify_export`` reports them."""
+        return AgentSignatureCounts(present=self.agent_signatures_present, verified=self.agent_signatures_verified)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -192,10 +210,10 @@ class VaultChainsReport:
                 "verified": self.agent_signatures_verified,
             },
             "federationWire": {
-                "present": self.federation_wire_present,
-                "verified": self.federation_wire_verified,
-                "failed": self.federation_wire_failed,
-                "afterRetirement": self.federation_wire_after_retirement,
+                "present": self.federation_wire.present,
+                "verified": self.federation_wire.verified,
+                "failed": self.federation_wire.failed,
+                "afterRetirement": self.federation_wire.after_retirement,
             },
             "certKeysFromChain": self.cert_keys_from_chain,
             "signedEntries": self.signed_entries,
