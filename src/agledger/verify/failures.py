@@ -258,9 +258,9 @@ _SUGGESTIONS: dict[str, str] = {
         "unsigned, so it stays tampering until the Server's operator confirms the entry."
     ),
     "CHECKPOINT_ROW_MISSING": (
-        "A signed checkpoint anchors a position that has no matching chain row. The chain"
-        " was truncated below a checkpoint (out-of-band DELETE/TRUNCATE). The checkpoint "
-        "is proof of the missing rows."
+        "A signed checkpoint anchors a position that has no matching chain row. Chain entries"
+        " below a checkpoint were removed out of band. The checkpoint is proof of the missing"
+        " entries."
     ),
     "CHECKPOINT_HASH_MISMATCH": (
         "A checkpoint's payloadHash does not match the chain row at its position. The "
