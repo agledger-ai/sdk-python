@@ -22,7 +22,7 @@ Verification walks every entry and asserts:
        (retired keys included), it is CHAIN_ENTRY_UNSIGNED
 
 This is the export (per-record) path. Beside the always-run checks above, it
-runs the input-gated checks whenever the export carries their inputs (engine
+runs the input-gated checks whenever the export carries their inputs (Server
 >= v0.26.x): binding-integrity on the row ``payload``, the OIDC-actor
 cross-check on ``actorOidc*``, and temporal key-validity on
 ``signingKeyWindows``. The agent-signature re-check runs when the caller passes
@@ -36,7 +36,7 @@ This is an independent re-implementation of the shared TS verification core
 (``@agledger/verify-core``); it emits the SAME canonical SCREAMING_SNAKE
 ``FailureCode`` taxonomy and the same per-entry/``broken_at`` shape, so the two
 languages agree byte-for-byte over the shared conformance corpus
-(``testdata/conformance``). Zero engine dependency: the load-bearing property
+(``testdata/conformance``). Zero Server dependency: the load-bearing property
 of an offline auditor.
 """
 
@@ -123,7 +123,7 @@ except ImportError as _err:  # pragma: no cover
 # CHAIN_OIDC_ACTOR_MISMATCH / CHAIN_KEY_EXPIRED / CHECKPOINT_* / TENANT_* codes
 # need inputs the ``/audit-export`` wire lacks), while the dump verifier
 # (``verify_dump.py``) reaches the rest. CHAIN_PAYLOAD_BINDING_MISMATCH became
-# export-reachable when the export began carrying the row payload (engine ≥
+# export-reachable when the export began carrying the row payload (Server ≥
 # v0.26.x): see verify_entry.
 
 # Mirrors ``@agledger/verify-core``'s ``SignatureOutcome``:
@@ -166,7 +166,7 @@ _AGLEDGER_LABEL_CHAIN = -65537
 _CHAIN_SUBLABEL_POSITION = 1
 _CHAIN_SUBLABEL_PREVIOUS_HASH = 2
 # The actor identity claim is nested inside CWT_Claims (RFC 9597, label 15)
-# rather than sitting at the outer header level: the engine keeps the outer
+# rather than sitting at the outer header level: the Server keeps the outer
 # level to IANA-known labels plus chain mechanics.
 _COSE_HEADER_CWT_CLAIMS = 15
 _AGLEDGER_LABEL_ACTOR = -65539
@@ -442,7 +442,7 @@ class VerifyExportResult:
     #: ``CHAIN_EVIDENCE_BINDING_MISMATCH``. See :class:`EvidenceBindingCounts`.
     evidence_binding: EvidenceBindingCounts = field(default_factory=EvidenceBindingCounts)
     #: ``applied`` only when ``agent_keys`` supplied the cert key for at least
-    #: one engine-validated agent signature on the chain. Mirrors
+    #: one Server-validated agent signature on the chain. Mirrors
     #: ``optionalChecks.agent_signature`` in ``@agledger/verify-core``.
     agent_signature_check: CheckApplicability = "skipped_no_input"
     #: Which input-gated checks ran on this export: ``payload_binding``,
@@ -527,10 +527,10 @@ def verify_export(
         ``cnf.jwk`` claim inside the returned ``certJws``, and what
         :attr:`agledger.OidcCertCredential.public_key_jwk` returns. The export
         does not carry them. Where an entry's signed payload carries an
-        engine-validated ``predicate.on_behalf_of.agent_signature`` and its
+        Server-validated ``predicate.on_behalf_of.agent_signature`` and its
         sealed cert thumbprint matches one of these keys, the signature is
         re-verified offline, proving the cert holder signed that request-body
-        hash without taking the engine's word for it. A failure is
+        hash without taking the Server's word for it. A failure is
         :data:`CHAIN_AGENT_SIGNATURE_INVALID`. A key is matched only through
         the RFC 7638 thumbprint the entry signed, so where a key came from
         does not need to be trusted. Anything that is not an Ed25519 JWK
@@ -677,7 +677,7 @@ def verify_export(
             applied,
             signed_before=signed_before,
         )
-        # As the engine's walk does: any earlier row naming a key, whatever its
+        # As the Server's walk does: any earlier row naming a key, whatever its
         # own verdict, means this chain was already being signed.
         row = chain_row(entry)
         if row.signing_key_id is not None:
@@ -783,7 +783,7 @@ class RegisteredKey:
     #: fail CHAIN_KEY_EXPIRED worded as past the distrust cutoff: the key was
     #: not retired there.
     distrust_cutoff: str | None = None
-    #: Algorithm the key registry DECLARES for this key (the engine's
+    #: Algorithm the key registry DECLARES for this key (the Server's
     #: ``vault_signing_keys.algorithm`` column), when the input carries it.
     #: Cross-checked against the algorithm the SPKI key material actually
     #: commits to; a divergence fails CHAIN_ALG_MISMATCH. The declared string
@@ -1134,7 +1134,7 @@ def _build_key_registry(
             )
             if key.carries_window:
                 caller_windowed.add(str(k))
-    # Activation/retirement windows from exportMetadata (engine >= v0.26.x)
+    # Activation/retirement windows from exportMetadata (Server >= v0.26.x)
     # enable the temporal key-validity check on the export path. A supplied
     # key that brought its own window keeps it: the export is the untrusted
     # side, and letting it overwrite the caller's window would let a
@@ -1157,7 +1157,7 @@ def _build_key_registry(
             activated, retired = window.get("activatedAt"), window.get("retiredAt")
             key.activated_at = activated if isinstance(activated, str) else None
             key.retired_at = retired if isinstance(retired, str) else None
-    # When the install began signing, for CHAIN_ENTRY_UNSIGNED. The engine reads
+    # When the install began signing, for CHAIN_ENTRY_UNSIGNED. The Server reads
     # it as min(activated_at) over its whole key registry, retired keys
     # included, and ``signingKeyWindows`` publishes that whole registry, so the
     # instant is taken over every key held here plus every window the export
@@ -1233,7 +1233,7 @@ def _trust_statements_of(
 def apply_key_trust(keys: KeyCache, trust: KeyTrust) -> KeyCache:
     """Mark every key of a registry with the walk's verdict, and give each
     anchored key the window its statements sign in place of whatever window it
-    carried, as the engine grades entries. An anchored key no statement dates
+    carried, as the Server grades entries. An anchored key no statement dates
     carries no edge on that side. A key is anchored only when its key id is the
     fingerprint of its own SPKI: a row filed under another key's id names that
     key's entries, and is anchored to nothing. Mirrors verify-core
@@ -1458,7 +1458,7 @@ def verify_entry(
     # are signature-covered at CWT_Claims label 15 -> private label -65539, so
     # a rewritten column re-attributes the action to another actor and must not
     # verify. Compare each column that is not null against the signed claim,
-    # and skip only when the envelope carries no claim (an older engine).
+    # and skip only when the envelope carries no claim (an older Server).
     if row.attribution is not None:
         actor_claim = _extract_actor_claim(parts[0])
         if actor_claim is not None:
@@ -1529,12 +1529,12 @@ def verify_entry(
     created_at = row.created_at
 
     # Signature (last, so a null-key row still ran every structural check above).
-    # Only a true None is the engine's unsigned-mode marker. Any other value,
-    # including the empty string no engine emits, must resolve in the registry
+    # Only a true None is the Server's unsigned-mode marker. Any other value,
+    # including the empty string no Server emits, must resolve in the registry
     # and fails CHAIN_SIGNATURE_MISSING_KEY below: a truthiness shortcut here
     # would let a tampered signingKeyId:"" row skip its signature check.
     if signing_key_id is None:
-        # Engine mirror of `signature_missing`. An unsigned entry is reduced
+        # Server mirror of `signature_missing`. An unsigned entry is reduced
         # coverage only where the install had not yet begun to sign: before any
         # signed entry in this chain, and before the earliest key activation.
         # Anywhere else no process of the install could have written it; it is
@@ -1549,7 +1549,7 @@ def verify_entry(
                 code="CHAIN_ENTRY_UNSIGNED",
                 detail="Entry has no signingKeyId but follows a signed entry in the same chain.",
             )
-        # The engine times every entry. Without a time the walk can read, an
+        # The Server times every entry. Without a time the walk can read, an
         # unsigned entry cannot be placed before signing began, so it is not
         # early history: it fails closed.
         if keys.signing_since is not None and rfc3339_ms(created_at) is None:
@@ -1620,10 +1620,10 @@ def verify_entry(
             ),
         )
 
-    # Signed-kid binding (engine mirror: signing_key_drift), ahead of every
-    # question about the key, as the engine orders it. The row's signingKeyId
-    # column selected the key above, but the column is a denormalized
-    # convenience; the kid at protected-header label 4 is signature-covered. A
+    # Signed-kid binding (Server mirror: signing_key_drift), ahead of every
+    # question about the key, as the Server orders it. The row's signingKeyId
+    # column selected the key above, but the column is a convenience
+    # copy; the kid at protected-header label 4 is signature-covered. A
     # divergence means the column was rewritten after signing.
     signed_kid = _extract_kid(parts[0])
     if signed_kid is not None and signed_kid != signing_key_id:
@@ -1637,7 +1637,7 @@ def verify_entry(
             ),
         )
 
-    # Key anchoring (engine mirror: signing_key_unanchored). Runs when a
+    # Key anchoring (Server mirror: signing_key_unanchored). Runs when a
     # key-statement walk marked the registry. A key nothing signed links to a
     # pinned anchor is one anything with write access to the Server's database
     # can register, so an entry under it is a forgery until shown otherwise,
@@ -1708,7 +1708,7 @@ def verify_entry(
             )
 
     # Temporal key-validity, whenever the key carries a window, and only here,
-    # AFTER the key has resolved, because it reads the key's window. The engine
+    # AFTER the key has resolved, because it reads the key's window. The Server
     # times every entry, so an entry with no time the walk can read cannot be
     # placed inside the window, and fails closed rather than skipping it.
     # Mirrors verify-core chain.ts temporalKeyFailure.
@@ -1782,7 +1782,7 @@ def verify_entry(
     outcome = _verify_cose_signature(parts, registered, keys, signing_key_id)
     if outcome == "unsigned":
         # An all-zero signature slot on an entry that CLAIMS a signing key. The
-        # engine writes a key id only beside a signature it made with that key,
+        # Server writes a key id only beside a signature it made with that key,
         # and fails this shape `signature_invalid`, so it is a forged or wiped
         # signature, never an unsigned entry. (A genuinely unsigned entry
         # carries a null signingKeyId and is graded above.)
@@ -1830,9 +1830,9 @@ def verify_entry(
     )
 
 
-# --- Binding-integrity primitives (mirror packages/verify-core/src/primitives.ts) ---
+# --- Binding-integrity primitives (mirror the primitives in @agledger/verify-core) ---
 
-# Keys the engine lifts out of the row payload into dedicated predicate fields
+# Keys the Server lifts out of the row payload into dedicated predicate fields
 # (state_transition / traces) or treats as envelope siblings: excluded from the
 # passthrough so the rebuilt predicate matches what was signed.
 _RECORD_STATE_RESERVED_KEYS = frozenset(
@@ -1895,18 +1895,18 @@ def envelope_extensions_match(row_payload: Mapping[str, Any], signed_predicate: 
 
     When a writer puts ``on_behalf_of`` (an object) or ``traceparent`` (a W3C
     v00 string; any other value is dropped) at the top level of the row
-    payload, the engine lifts it into ``predicate.on_behalf_of`` /
+    payload, the Server lifts it into ``predicate.on_behalf_of`` /
     ``predicate.traceparent``, so a row copy must equal the signed value. The
     row copy is what a reader of an export or dump sees, and
     :func:`_strip_envelope_extensions` takes both sides out of the predicate
     comparison, so without this check a rewritten or added row copy would
     still verify.
 
-    Anything else under those keys is ignored, as the engine ignores it: it
+    Anything else under those keys is ignored, as the Server ignores it: it
     lifts only an object ``on_behalf_of`` and a v00 ``traceparent``, so a
     genuine older row holding another shape signed nothing for it.
 
-    A row without them is not a mismatch: the engine also signs an
+    A row without them is not a mismatch: the Server also signs an
     ``on_behalf_of`` built from the request's authentication rather than from
     the payload, and that one never reaches the row payload. Its identity is
     held to the row's actor columns by the OIDC-actor check instead."""
@@ -1931,7 +1931,7 @@ def _strip_envelope_extensions(predicate: dict[str, Any]) -> dict[str, Any]:
 
 # --- agent signature (mirror verify-core chain.ts checkAgentSignature) ---
 
-#: Domain-separation prefix the engine applies before verifying an agent's
+#: Domain-separation prefix the Server applies before verifying an agent's
 #: ``X-Agent-Signature`` at intake: the agent signs the UTF-8 bytes of this
 #: prefix followed by the lowercase hex sha256 of the raw request body (the hex
 #: string, not the digest bytes).
@@ -1943,10 +1943,10 @@ _STANDARD_BASE64_64_BYTES = re.compile(r"^[A-Za-z0-9+/]{86}(==)?$")
 
 
 def ed25519_jwk_thumbprint(jwk: object) -> str | None:
-    """RFC 7638 thumbprint of an Ed25519 JWK in the engine's ``sha256:<hex>``
+    """RFC 7638 thumbprint of an Ed25519 JWK in the Server's ``sha256:<hex>``
     form, or ``None`` when the value is not an Ed25519 public-key JWK. The
     members are hashed in the RFC's lexicographic order (``crv``, ``kty``,
-    ``x``), which is what the engine's thumbprint function produces for an OKP
+    ``x``), which is what the Server's thumbprint function produces for an OKP
     key."""
     if not isinstance(jwk, Mapping):
         return None
@@ -1996,7 +1996,7 @@ def verify_agent_signature(
 ) -> AgentSignatureOutcome:
     """Verify a sealed agent signature against the cert's Ed25519 key.
 
-    ``malformed`` is a shape the engine never writes (alg other than EdDSA, a
+    ``malformed`` is a shape the Server never writes (alg other than EdDSA, a
     content hash not ``sha256:<hex64>``, a signature that is not 64 bytes of
     standard base64), which nothing can verify. ``unsupported`` means this host
     cannot compute Ed25519: NOT verified and NOT tamper evidence. What an
@@ -2185,10 +2185,10 @@ def check_agent_signature(
     applied: list[CheckApplicability],
 ) -> EntryVerificationResult:
     """Offline re-check of a sealed agent signature, on an entry that already
-    passed every other check (so its payload is the engine's signed bytes).
+    passed every other check (so its payload is the Server's signed bytes).
 
-    Runs only on an engine-validated identity (``on_behalf_of.validated`` is
-    true). On a caller-asserted one, entries written before the engine sealed
+    Runs only on a Server-validated identity (``on_behalf_of.validated`` is
+    true). On a caller-asserted one, entries written before the Server sealed
     these fields itself carry them as caller passthrough, and the marker that
     tells the two apart is a column neither the export nor the dump publishes,
     so a failure there could not be told from a claim nobody ever checked."""
@@ -2303,7 +2303,7 @@ def _check_oidc_actor(
             )
         return None
 
-    # synthesized=false: engine writers leave the columns null. Any populated
+    # synthesized=false: Server writers leave the columns null. Any populated
     # state is a DB-level CHECK-constraint bypass.
     if synthesized is False and (row_iss is not None or row_sub is not None):
         return EntryVerificationResult(
@@ -2322,7 +2322,7 @@ def _build_predicate_for_row(
     record_id: object, entry_type: object, payload: object
 ) -> dict[str, Any] | None:
     """Re-project ``(record_id, entry_type, payload)`` into the predicate body
-    using the same logic the engine applies at write time. Returns ``None`` when
+    using the same logic the Server applies at write time. Returns ``None`` when
     the payload is structurally insufficient or is not an object at all (a
     nulled or retyped column): the caller reads that as a binding mismatch
     rather than crashing on attacker-zeroed payloads."""
@@ -2403,8 +2403,8 @@ def _decode_cose_sign1(envelope: bytes) -> tuple[bytes, bytes, bytes] | None:
 
     Returns ``None`` on any structural failure.
 
-    Tag 18 is required (short-form ``0xd2``, matching the engine's encoder).
-    The engine rejects untagged envelopes: producer and offline verifier must
+    Tag 18 is required (short-form ``0xd2``, matching the Server's encoder).
+    The Server rejects untagged envelopes: producer and offline verifier must
     agree on what a COSE_Sign1 is, so gate on the leading byte the same way.
     """
     if len(envelope) == 0 or envelope[0] != _COSE_SIGN1_TAG_PREFIX:
@@ -2569,10 +2569,10 @@ def decode_cose_kid(envelope: bytes) -> str | None:
 
 def _extract_kid(protected_bstr: bytes) -> str | None:
     """Extract the signature-covered ``kid`` (protected header label 4) as
-    lowercase hex, matching the engine's ``vault_signing_keys.key_id`` shape.
+    lowercase hex, matching the Server's ``vault_signing_keys.key_id`` shape.
     ``None`` when absent or malformed. The caller cross-checks it against the
-    row's ``signingKeyId`` column: the column is a denormalized convenience,
-    the kid is signed (engine mirror: signing_key_drift)."""
+    row's ``signingKeyId`` column: the column is a convenience copy,
+    the kid is signed (Server mirror: signing_key_drift)."""
     try:
         header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
     except Exception:
@@ -2672,10 +2672,10 @@ def _verify_signature_bytes(
 ) -> Literal["ok", "invalid"]:
     """Verify raw signature bytes under the algorithm the key commits to.
 
-    ES256 mirrors the engine's ``verifyWithAlgorithm``: the wire carries raw
+    ES256 mirrors the Server's ``verifyWithAlgorithm``: the wire carries raw
     ``r||s`` (COSE / ieee-p1363, 64 bytes), which ``cryptography`` expects
     DER-encoded, so the two 32-byte halves are re-encoded via
-    ``encode_dss_signature``. The engine emits low-S but, like the engine's
+    ``encode_dss_signature``. The Server emits low-S but, like the Server's
     verifier, high-S is accepted: ECDSA malleability changes the envelope
     bytes, which the hash-link layer already pins. Any key/algorithm pairing
     outside the table reads ``invalid`` (the callers gate ``verifiable``
@@ -2733,9 +2733,9 @@ def earliest_key_activation(keys: Iterable[Mapping[str, Any]]) -> str | None:
     the ISO string it was given in, or ``None`` when no key carries a
     parseable one.
 
-    This is the instant from which the engine treats every chain entry and
+    This is the instant from which the Server treats every chain entry and
     checkpoint as required to be signed; pass every key the verifier knows,
-    retired ones included, since the engine reads it as ``min(activated_at)``
+    retired ones included, since the Server reads it as ``min(activated_at)``
     over its whole key registry. Mirrors verify-core ``earliestKeyActivation``.
     """
     earliest: tuple[int, str] | None = None
@@ -2759,7 +2759,7 @@ def written_while_signing(written_at: object, signing_since: object) -> bool:
     ``False`` when ``signing_since`` is absent or unparseable: with no instant
     from which the install signs, nothing has to be signed. ``True`` when
     ``signing_since`` is known and ``written_at`` is missing or unparseable:
-    the engine times every row, so a row with no readable time was edited, and
+    the Server times every row, so a row with no readable time was edited, and
     it cannot be placed before signing began. It fails closed rather than
     reading as early history. Mirrors verify-core ``writtenWhileSigning``."""
     since = _instant_ms(signing_since)

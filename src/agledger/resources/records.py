@@ -118,7 +118,7 @@ class RecordsResource:
         is only needed when two publishers offer the same type in the org (an
         imported peer manifest alongside a local registration). That case raises
         ``UnprocessableError`` with ``type == "/problems/ambiguous-publisher"``
-        and the candidates on ``.publishers``, rather than the engine picking one.
+        and the candidates on ``.publishers``, rather than the Server picking one.
         Re-send pinned to one of those labels.
 
         ``max_revisions`` caps the rework cycles this Record allows. Omit it to
@@ -130,7 +130,7 @@ class RecordsResource:
         ``on_behalf_of`` is an RFC 8693 delegation token (the token-exchange
         result your IdP issued, as a compact JWS), sent as the
         ``AGLedger-On-Behalf-Of`` header beside your own credential when the
-        work is done for a person or another party. The engine validates it
+        work is done for a person or another party. The Server validates it
         against a trusted issuer whose ``applies_to`` is ``principal`` or
         ``any`` and seals ``predicate.on_behalf_of`` into the signed chain
         entry.
@@ -677,7 +677,7 @@ class RecordsResource:
         Vault entries carry an ``_actor`` envelope (key id, role, owner id) folded
         into the canonical payload; the hash chain covers it. Set ``receipts=True``
         to opt the SCITT Receipts (Merkle inclusion proofs) into the export: only
-        emitted when the engine has a ``VAULT_SIGNING_KEY``. Set ``evidence=True`` to
+        emitted when the Server has a signing key configured. Set ``evidence=True`` to
         inline the completion evidence body at each COMPLETION_SUBMITTED entry:
         an UNSIGNED projection the chain binds by hash via
         ``payload.evidenceHash``. JSON/NDJSON only.

@@ -1,8 +1,9 @@
 """
 AGLedger SDK: API Key Scopes
 
-Mirrors the scope definitions the AGLedger API declares.
-Keep this file in lockstep with the API.
+Mirrors the Server's scope profiles, as served by ``GET /v1/scope-profiles``.
+A scope or profile the Server adds appears here only in a later release of
+this SDK.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ class Scopes:
 
 
 class ScopeProfile(TypedDict):
-    """Scope profile definition. Mirrors the API's SCOPE_PROFILES entry."""
+    """Scope profile definition. Mirrors an entry of the Server's scope profiles."""
 
     name: str
     description: str

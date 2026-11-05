@@ -136,7 +136,7 @@ class SchemasResource:
     ) -> dict[str, Any]:
         """Export a Type schema bundle.
 
-        Pin ``publisher`` on a type two publishers offer. Without it the engine
+        Pin ``publisher`` on a type two publishers offer. Without it the Server
         emits both registrations, whose ``versions`` entries can carry the same
         number with nothing to tell them apart.
         """
@@ -207,7 +207,7 @@ class SchemasResource:
         """Dry-run the compatibility check :meth:`register` runs, without registering.
 
         The check is against the latest ACTIVE version of ``publisher`` in your
-        org, or the engine-wide one when your org has none. ``publisher``
+        org, or the Server-wide one when your org has none. ``publisher``
         defaults to ``local`` on the Server, as ``register``'s ``publisher``
         field does; a publisher with no version of the type here answers
         compatible."""

@@ -72,7 +72,7 @@ _PLATFORM_OPS_RECORD_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def chain_of_scope(scope_id: str) -> tuple[Literal["record", "admin", "schema"], str | None, str | None]:
-    """Name a chain scope (a record id or a dump ``chain_key``) as the engine
+    """Name a chain scope (a record id or a dump ``chain_key``) as the Server
     does: ``(chain, record_id, org_id)``. Mirrors verify-core ``chainOfScope``."""
     if scope_id.startswith("schema:"):
         org = scope_id[len("schema:") :]
@@ -88,7 +88,7 @@ class AccountedEntry:
     names, that falls outside what the key is trusted for (the key is
     unanchored, or the entry was written at or after its cutoff), and that was
     written before a key the walk trusts retired it. The distrust entry and
-    that retirement account for it, as the engine's scan lists it in
+    that retirement account for it, as the Server's scan lists it in
     ``distrustedEntries``: listed, not verified, and it fails nothing. Mirrors
     verify-core ``AccountedEntry``, field for field."""
 
@@ -161,7 +161,7 @@ class VaultChainsReport:
     each ``EPHEMERAL_CERT_ISSUED`` entry signs on the platform-ops chain,
     counted once per key and only from a chain that verified clean. Used
     beside any ``agent_keys`` the caller passed. Zero on an org-scoped dump,
-    which leaves that chain out, and for certs an engine older than 1.8.0
+    which leaves that chain out, and for certs a Server older than 1.8.0
     issued."""
     signed_entries: int = 0
     """Vault entries whose signature verified. Under a key walk each verified

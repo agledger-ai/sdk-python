@@ -106,8 +106,8 @@ limited -> minimal). An AI impact assessment always asserts one of these."""
 RiskClassification = Literal[
     "unacceptable", "high", "limited", "minimal", "unclassified"
 ]
-"""Record-column risk classification: the canonical tiers plus the notary
-sentinel ``unclassified`` (the create-time default, nothing asserted yet)."""
+"""A Record's risk classification: the canonical tiers plus the ledger's
+sentinel value ``unclassified`` (the create-time default, nothing asserted yet)."""
 EuAiActDomain = Literal[
     "biometrics",
     "critical_infrastructure",
@@ -131,7 +131,7 @@ of the org config's ``enforcement`` block."""
 
 EnforcementSource = Literal["org", "default"]
 """Where a resolved org enforcement value came from: the org's own override or
-the engine default. One entry per field in the org config's
+the Server default. One entry per field in the org config's
 ``enforcementSource`` block."""
 
 AcceptanceStatus = Literal["PROPOSED", "ACCEPTED", "REJECTED", "BYPASSED"]
@@ -384,7 +384,7 @@ class _RecordRowFields(BaseModel):
     operating_mode: OperatingMode | str | None = Field(None, alias="operatingMode")
     """Operating mode: cleartext (default) or encrypted."""
     gate_mode: GateMode | str | None = Field(None, alias="gateMode")
-    """Gate mode: auto (auto-settles against the principal's pre-configured predicates) or principal (engine advisory pass, then the principal renders accept/reject). Either way the verdict is the principal's; AGLedger holds the signed decision and never renders it."""
+    """Gate mode: auto (auto-settles against the principal's pre-configured predicates) or principal (Server advisory pass, then the principal renders accept/reject). Either way the verdict is the principal's; AGLedger holds the signed decision and never renders it."""
     risk_classification: RiskClassification | str | None = Field(
         None, alias="riskClassification"
     )
@@ -471,12 +471,12 @@ class _RecordRowFields(BaseModel):
     """Advisory enforcement warnings."""
     publisher: str | None = None
     """Publisher label of the registration this Record binds to. With ``type`` and
-    ``contract_version`` it names exactly which schema the Record was judged
+    ``contract_version`` it names exactly which schema the Record was validated
     against, which ``type`` alone cannot once two publishers offer the same type.
     Present whether or not ``publisher`` was pinned on create, so a
     single-publisher org reads its one label (usually ``local``).
 
-    ``None`` means the engine never validated this Record against a local
+    ``None`` means the Server never validated this Record against a local
     registration, which leaves exactly one case: federation-received Records,
     where the originator ran the gate against its own registration. Read
     ``None`` as "ask the originator", not as "the schema is missing here".
@@ -707,7 +707,7 @@ class CompletionSettlementSignal(BaseModel):
     recommendation: Literal["SETTLE", "HOLD", "RELEASE"]
     """The gate decision in GET /v1/records vocabulary: SETTLE, HOLD, or RELEASE."""
     outcome: Literal["accept", "reject"]
-    """Engine verdict that drove the recommendation."""
+    """Server verdict that drove the recommendation."""
     reason_code: str | None = Field(None, alias="reasonCode")
     """Discriminator code (same as the settlement webhook), e.g. ``AUTO_SETTLE``, or
     ``AUTO_SETTLE_WITHIN_TOLERANCE`` when the gate cleared only via a
@@ -726,12 +726,12 @@ class Completion(BaseModel):
     record_id: str = Field(alias="recordId")
     """Record this completion is for."""
     agent_id: str | None = Field(alias="agentId")
-    """Agent that submitted the completion. None on the completion the engine
+    """Agent that submitted the completion. None on the completion the Server
     synthesizes for a delegation parent when its children's failure rollup is
     held for the principal's verdict (``rollup_synthesized`` is True); every
     agent-submitted completion carries one."""
     rollup_synthesized: bool | None = Field(None, alias="rollupSynthesized")
-    """True on a completion the engine wrote for a delegation parent from its
+    """True on a completion the Server wrote for a delegation parent from its
     children's failure rollup rather than one an agent submitted. A principal
     cannot accept it: reject, then revise and resubmit."""
     evidence: dict[str, Any]
@@ -751,8 +751,8 @@ class Completion(BaseModel):
     the same vocabulary as the Record's ``verdict``. Set on the submit response
     when the gate ran inline (auto mode, cleartext), and on an idempotent replay
     of the same ``idempotency_key``. None in principal mode (read the verdict on
-    the Record), on encrypted Records, when the gate was deferred to the
-    worker, and on reads of a completion."""
+    the Record), on encrypted Records, when the gate had not finished by the time the
+    response was sent, and on reads of a completion."""
     last_verdict_reason: str | None = Field(None, alias="lastVerdictReason")
     """Reason attached to the most recent verdict, or None."""
     settlement_signal: CompletionSettlementSignal | None = Field(
@@ -808,7 +808,7 @@ validates against. ``EVIDENCE_WINDOW`` takes evidence until the dispute's
 ``evidence_window_closes_at``; ``PENDING_RESOLUTION`` is that window closed and
 the dispute waiting on the record principal to render an outcome through
 :meth:`~agledger.resources.disputes.DisputesResource.resolve`; ``RESOLVED`` and
-``WITHDRAWN`` are terminal. The engine writes a transient ``OPENED`` inside the
+``WITHDRAWN`` are terminal. The Server writes a transient ``OPENED`` inside the
 transaction that opens a dispute and never commits a row at it, so it is not
 externally observable and is not a member here.
 
@@ -936,7 +936,7 @@ WebhookEventType = (
         "record.completion_invalid",
         "record.gate_complete",
         # Principal-mode record held at PROCESSING awaiting the principal verdict;
-        # payload carries the completionId to verdict against plus the engine/rollup
+        # payload carries the completionId to verdict against plus the Server/rollup
         # advisory result.
         "record.gate_held",
         "record.fulfilled",
@@ -1022,9 +1022,9 @@ EventType = Literal[
     "dispute.evidence_window_closed",
     "dispute.resolved",
     "dispute.withdrawn",
-    # Engine-internal enqueue failures: work the Server could not hand to a
-    # worker. Queryable here only, and the reason a record can sit at PROCESSING
-    # with nothing wrong on the record itself.
+    # Server-internal failures: follow-on work the Server could not start.
+    # Queryable here only, and the reason a record can sit at PROCESSING with
+    # nothing wrong on the record itself.
     "system.cascading_gate_enqueue_failed",
     "system.verification_enqueue_failed",
     # Federation
@@ -1128,7 +1128,7 @@ class VerdictResult(BaseModel):
     where the Record landed without a follow-up fetch."""
     reporter_type: str = Field(alias="reporterType")
     """The verdict channel: ``principal``, a principal-side verdict rather than
-    the engine's. ``reporter_role`` says who on that side rendered it."""
+    the Server's. ``reporter_role`` says who on that side rendered it."""
     reporter_role: Literal["principal", "org-admin"] | str | None = Field(
         None, alias="reporterRole"
     )
@@ -1214,7 +1214,7 @@ class AuditExportEntry(BaseModel):
     human_readable_label: str | None = Field(None, alias="humanReadableLabel")
     """Auditor-readable label for ``entry_type`` (e.g. RECORD_STATE_CHANGE → "Record state
     transitioned"). Display PROJECTION: NOT signature-covered; the canonical machine-readable name
-    stays in ``entry_type``. Replaced the pre-launch ``description`` placeholder (engine v0.26.x+)."""
+    stays in ``entry_type``. Replaced the pre-launch ``description`` placeholder (Server v0.26.x+)."""
     payload: dict[str, Any]
     evidence: dict[str, Any] | None = None
     """Completion evidence body, present only when the export was fetched with
@@ -1257,7 +1257,7 @@ AuditChainIntegrityReasonCode = (
         "agent_signature_invalid",
         # API v1.3.2: the vault fails closed on per-entry signature
         # verification: signature did not verify / signing key unresolvable /
-        # denormalized signing_key_id column drifted from the signed kid.
+        # the key recorded beside the entry differs from the signed kid.
         "signature_invalid",
         "signing_key_unknown",
         "signing_key_drift",
@@ -1279,10 +1279,10 @@ AuditChainIntegrityReasonCode = (
         # with, its predecessor, or a configured trust anchor). A database
         # writer can insert a key row; it cannot produce the statement.
         "signing_key_unanchored",
-        # Signed under a COSE algorithm this engine build cannot verify. Not a
+        # Signed under a COSE algorithm this Server build cannot verify. Not a
         # tamper signal: check minVerifierVersion on the key.
         "unsupported_algorithm",
-        # Signed by a key the operator named in VAULT_DISTRUSTED_KEYS before a
+        # Signed by a key the operator listed as distrusted on the Server before a
         # key the Server trusts retired it. Accounted for (a vault scan lists it
         # under distrustedEntries, not as a break) but never verified.
         "signing_key_distrusted",
@@ -1573,9 +1573,8 @@ class OrgAdminRead(BaseModel):
 
 
 OrgReadsCheckpointingSource = Literal["worker", "config"] | str
-"""``OrgReadsCheckpointing.source``: ``worker`` when read from the schedule
-the worker registered, ``config`` when the API process fell back to its own
-defaults. A named module-level alias so the enum-parity guard
+"""``OrgReadsCheckpointing.source``: ``worker`` when the Server read the live
+schedule, ``config`` when it fell back to its configured default. A named module-level alias so the enum-parity guard
 (``tests/test_enum_parity.py``) can see and pin it. The ``| str`` still
 protects a caller against a value a newer Server adds before this SDK names
 it."""
@@ -1584,9 +1583,9 @@ it."""
 class OrgReadsCheckpointing(BaseModel):
     """Checkpoint sweep posture, served alongside the checkpoint listing.
 
-    Read it before reporting missing checkpoints: the sweep is time-driven, so a
-    fresh install returns an empty listing however many qualifying reads it has
-    logged.
+    Read it before reporting missing checkpoints: checkpoints are written
+    periodically, so a fresh install returns an empty listing however many
+    qualifying reads it has logged.
 
     Distinct from ``admin.get_ops_summary()``'s ``vault.anchoring`` block, which
     is platform-wide (not per-org) and reports the external-anchoring posture
@@ -1599,25 +1598,25 @@ class OrgReadsCheckpointing(BaseModel):
     )
 
     cron: str
-    """Cron the sweep runs on (UTC). Fixed cadence; there is no env knob."""
+    """Schedule the Server runs the sweep on, as a cron expression in UTC."""
     interval_minutes: int | None = Field(alias="intervalMinutes")
     last_checkpoint_at: str | None = Field(alias="lastCheckpointAt")
     """Newest checkpoint in the caller's org; ``None`` until the first sweep
     lands one."""
     next_run_at: str | None = Field(alias="nextRunAt")
     source: OrgReadsCheckpointingSource
-    """``worker`` when read from the schedule the worker registered; ``config``
-    when the API process fell back to its own defaults."""
+    """``worker`` when the Server read the live schedule; ``config`` when it
+    fell back to its configured default."""
 
 
 VaultScanState = (
     Literal["created", "active", "completed", "failed", "cancelled", "retry"] | str
 )
-"""pg-boss job state of a vault integrity scan. ``completed``, ``cancelled``
-and ``failed`` are terminal; ``retry`` means an attempt failed and another is
+"""Job state of a vault integrity scan. ``completed``, ``cancelled`` and
+``failed`` are terminal; ``retry`` means an attempt failed and another is
 scheduled, so the scan is still unfinished. Open with ``| str`` because the
-queue owns this vocabulary and has changed it before: branch on ``completed``
-and ``failed`` and treat anything else as still running."""
+job queue owns this vocabulary and may extend it: branch on ``completed`` and
+``failed`` and treat anything else as still running."""
 
 VaultScanBreakReason = (
     Literal[
@@ -1816,8 +1815,8 @@ VaultScanKeyRegistryFinding = TypedDict(
 statement that does not verify or touches no anchored key),
 ``key_closure_invalid`` (a retired key with no signed retirement, a closure by
 an unanchored key, or a ``VAULT_DISTRUSTED_KEYS`` key no trusted key has
-retired) or ``key_window_drift`` (a registry column that differs from the value
-signed for it). A finding about the published key material (a counting
+retired) or ``key_window_drift`` (a stored registry value that differs from the
+value signed for it). A finding about the published key material (a counting
 closure, or a trusted key's admission, signed by a key no key surface
 publishes) makes every audit export answer ``chainIntegrityReason:
 signing_key_material_invalid``; its ``detail`` names the ``VAULT_TRUST_ANCHORS``
@@ -1862,7 +1861,7 @@ class VaultScanDistrustedEntry(TypedDict, total=False):
 class VaultScanWaitingOn(TypedDict):
     """Why a scan that has not started is not being taken, read as ``GET
     /status`` reads its Workers component. ``workerHolds`` names each connected
-    worker's reason to hold (``key_unanchored``, ``key_retired``,
+    background processor's reason to hold (``key_unanchored``, ``key_retired``,
     ``key_unregistered``, ``signer_unreachable``) under
     ``worker_not_consuming``, and is empty otherwise. ``nextSteps[0]`` names the
     remedy."""
@@ -1930,8 +1929,8 @@ class VaultScanJob(TypedDict):
     """None until ``state == "completed"``."""
     waitingOn: NotRequired[VaultScanWaitingOn | None]
     """Non-null while the scan has not started (``created`` or ``retry``) and
-    the attached workers will not take it. None once a worker takes it, while
-    one is consuming, or when the attached workers cannot be read."""
+    the attached background processors will not take it. None once one takes
+    it, while one is consuming, or when their state cannot be read."""
     nextSteps: NotRequired[list[dict[str, Any]]]
 
 
@@ -2036,7 +2035,7 @@ class DriftBucket(BaseModel):
     verdicts: int
     """Gate verdicts rendered in the window on this agent's records: the final
     verdict on each completion, so a principal-gated record counts the
-    principal's verdict and not the engine's structural pass before it. A record
+    principal's verdict and not the Server's structural pass before it. A record
     that is revised and resubmitted contributes one per completion. Zero for a
     notarize-only agent, whose records carry no gate."""
     accepted: int
@@ -2306,16 +2305,17 @@ class StatusComponent(BaseModel):
     ``signing_key_unusable`` (this process's vault signing key may not sign, so
     every chain write answers 503). On the workers component it is
     ``database_unavailable`` at ``outage``, and at ``degraded``
-    ``no_worker_connected`` (no worker is attached), ``worker_not_consuming``
-    (one is attached but has stopped taking jobs), ``worker_stalled`` (one is
-    attached and publishes no reason to hold, yet has run nothing from a queue
-    holding a ready job for over 180s; restart it), ``not_checked`` (the
-    database could not be asked) or ``error``. ``privilege_missing``: on the
-    database component at ``degraded``, the role this Server connects as lacks
-    a privilege the engine writes with, so every request needing it answers
-    500; on chain writes at ``outage``, the missing privilege is on
-    ``audit_vault``. ``admin.get_system_health()`` names each missing privilege
-    and the GRANT that restores it. None when the component is healthy."""
+    ``no_worker_connected`` (no background processor is attached),
+    ``worker_not_consuming`` (one is attached but has stopped taking jobs),
+    ``worker_stalled`` (one is attached and reports no reason to hold, yet has
+    made no progress on queued work for an extended period), ``not_checked``
+    (the database could not be asked) or ``error``. ``privilege_missing``: on
+    the database component at ``degraded``, the database account the Server
+    uses lacks a permission it needs, so every request needing it answers 500;
+    on chain writes at ``outage``, the missing permission is on the chain
+    store. ``admin.get_system_health()`` names each missing permission; the
+    Server's documentation at https://agledger.ai/docs says how an operator
+    restores it. None when the component is healthy."""
 
 
 class StatusResponse(BaseModel):
@@ -2513,7 +2513,7 @@ class GateStatus(BaseModel):
         "pending", "in_progress", "passed", "failed", "superseded", "not_applicable"
     ] = Field(alias="phase2Status")
     """Semantic (rules-engine) evaluation phase. In ``principal`` gate mode this
-    reflects whichever verdict row is most recent, engine-advisory or
+    reflects whichever verdict row is most recent, Server-advisory or
     principal-rendered, so ``verdict`` is the unambiguous accept/reject.
 
     ``superseded`` means the latest evaluation row is no longer the decision that
@@ -2531,7 +2531,7 @@ class GateStatus(BaseModel):
     than settling it. None while pending, while the record is DISPUTED, and on a
     federation projection."""
     gate_mode: Literal["auto", "principal"] | None = Field(None, alias="gateMode")
-    """Whether the engine renders the verdict or a principal does."""
+    """Whether the Server renders the verdict or a principal does."""
     reporter_type: Literal["system", "principal", "accessor"] | None = Field(
         None, alias="reporterType"
     )
@@ -2660,7 +2660,7 @@ class VerificationKey(BaseModel):
     """Base64 of the raw 32-byte Ed25519 key: for raw-key verifiers (RFC 9421 / Standard-Webhooks-style). Same key as ``public_key``, different encoding."""
     status: str
     activated_at: str | None = Field(None, alias="activatedAt")
-    """May be a full ISO timestamp (engine ≥ v0.26.x) or a bare date string
+    """May be a full ISO timestamp (Server ≥ v0.26.x) or a bare date string
     (older builds). Optional so the model parses either way."""
     retired_at: str | None = Field(None, alias="retiredAt")
     distrusted_from: str | None = Field(None, alias="distrustedFrom")

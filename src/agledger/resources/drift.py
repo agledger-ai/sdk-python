@@ -5,9 +5,6 @@ The difference is the signal. There is no score, no weighting and no threshold:
 an acceptance rate that moves from 0.8 to 1.0 is as much of a change as one that
 moves to 0.6, and both are for whoever watches the agent to look into.
 Everything is computed on read from records, completions, verdicts and disputes.
-
-This replaces the reputation resource, which scored agents. The routes it called
-(``/v1/agents/{id}/reputation`` and its per-type sibling) no longer exist.
 """
 
 from __future__ import annotations

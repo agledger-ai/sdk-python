@@ -81,7 +81,7 @@ class APIError(AgledgerError):
     the same value ``problemType``."""
     publishers: list[str] | None
     """Candidate publisher labels on a 422 ``/problems/ambiguous-publisher``: the
-    type is offered by more than one publisher, so the engine refuses to pick.
+    type is offered by more than one publisher, so the Server refuses to pick.
     Re-send pinned to one of these (``publisher=`` on ``records.create``, or on a
     schema read)."""
     registry_version: int | None

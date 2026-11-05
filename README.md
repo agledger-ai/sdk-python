@@ -52,7 +52,7 @@ completion = performer.completions.submit(
     evidence={"summary": "Delivered 95 widgets", "evidenceUrl": "https://files.example.com/out.pdf"},
 )
 
-# The worker validates the completion, then holds the Record at PROCESSING
+# The Server validates the completion, then holds the Record at PROCESSING
 # until the principal renders its verdict.
 for _ in range(30):
     if principal.records.get(record.id).status == "PROCESSING":
@@ -209,7 +209,7 @@ except UnprocessableError as err:
 
 Branch on `err.type`, not on `str(err)`, which is the body's human-readable `detail`. Schema reads take the same pin (`client.schemas.get("acme-po-v1", publisher="acme-corp")`), and `client.schemas.list()` returns one row per (publisher, type) so you can choose before reading.
 
-Every Record reports the binding the engine used, whether or not you pinned it:
+Every Record reports the binding the Server used, whether or not you pinned it:
 
 ```python
 record = client.records.get(record_id)
@@ -217,7 +217,7 @@ record.publisher   # "acme-corp", or None (see below)
 record.schema_url  # "/v1/schemas/acme-po-v1?publisher=acme-corp". Follow it verbatim.
 ```
 
-`publisher` is `None` on Records the engine never validated against a local registration: federation-received ones (the originator ran the gate against its own registration) and ones backfilled through admin import. Read that as "ask the originator", not as "the schema is missing here".
+`publisher` is `None` on Records the Server never validated against a local registration: federation-received ones (the originator ran the gate against its own registration) and ones backfilled through admin import. Read that as "ask the originator", not as "the schema is missing here".
 
 Single-publisher orgs, which is nearly every install, never pass `publisher` and read their one label (usually `local`) back.
 
@@ -366,7 +366,8 @@ with open("audit-export.json") as fh:
 result = verify_export(
     export_data,
     trust_anchors=["sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"],
-    # The operator's VAULT_DISTRUSTED_KEYS, when a key leaked: what it signed
+    # The same entries the operator sets in the Server's VAULT_DISTRUSTED_KEYS,
+    # when a key leaked: what it signed
     # from the instant on (or, with none, from its retirement) counts for nothing.
     distrusted_keys=[],
 )
@@ -388,7 +389,7 @@ closure or a second admission, or admits a trusted key under an endorser the
 walk does not trust), `KEY_CLOSURE_INVALID` (a retired key with no closure that
 counts for it, a closure that should not count, any counting closure of a
 published key by a key the walk reaches but does not anchor, or a closure dated
-after the time it was stored, as the engine's scan grades them), and
+after the time it was stored, as the Server's scan grades them), and
 `CHAIN_KEY_WINDOW_DRIFT` (a listed window or status that differs from the
 signed value).
 
@@ -416,8 +417,8 @@ dump row repeating an earlier row's signed payload counts once, so a row
 copied in the database under a new id and time says nothing new.
 
 On a dump, a distrusted key that a key the walk trusts has retired (with force,
-as the key-compromise runbook does) is bounded by that retirement, and what it
-signed before then is accounted for rather than failed, as the engine's scan
+as in a key-compromise response) is bounded by that retirement, and what it
+signed before then is accounted for rather than failed, as the Server's scan
 lists it: a statement it signed is listed in `key_trust.accounted`, and a chain
 entry whose signature verifies under it, outside what the key is trusted for,
 is listed in `vault.accounted` as `CHAIN_SIGNED_BY_DISTRUSTED_KEY` (each an
@@ -430,13 +431,13 @@ dump directory, refusing its key options before it reads anything.
 
 `distrusted_keys` on an export is stricter than on a dump. A dump's
 `vault_key_statements` rows date what a distrusted key stored before its cutoff,
-as the engine does. An export's statements, and those on keys you pass, carry
+as the Server does. An export's statements, and those on keys you pass, carry
 an `id` and `createdAt` nothing signs, so a leaked key's holder can backdate
 them at will: there a statement a distrusted key signed admits no key, whatever
 time it carries. It still does everything that can only narrow trust (it dates
 its subject's window, cuts that key's edge back as a later admission, and a
 closure it signed still retires its subject). Where the document dates such a
-statement before the cutoff, so the engine would have counted it, voiding it is
+statement before the cutoff, so the Server would have counted it, voiding it is
 a note in `key_trust.notes`, never a finding, so an honest rotation away from a
 key you later distrust still passes pinned on its successor.
 
@@ -463,10 +464,10 @@ field is walked in the order of the instants its statements sign
 (`key_trust.order` is `"signed"`), which agrees with the write order for a
 document the Server served but cannot hold a leaked key to when it actually
 wrote a statement. A trusted key's document lists every admission it signed,
-so the walk opens its window where the engine does; where it cannot (a later
+so the walk opens its window where the Server does; where it cannot (a later
 succession whose endorser is not itself published, which the walk cannot
 check), the key's listed window is reported as `CHAIN_KEY_WINDOW_DRIFT`. A dump
-carries that endorser and agrees with the engine. The walk
+carries that endorser and agrees with the Server. The walk
 is `agledger.verify.compute_key_trust`, with
 `key_statements_from_verification_keys()` for a saved `GET
 /v1/verification-keys` response.
@@ -504,7 +505,7 @@ is entirely offline, so the export and keys are portable.
 ## Offline Full-Vault Dump Verification
 
 For a whole-instance audit (not just one Record), verify a six-file NDJSON dump
-produced by the API's dump-vault tool. This walks the signed key statements
+produced by the Server's vault dump tool. This walks the signed key statements
 from your trust anchors, walks every per-record and per-org schema-event chain,
 cross-checks the signed vault checkpoints against the live chain, and verifies
 the `org_admin_reads` log: each leaf's RFC 9162 leaf hash, signed claim and
@@ -597,7 +598,7 @@ encrypted-mode completion, whose signed hash covers a cleartext the export
 does not carry, is counted as `client_hashed`.
 A dump not scoped to one org carries the certificate keys itself: each
 `EPHEMERAL_CERT_ISSUED` entry on the platform-ops chain signs its
-certificate's `publicKeyJwk` (engines from 1.8.0 on), and a key is used once
+certificate's `publicKeyJwk` (Servers from 1.8.0 on), and a key is used once
 that chain has verified clean (`cert_keys_from_chain` counts them). An
 org-scoped dump and an `/audit-export` carry none, so for those pass the keys.
 
@@ -606,13 +607,14 @@ began signing. An unsigned chain entry after a signed one, or any unsigned
 entry, checkpoint or read-log row written at or after the earliest
 `activatedAt` in the key set (retired keys included), fails
 `CHAIN_ENTRY_UNSIGNED`, `CHECKPOINT_UNSIGNED`, `TENANT_READ_LEAF_UNSIGNED` or
-`TENANT_CHECKPOINT_UNSIGNED`, as the engine grades it. Each read-log leaf's
+`TENANT_CHECKPOINT_UNSIGNED`, as the Server grades it. Each read-log leaf's
 signature is verified too.
 
 `--trust-anchor` (repeat it once per key) pins the SPKI digest of a vault key
 you hold, on a dump directory and on an `/audit-export` file alike, and
 `--distrusted-key` (once per key: `sha256:<hex>`, optionally `@<RFC 3339
-instant>`) passes the operator's `VAULT_DISTRUSTED_KEYS` entries. A pass
+instant>`) passes the same entries the operator sets in the Server's
+`VAULT_DISTRUSTED_KEYS`. A pass
 anchored to a pin is `[PASS]`. Without a pin the headline reads `[VERIFIED,
 NOT ANCHORED]` and says plainly that the pass is not a trusted verdict: anyone
 who re-signs the chain with a key of their own, and writes that key into the
@@ -696,9 +698,8 @@ bundle = client.records.get_attestation_bundle(record_id)
 
 ## Vault Checkpoints
 
-Per-record signed Merkle anchors are written on a schedule (every 6 hours by
-default), letting an auditor detect audit-vault TRUNCATE / DELETE tampering
-offline. Listing them takes an org admin key:
+The Server periodically writes per-record signed Merkle anchors, letting an
+auditor detect removed or rewritten chain entries offline. Listing them takes an org admin key:
 
 ```python
 checkpoints = admin.audit.vault_checkpoints.list(record_id=record.id)

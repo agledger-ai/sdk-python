@@ -639,7 +639,7 @@ def test_vault_anchors_list_requires_the_record_id():
         _client().admin.vault.anchors.list()  # type: ignore[call-arg]
 
 
-# --- API main 63649593 ---
+# --- Server 2.0.0 ---
 
 
 def test_create_api_key_pairs_each_role_with_its_owner_kind():
@@ -705,7 +705,7 @@ def test_a_status_component_names_the_worker_and_signing_key_causes():
 
 
 def test_the_lifecycle_table_is_the_graph_get_lifecycle_serves():
-    # agledger-api 5444a54f, record.states[s].validTransitions on GET /lifecycle.
+    # Server 2.0.0, record.states[s].validTransitions on GET /lifecycle.
     assert RECORD_TRANSITIONS == {
         "CREATED": ("ACTIVE", "CANCELLED", "EXPIRED", "PROPOSED"),
         "PROPOSED": ("CANCELLED", "CREATED", "EXPIRED", "REJECTED"),

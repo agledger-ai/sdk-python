@@ -92,7 +92,7 @@ def test_offline_verifier_imports_no_network() -> None:
 # marker for these fields; a truthiness test treats a tampered "" like None and
 # skips the signature check (fail-open). The empty string must instead fall
 # through to key resolution and fail as an unknown key. Six instances of this
-# class shipped in the verifier wave before the sweep; this pins it at zero.
+# class once shipped before a sweep removed them; this pins it at zero.
 # Legal spellings: ``is None`` / ``is not None``.
 _TRUTHY_SIGNING_KEY = re.compile(
     r"if\s+(?:not\s+)?(?:[\w.]+\.)?signing_key_id\s*(?::|\)|and\b|or\b)"
@@ -119,7 +119,7 @@ def test_no_truthiness_on_signing_key_ids() -> None:
 # not match its own source.
 EM_DASH = "\u2014"
 
-# ``testdata`` is engine output, written by agledger-api's corpus generator and
+# ``testdata`` is Server output, written by the Server's corpus generator and
 # synced here verbatim, so changes there have to be made at the generator.
 # CHANGELOG.md is history.
 _SKIP_DIRS = {".git", ".venv", "__pycache__", "dist", "build", "testdata", ".claude"}
@@ -159,12 +159,22 @@ _TRACKER_REF = re.compile(
 )
 
 
+def _tracker_scan_files() -> list[Path]:
+    """The prose files, plus ``pyproject.toml`` and the helper scripts.
+
+    ``testdata`` and the signed fixtures (JSON, NDJSON) are never scanned: they
+    are generated upstream or sealed by a signature.
+    """
+    files = [p for p in _prose_files() if p.suffix not in {".toml", ".yml", ".yaml"}]
+    files.append(ROOT / "pyproject.toml")
+    files.extend(sorted((ROOT / "scripts").glob("*.mjs")))
+    return files
+
+
 def test_no_tracker_references() -> None:
-    """Source, tests and shipped Markdown cite no issue numbers."""
+    """Source, tests, scripts, pyproject and shipped Markdown cite no issue numbers."""
     violations: list[str] = []
-    for path in _prose_files():
-        if path.suffix in {".toml", ".yml", ".yaml"}:
-            continue
+    for path in _tracker_scan_files():
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if _TRACKER_REF.search(line):
                 violations.append(f"{_rel(path)}:{lineno}  {line.strip()}")

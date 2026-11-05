@@ -7,7 +7,7 @@ catch the two ways the API drifts from the SDK: endpoints AND field shapes.
 
 This guard exists because route-only parity silently missed a full minor's worth
 of field renames/additions (0.26.x). A clean route diff (194/194) hid all of it.
-The TS SDK gained this guard in the 0.26.x wave; Python had only hand-written
+The TS SDK gained this guard in its 0.26.x line; Python had only hand-written
 ``test_response_contract.py`` regressions for specific past bugs: no snapshot
 diff. This closes that TS/Python asymmetry: the Python models are now held to
 the same field snapshot, so the moment the API adds/renames a field a mapped

@@ -1,9 +1,6 @@
 """API v1.7.0 client-facing deltas.
 
-The wave that carried the 1.7.0 client sync was prepared against an untagged API
-commit, and the tag landed sixteen commits later. Everything here is a delta
-between those two specs, so none of it was covered by the round that validated
-the wave.
+These tests pin the shapes that changed in the Server's 1.7.0 spec.
 
 Same style as test_response_contract.py: feed a real-server-shaped payload
 (camelCase, exactly what the API emits) through a resource method and assert the
