@@ -208,6 +208,7 @@ def test_rule2_is_inclusive_at_the_activation_instant_and_silent_one_ms_before()
 
     at = _valid_all_nulled()
     at["entries"] = at["entries"][:1]
+    at["exportMetadata"]["totalEntries"] = 1
     at["exportMetadata"]["signingKeyWindows"] = {"k": {"activatedAt": created, "retiredAt": None}}
     at_result = verify_export(at)
     assert at_result.broken_at is not None
@@ -215,6 +216,7 @@ def test_rule2_is_inclusive_at_the_activation_instant_and_silent_one_ms_before()
 
     before = _valid_all_nulled()
     before["entries"] = before["entries"][:1]
+    before["exportMetadata"]["totalEntries"] = 1
     before["exportMetadata"]["signingKeyWindows"] = {
         "k": {"activatedAt": _shift_ms(created, 1), "retiredAt": None}
     }

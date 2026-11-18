@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 
 MAX_TOLERANCE_SECONDS = 300
 
+#: Clock skew allowed at each edge of a signing key's window when a delivery's
+#: ``created`` time is placed in it. The Server publishes the same allowance to
+#: receivers; it is fixed, and separate from the replay tolerance.
+KEY_WINDOW_SKEW_MS = 300_000
+
 #: Covered components a signed delivery signs, lowercased per RFC 9421.
 RFC9421_COVERED_COMPONENTS = ("content-digest", "x-agledger-idempotency-key")
 
@@ -188,33 +193,58 @@ def _load_public_key(base64_key: str) -> Ed25519PublicKey | EllipticCurvePublicK
     return loaded
 
 
-def _extract_key_fields(item: object) -> tuple[str | None, str | None]:
-    """Pull (keyId, publicKey) from a VerificationKey model or a mapping."""
+def _extract_key_fields(item: object) -> tuple[str | None, str | None, tuple[object, object]]:
+    """Pull (keyId, publicKey, (activatedAt, retiredAt)) from a VerificationKey
+    model or a mapping."""
     if isinstance(item, Mapping):
         m = cast("Mapping[str, Any]", item)
         keyid = m.get("keyId") or m.get("key_id")
         material = m.get("publicKey") or m.get("public_key")
+        activated = m.get("activatedAt", m.get("activated_at"))
+        retired = m.get("retiredAt", m.get("retired_at"))
     else:
         keyid = getattr(item, "key_id", None)
         material = getattr(item, "public_key", None)
+        activated = getattr(item, "activated_at", None)
+        retired = getattr(item, "retired_at", None)
     return (
         keyid if isinstance(keyid, str) else None,
         material if isinstance(material, str) else None,
+        (activated, retired),
     )
 
 
 def _resolve_public_key(
     key: str | Sequence[object], keyid: str | None
-) -> Ed25519PublicKey | EllipticCurvePublicKey | None:
-    """Resolve a base64 public key from a single string or a verification-keys list."""
+) -> tuple[Ed25519PublicKey | EllipticCurvePublicKey, tuple[object, object] | None] | None:
+    """Resolve a public key, and its window when it came from a
+    verification-keys list, from a single string or that list."""
     if isinstance(key, str):
-        return _load_public_key(key)
+        return _load_public_key(key), None
     for item in key:
-        item_keyid, material = _extract_key_fields(item)
+        item_keyid, material, window = _extract_key_fields(item)
         if item_keyid != keyid or material is None:
             continue
-        return _load_public_key(material)
+        return _load_public_key(material), window
     return None
+
+
+def _inside_key_window(created_seconds: int, window: tuple[object, object]) -> bool:
+    """Whether a signature created at ``created_seconds`` falls inside its key's
+    window, with the skew allowance at each edge. A window that cannot be read
+    (no ``activatedAt``, or an instant that is not RFC 3339) places nothing."""
+    # Imported here: the HMAC path must load without the ``verify`` extra.
+    from agledger.verify.key_statements import instant_ms
+
+    activated, retired = window
+    created_ms = created_seconds * 1000
+    activated_ms = instant_ms(activated)
+    if activated_ms is None or created_ms < activated_ms - KEY_WINDOW_SKEW_MS:
+        return False
+    if retired is None:
+        return True
+    retired_ms = instant_ms(retired)
+    return retired_ms is not None and created_ms <= retired_ms + KEY_WINDOW_SKEW_MS
 
 
 def verify_rfc9421(
@@ -229,7 +259,13 @@ def verify_rfc9421(
     Recomputes the Content-Digest over ``raw_body``, reconstructs the RFC 9421
     signature base, resolves the public key by ``keyid``, verifies the
     signature under the algorithm that key commits to, and enforces the
-    ``created`` replay window.
+    ``created`` replay window. Given the key list, it also holds ``created`` to
+    the signing key's ``[activatedAt, retiredAt]`` window with 300 seconds
+    allowed at each edge (``retiredAt`` of None means the window is still
+    open). ``status`` is not consulted: a key retired between signing and your
+    fetch still verifies what it signed while it was active. A single key
+    string carries no window, so pinning one accepts whatever that key signed
+    inside the replay window.
 
     :param headers: delivery HTTP headers, which must include ``content-digest``,
         ``signature-input``, ``signature``, and ``x-agledger-idempotency-key``.
@@ -239,7 +275,7 @@ def verify_rfc9421(
         ``.data`` list from ``client.verification_keys.list()`` (resolved by
         ``keyid``).
     :param tolerance_seconds: Replay window for the ``created`` time (default/max 300).
-    :returns: True only if the signature, digest, and replay window all hold.
+    :returns: True only if the signature, digest, replay window and key window all hold.
     """
     try:
         from cryptography.exceptions import InvalidSignature
@@ -298,13 +334,16 @@ def verify_rfc9421(
     keyid = keyid_m.group(1) if keyid_m else None
 
     try:
-        public_key = _resolve_public_key(key, keyid)
+        resolved = _resolve_public_key(key, keyid)
     except SignatureAlgorithmUnavailableError:
         # "Could not check" must not be flattened into "did not verify".
         raise
     except Exception:
         return False
-    if public_key is None:
+    if resolved is None:
+        return False
+    public_key, window = resolved
+    if window is not None and not _inside_key_window(created, window):
         return False
 
     component_values = {"content-digest": content_digest, "x-agledger-idempotency-key": idempotency_key}

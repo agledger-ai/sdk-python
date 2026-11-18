@@ -33,9 +33,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-#: The full canonical taxonomy. The export path can only emit a subset (the
-#: ``CHECKPOINT_*`` / ``TENANT_*`` codes need inputs the export wire lacks), but
-#: both verifiers share this one type so the strings can never drift apart.
+#: The full canonical taxonomy. The export path can only emit a subset (of the
+#: ``CHECKPOINT_*`` / ``TENANT_*`` codes it reports ``CHECKPOINT_ROW_MISSING``
+#: alone; the rest need inputs the export wire lacks), but both verifiers share
+#: this one type so the strings can never drift apart.
 FailureCode = Literal[
     # --- input / format (precede the chain walk) ---
     "UNSUPPORTED_FORMAT",
@@ -268,7 +269,9 @@ _SUGGESTIONS: dict[str, str] = {
     "CHECKPOINT_ROW_MISSING": (
         "A signed checkpoint anchors a position that has no matching chain row. Chain entries"
         " below a checkpoint were removed out of band. The checkpoint is proof of the missing"
-        " entries."
+        " entries. On a record export the position is the one the export states"
+        " (exportMetadata.expectedEntries): fetch the export again and verify the file exactly"
+        " as served."
     ),
     "CHECKPOINT_HASH_MISMATCH": (
         "A checkpoint's payloadHash does not match the chain row at its position. The "

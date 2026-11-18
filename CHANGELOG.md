@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - `ComplianceExport.resume_to` (`resumeTo`): on a truncated export, the `filters.to` for the next window. Create the export again with the same filters and `filters.to` set to it, and that export holds exactly the records this one left out.
 - Reason codes from an AGLedger Server later than 2.2.0: `checkpoint_key_expired`, `checkpoint_key_not_yet_active` and `checkpoint_accounted_run_exceeded` on `AuditChainIntegrityReasonCode` and `VaultScanBreakReason`; `accounted_checkpoint_only` on `VaultScanBreakReason`; `leaf_key_expired`, `leaf_key_not_yet_active`, `checkpoint_key_expired` and `checkpoint_key_not_yet_active` on `OrgReadsBreakReason`.
 - Python 3.15 is supported and tested in CI.
+- **A record export cut from the end fails (`result.entry_count`).** `verify_export` and `agledger-verify` hold the export to the two entry counts it states: fewer entries than `exportMetadata.expectedEntries`, the position of the record's latest checkpoint, is `CHECKPOINT_ROW_MISSING`, and fewer than `exportMetadata.totalEntries` is `CHAIN_POSITION_GAP`. `result.entry_count` (`EntryCount`) carries both, each `None` when the export does not state it; the text report has an `entry count` line and the JSON `entryCount`. An export that verified on 3.1.0 with its tail removed now fails.
+- **A dump report counts the chains a checkpoint holds the length of.** `report.vault.checkpointed_chain_count` (`checkpointedChainCount` in JSON, `checkpointed` in the text report) is how many of the chains were compared with at least one checkpoint. The length of a chain with no checkpoint yet is the dump's own, and the report now says how many those are.
 
 ### Changed
 
@@ -33,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - `RateLimitInfo.reset` is documented as the seconds until the window resets. It said a Unix timestamp.
 - `ComplianceExport.truncated` says how to fetch the rest with `resume_to`, and `get_org_config()` says what the dispute re-check does with `deadlineGraceSeconds`: it is added to the record's `tolerance.graceSeconds`, which `toleranceExpansion` does not multiply.
 
+- **`verify_rfc9421` and `construct_event_rfc9421` hold a delivery to its signing key's window.** Given the list from `client.verification_keys.list()`, a delivery was accepted whenever its `keyid` matched a listed key and its signature verified, including one signed with a retired key long after its retirement. The delivery's `created` time must now fall inside that key's `[activatedAt, retiredAt]` window, with 300 seconds allowed at each edge, as the Server's receiver guidance gives it. `status` is not consulted. A listed key with no readable `activatedAt` verifies nothing. A single key passed as a string carries no window and behaves as before.
 ## [3.1.0] - 2026-11-05
 
 ### Added

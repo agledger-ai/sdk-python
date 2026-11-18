@@ -349,6 +349,19 @@ class BrokenAt:
 
 
 @dataclass
+class EntryCount:
+    """The entry counts an export states. Mirrors ``entryCount`` in
+    ``@agledger/verify-core``."""
+
+    #: Position of the record's latest signed checkpoint; ``None`` when the
+    #: export names none.
+    expected_entries: int | None = None
+    #: How many entries the Server wrote into the export; ``None`` when it
+    #: does not say.
+    stated_entries: int | None = None
+
+
+@dataclass
 class SignatureCoverage:
     signed: int = 0
     unsigned: int = 0
@@ -466,6 +479,13 @@ class VerifyExportResult:
     #: export carries no such guide. Mirrors ``unsignedProjectionFields`` in
     #: ``@agledger/verify-core``.
     unsigned_projection_fields: list[str] = field(default_factory=list[str])
+    #: The entry counts the export states, which the chain is held to. Fewer
+    #: entries than ``expected_entries`` (the record's latest checkpoint
+    #: position) fails CHECKPOINT_ROW_MISSING, and fewer than
+    #: ``stated_entries`` (what the Server wrote) fails CHAIN_POSITION_GAP.
+    #: With both ``None`` the entry count is the file's own and is held to
+    #: nothing. Mirrors ``entryCount`` in ``@agledger/verify-core``.
+    entry_count: EntryCount = field(default_factory=lambda: EntryCount())
 
     @property
     def verdict(self) -> Literal["trusted", "unanchored", "failed"]:
@@ -646,6 +666,7 @@ def verify_export(
             optional_checks=optional_checks_report(set(), walked=trust is not None),
             key_trust=settle_key_trust(walk_report, 0),
             unsigned_projection_fields=_unsigned_projection_fields(export_data),
+            entry_count=_stated_entry_count(meta, 0)[0],
         )
 
     # Sort by chain position before the walk so a reordered export array still
@@ -713,9 +734,12 @@ def verify_export(
     if broken_at is None and key_trust.findings:
         first = key_trust.findings[0]
         broken_at = BrokenAt(position=0, code=first.code, detail=first.detail)
+    entry_count, count_finding = _stated_entry_count(meta, len(sorted_entries))
+    if broken_at is None:
+        broken_at = count_finding
 
     return VerifyExportResult(
-        valid=verified == len(sorted_entries) and not key_trust.findings,
+        valid=verified == len(sorted_entries) and not key_trust.findings and count_finding is None,
         total_entries=len(sorted_entries),
         verified_entries=verified,
         record_id=record_id,
@@ -733,7 +757,68 @@ def verify_export(
         ),
         key_trust=key_trust,
         unsigned_projection_fields=_unsigned_projection_fields(export_data),
+        entry_count=entry_count,
     )
+
+
+def _stated_entry_count(meta: Mapping[str, Any], held: int) -> tuple[EntryCount, BrokenAt | None]:
+    """Hold the chain's length to the counts the export states. A chain that
+    was cut from the end still links and verifies entry by entry, so its length
+    is the only thing that shows the cut: against the latest checkpoint
+    position (Server ``audit_vault_row_missing_for_checkpoint``) and against
+    the number of entries the Server wrote. A count that is present and is not
+    a non-negative integer is refused rather than skipped. Mirrors verify-core
+    ``statedEntryCount``."""
+
+    def read(name: str) -> int | Literal["malformed"] | None:
+        value = meta.get(name)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return "malformed"
+        if isinstance(value, float):
+            if not value.is_integer():
+                return "malformed"
+            value = int(value)
+        return value if value >= 0 else "malformed"
+
+    expected = read("expectedEntries")
+    stated = read("totalEntries")
+    count = EntryCount(
+        expected_entries=None if expected == "malformed" else expected,
+        stated_entries=None if stated == "malformed" else stated,
+    )
+    for name, value in (("expectedEntries", expected), ("totalEntries", stated)):
+        if value == "malformed":
+            shown = json.dumps(meta.get(name), separators=(",", ":"))
+            return count, BrokenAt(
+                position=0,
+                code="UNSUPPORTED_FORMAT",
+                detail=(
+                    f"exportMetadata.{name} is {shown}, not a non-negative integer or null, "
+                    "so the chain's length cannot be held to it."
+                ),
+            )
+    if count.expected_entries is not None and held < count.expected_entries:
+        noun = "entry" if held == 1 else "entries"
+        return count, BrokenAt(
+            position=count.expected_entries,
+            code="CHECKPOINT_ROW_MISSING",
+            detail=(
+                f"The export states a signed checkpoint at position {count.expected_entries} "
+                f"and carries {held} {noun}: the chain was cut below its checkpoint."
+            ),
+        )
+    if count.stated_entries is not None and held < count.stated_entries:
+        return count, BrokenAt(
+            position=held + 1,
+            code="CHAIN_POSITION_GAP",
+            detail=(
+                f"The export states {count.stated_entries} entries and carries {held}: "
+                "entries were removed from the end after the Server wrote it."
+            ),
+        )
+    return count, None
 
 
 def _unsigned_projection_fields(export: Mapping[str, Any]) -> list[str]:

@@ -226,6 +226,12 @@ class VaultChainsReport:
     checked anywhere" never reads as "passed". Mirrors the ``@agledger/verify``
     report. ``evidence_binding`` stays ``skipped_no_input``: a dump carries no
     inlined evidence."""
+    checkpointed_chain_count: int = 0
+    """How many of the ``record_count`` chains were compared with at least one
+    checkpoint. A checkpoint is what holds a chain's length: a chain cut below
+    one fails CHECKPOINT_ROW_MISSING. The remaining chains have no checkpoint
+    the dump was judged against (none written yet, or only ones set aside), so
+    their length is the dump's own."""
 
     @property
     def agent_signatures(self) -> AgentSignatureCounts:
@@ -238,6 +244,7 @@ class VaultChainsReport:
             "recordCount": self.record_count,
             "entryCount": self.entry_count,
             "checkpointCount": self.checkpoint_count,
+            "checkpointedChainCount": self.checkpointed_chain_count,
             "failures": [f.to_json() for f in self.failures[:MAX_REPORTED_FAILURES]],
             "failureCount": len(self.failures),
             "accounted": [a.to_json() for a in self.accounted[:MAX_REPORTED_FAILURES]],
