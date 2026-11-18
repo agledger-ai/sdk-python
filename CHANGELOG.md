@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-18
+
 ### Added
 
 - **`agledger-verify` holds checkpoints and the read log to their signing key's window.** An AGLedger Server later than 2.2.0 reports a vault checkpoint, a read-log leaf or a read-log tree head written outside the signed window of the key that signed it, and a dump holding one verified clean here. Each is now placed by the time its row was written (`created_at`, `read_at`, `checkpoint_at`), after its signature verifies, by the rule chain entries are held to: `CHECKPOINT_KEY_NOT_YET_ACTIVE` and `CHECKPOINT_KEY_EXPIRED`, `TENANT_READ_KEY_NOT_YET_ACTIVE` and `TENANT_READ_KEY_EXPIRED`, `TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE` and `TENANT_CHECKPOINT_KEY_EXPIRED`. A row written exactly at the retirement passes. `place_in_key_window` and `distrust_accounts` are exported from `agledger.verify`.
