@@ -1652,12 +1652,10 @@ def verify_entry(
             # whose key material the registry does not lie about: anything else
             # under its id is bytes the database's writer wrote.
             span = registered.distrust_span
-            bound = instant_ms(span.retired_at) if span is not None and span.retired_at is not None else None
             written_ms = rfc3339_ms(created_at) if isinstance(created_at, str) else None
             if (
-                bound is not None
-                and written_ms is not None
-                and written_ms < bound
+                written_ms is not None
+                and _before_trusted_retirement(span, written_ms)
                 and not _declared_algorithm_lies(registered)
                 and _verify_cose_signature(parts, registered, keys, signing_key_id) == "ok"
             ):
@@ -1756,15 +1754,11 @@ def verify_entry(
             # verified. The signature below still has to verify.
             span = registered.distrust_span
             written = rfc3339_ms(created_at)
-            cutoff_ms = instant_ms(span.cutoff) if span is not None and span.cutoff is not None else None
-            bound_ms = instant_ms(span.retired_at) if span is not None and span.retired_at is not None else None
             if (
                 temporal_code == "CHAIN_KEY_EXPIRED"
                 and span is not None
                 and written is not None
-                and cutoff_ms is not None
-                and bound_ms is not None
-                and cutoff_ms <= written < bound_ms
+                and _past_distrust_cutoff(span, written)
             ):
                 accounted_past_cutoff = (
                     f"Entry written {created_at} is signed by key {signing_key_id} at or after {span.cutoff}, the "
@@ -2789,11 +2783,13 @@ def _temporal_key_failure(
     activated_at: str | None,
     retired_at: str | None,
     distrust_cutoff: str | None = None,
-) -> tuple[FailureCode, str] | None:
+    what: str = "Entry",
+) -> tuple[Literal["CHAIN_KEY_NOT_YET_ACTIVE", "CHAIN_KEY_EXPIRED"], str] | None:
     """Return ``(code, detail)`` if ``created_at`` falls outside the key's
     activated..retired window, else ``None``. Bounds are inclusive: an entry
     written exactly at activation or retirement is valid (strict ``<`` / ``>``
     comparisons). Unparseable timestamps are skipped (no failure), mirroring TS.
+    ``what`` names the artifact in the detail ("Entry", "Checkpoint", "Leaf").
 
     The two directions carry different codes: reporting "expired"
     for a key that had not started yet sent consumers to investigate rotation
@@ -2807,7 +2803,7 @@ def _temporal_key_failure(
         if activated is not None and written < activated:
             return (
                 "CHAIN_KEY_NOT_YET_ACTIVE",
-                f"Entry written {created_at} predates key {key_id} activation {activated_at}.",
+                f"{what} written {created_at} predates key {key_id} activation {activated_at}.",
             )
     if distrust_cutoff:
         cutoff = _instant_ms(distrust_cutoff)
@@ -2815,7 +2811,7 @@ def _temporal_key_failure(
             return (
                 "CHAIN_KEY_EXPIRED",
                 (
-                    f"Entry written {created_at} postdates {distrust_cutoff}, the instant distrustedKeys "
+                    f"{what} written {created_at} postdates {distrust_cutoff}, the instant distrustedKeys "
                     f"(VAULT_DISTRUSTED_KEYS on the Server) gives for key {key_id}; the key was not retired then."
                 ),
             )
@@ -2824,9 +2820,115 @@ def _temporal_key_failure(
         if retired is not None and written > retired:
             return (
                 "CHAIN_KEY_EXPIRED",
-                f"Entry written {created_at} postdates key {key_id} retirement {retired_at}.",
+                f"{what} written {created_at} postdates key {key_id} retirement {retired_at}.",
             )
     return None
+
+
+def _before_trusted_retirement(span: DistrustSpan | None, written: int) -> bool:
+    """Whether a write at ``written`` ms comes before the retirement a key the
+    walk trusts signed for a distrusted key (``span.retired_at``)."""
+    bound = instant_ms(span.retired_at) if span is not None and span.retired_at is not None else None
+    return bound is not None and written < bound
+
+
+def _past_distrust_cutoff(span: DistrustSpan, written: int) -> bool:
+    """Whether a write at ``written`` ms falls at or after the instant a
+    ``distrusted_keys`` entry gives for its key and before the trusted
+    retirement: the span the entry and that retirement account for."""
+    cutoff = instant_ms(span.cutoff) if span.cutoff is not None else None
+    return cutoff is not None and written >= cutoff and _before_trusted_retirement(span, written)
+
+
+#: The kinds :func:`place_in_key_window` reports. Mirrors verify-core
+#: ``KeyWindowPlacement['placement']``.
+KeyWindowPlacementKind = Literal["inside", "accounted", "not-yet-active", "expired", "unplaceable"]
+
+
+@dataclass(frozen=True)
+class KeyWindowPlacement:
+    """Where a signed artifact other than a chain entry falls against the
+    window of the key that signed it. ``inside``: the key's window covers its
+    write time, or the key carries no window. ``accounted``: it was written at
+    or after the instant ``distrusted_keys`` gives for the key and before a key
+    the walk trusts retired it. ``not-yet-active`` and ``expired``: outside the
+    window. ``unplaceable``: the write time or a window edge is not an RFC 3339
+    instant, so the artifact cannot be placed and the caller fails closed.
+    ``detail`` is set for the last three. Mirrors verify-core
+    ``KeyWindowPlacement``."""
+
+    placement: KeyWindowPlacementKind
+    detail: str | None = None
+
+
+def place_in_key_window(key_id: str, key: RegisteredKey, written_at: object, what: str) -> KeyWindowPlacement:
+    """Place a vault checkpoint, a read-log leaf or a read-log tree head in the
+    signed window of key ``key_id``, by the time its row was written. The rule
+    is the one chain entries are held to (CHAIN_KEY_NOT_YET_ACTIVE,
+    CHAIN_KEY_EXPIRED): each edge is checked only when the key carries it, at
+    millisecond precision, and an artifact written exactly at the key's
+    retirement is inside. ``what`` names the artifact in the detail
+    ("Checkpoint", "Leaf").
+
+    The caller verifies the signature first: the Server reports a signature
+    that does not verify ahead of a window finding. Mirrors verify-core
+    ``placeInKeyWindow``."""
+    edges: tuple[tuple[str, object], ...] = (
+        ("activatedAt", key.activated_at),
+        ("retiredAt", key.retired_at),
+        ("distrustCutoff", key.distrust_cutoff),
+    )
+    if not any(isinstance(value, str) for _, value in edges):
+        return KeyWindowPlacement("inside")
+    for edge, value in edges:
+        if isinstance(value, str) and rfc3339_ms(value) is None:
+            return KeyWindowPlacement(
+                "unplaceable",
+                f"Key {key_id}'s {edge} {json.dumps(value)} is not an RFC 3339 instant, so the "
+                f"{what.lower()} cannot be placed inside its window.",
+            )
+    written = rfc3339_ms(written_at)
+    if not isinstance(written_at, str) or written is None:
+        return KeyWindowPlacement(
+            "unplaceable", f"{what} has no parseable write time, so it cannot be placed inside key {key_id}'s window."
+        )
+
+    def carried(value: object) -> str | None:
+        return value if isinstance(value, str) else None
+
+    temporal = _temporal_key_failure(
+        written_at, key_id, carried(key.activated_at), carried(key.retired_at), carried(key.distrust_cutoff), what
+    )
+    if temporal is None:
+        return KeyWindowPlacement("inside")
+    code, detail = temporal
+    span = key.distrust_span
+    if code == "CHAIN_KEY_EXPIRED" and span is not None and _past_distrust_cutoff(span, written):
+        return KeyWindowPlacement("accounted")
+    return KeyWindowPlacement("expired" if code == "CHAIN_KEY_EXPIRED" else "not-yet-active", detail)
+
+
+def distrust_accounts(key: RegisteredKey, written_at: object) -> bool:
+    """Whether a ``distrusted_keys`` entry and the retirement a trusted key
+    signed account for an artifact signed under ``key`` and written at
+    ``written_at``: the key is unanchored only because of the entry, or
+    anchored and the artifact written at or after the entry's instant, and in
+    both cases the artifact was written before that retirement. The same
+    condition lists a chain entry as CHAIN_SIGNED_BY_DISTRUSTED_KEY.
+
+    Such an artifact is listed, never verified, and never evidence for or
+    against anything else. The caller still verifies its signature under the
+    key before setting it aside: anything else under the key's id is bytes
+    whoever writes to the database wrote. Mirrors verify-core
+    ``distrustAccounts``."""
+    if key.trust == "undecided" or _declared_algorithm_lies(key):
+        return False
+    if key.trust == "unanchored":
+        written = rfc3339_ms(written_at)
+        return isinstance(written_at, str) and written is not None and _before_trusted_retirement(
+            key.distrust_span, written
+        )
+    return place_in_key_window("", key, written_at, "Artifact").placement == "accounted"
 
 
 # --- org_admin_reads Merkle tree (mirror verify-core primitives.ts, RFC 9162 section 2.1) ---

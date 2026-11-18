@@ -1243,6 +1243,18 @@ AuditChainIntegrityReasonCode = (
         # A checkpoint signed under a key no signed key statement links to a
         # key the Server trusts from outside its database.
         "checkpoint_key_unanchored",
+        # The checkpoint's signature verifies, but the database wrote it before
+        # the activatedAt (after the retiredAt) published for its key: the same
+        # window rule as key_not_yet_active / key_expired for an entry. A
+        # checkpoint a VAULT_DISTRUSTED_KEYS key signed inside what that entry
+        # and the trusted retirement account for is no finding and never
+        # evidence; the chain is judged against the newest checkpoint that is
+        # not one.
+        "checkpoint_key_not_yet_active",
+        "checkpoint_key_expired",
+        # More than 1000 such accounted checkpoints sit above the newest one
+        # that is not, so the chain is reported rather than judged.
+        "checkpoint_accounted_run_exceeded",
         "payload_drift",
         "oidc_actor_drift",
         "cert_actor_drift",
@@ -1642,8 +1654,12 @@ VaultScanBreakReason = (
         "checkpoint_key_unknown",
         "checkpoint_key_unanchored",
         "checkpoint_unsigned",
+        "checkpoint_key_not_yet_active",
+        "checkpoint_key_expired",
+        "checkpoint_accounted_run_exceeded",
         "checkpoint_claim_mismatch",
         "schema_chain_missing_for_subjects",
+        "accounted_checkpoint_only",
         "verification_error",
         "signing_key_distrusted",
     ]
@@ -1651,9 +1667,11 @@ VaultScanBreakReason = (
 )
 """Why a record chain or a record-less chain broke in a vault scan. The
 meanings match :data:`AuditChainIntegrityReasonCode`;
-``schema_chain_missing_for_subjects`` is schema-chain only, and
-``verification_error`` is a walk that could not run. Open with ``| str`` so a
-code a newer Server adds still type-checks."""
+``schema_chain_missing_for_subjects`` is schema-chain only,
+``accounted_checkpoint_only`` is a chain with no entry whose only checkpoints
+are ones a ``VAULT_DISTRUSTED_KEYS`` entry accounts for (see
+``distrustedCheckpoints``), and ``verification_error`` is a walk that could not
+run. Open with ``| str`` so a code a newer Server adds still type-checks."""
 
 VaultScanFirstFindingReason = Literal[
     "key_expired", "key_not_yet_active", "unsupported_algorithm", "signing_key_distrusted"
@@ -1676,6 +1694,8 @@ OrgReadsBreakReason = (
         "leaf_key_unknown",
         "leaf_key_unanchored",
         "leaf_signature_missing",
+        "leaf_key_not_yet_active",
+        "leaf_key_expired",
         "checkpoint_leaf_count_mismatch",
         "checkpoint_root_mismatch",
         "checkpoint_claim_mismatch",
@@ -1683,15 +1703,19 @@ OrgReadsBreakReason = (
         "checkpoint_key_unknown",
         "checkpoint_key_unanchored",
         "checkpoint_unsigned",
+        "checkpoint_key_not_yet_active",
+        "checkpoint_key_expired",
         "verification_error",
     ]
     | str
 )
 """Why the cross-party read log broke for one org. ``leaf_signature_missing``
 and ``checkpoint_unsigned`` are the read-log twins of the vault chain's
-``signature_missing`` and ``checkpoint_unsigned``, and ``leaf_key_unanchored``
-is the twin of ``signing_key_unanchored``. Open with ``| str`` so a code a
-newer Server adds still type-checks."""
+``signature_missing`` and ``checkpoint_unsigned``, ``leaf_key_unanchored`` is
+the twin of ``signing_key_unanchored``, and the ``*_key_not_yet_active`` /
+``*_key_expired`` pairs are a leaf or checkpoint signed outside its key's
+signed window, the twins of ``key_not_yet_active`` and ``key_expired``. Open
+with ``| str`` so a code a newer Server adds still type-checks."""
 
 
 class VaultScanFirstFinding(TypedDict):
@@ -1766,10 +1790,27 @@ class VaultScanBrokenOrg(TypedDict):
     """The leaf index or checkpoint tree size the finding localizes to."""
 
 
+class VaultScanOrgReadsDistrustedEntry(TypedDict, total=False):
+    """A read-log leaf or checkpoint a ``VAULT_DISTRUSTED_KEYS`` key signed
+    that the database wrote inside what that entry and the retirement a key the
+    Server trusts signed for it account for. Listed by a vault scan rather than
+    counted as a break, never verified, and never evidence: such a checkpoint's
+    root is not compared."""
+
+    orgId: str
+    kind: Literal["leaf", "checkpoint"]
+    at: int
+    """The leaf index, or the checkpoint's tree size."""
+    keyId: str
+
+
 class VaultScanOrgAdminReads(TypedDict, total=False):
     """The cross-party read log walked whole on a full scan: each leaf against
-    its hash, signed claim and signature, and each checkpoint against the Merkle
-    root over the leaves it covers. A break here fails ``healthy``."""
+    its hash, signed claim, signature and its key's signed window, and each
+    checkpoint against the Merkle root over the leaves it covers, its signed
+    claim, signature and its key's signed window. A break here fails
+    ``healthy``; what a ``VAULT_DISTRUSTED_KEYS`` entry accounts for is listed
+    in ``distrustedEntries`` and does not."""
 
     orgs: int
     """Orgs with at least one leaf or checkpoint."""
@@ -1780,6 +1821,20 @@ class VaultScanOrgAdminReads(TypedDict, total=False):
     first met."""
     unsupportedAlgorithm: int
     """Orgs whose leaves this Server cannot verify. Not in ``broken``."""
+    distrustedSigned: int
+    """Orgs whose only findings are leaves or checkpoints a
+    ``VAULT_DISTRUSTED_KEYS`` entry accounts for. Not in ``broken``; each is in
+    ``distrustedEntries``."""
+    distrustedEntries: list[VaultScanOrgReadsDistrustedEntry]
+    """The read-log leaves and checkpoints such an entry accounts for, as the
+    walk met them before its org's first finding (the walk stops an org at its
+    first finding), capped at 100; ``distrustedEntriesTotal`` is the full count
+    listed. Not folded into ``broken`` or ``healthy``. One such a key signed
+    after that retirement is not listed: under a key still anchored it is
+    ``leaf_key_expired`` or ``checkpoint_key_expired``, under one the distrust
+    entry leaves unanchored it is ``leaf_key_unanchored`` or
+    ``checkpoint_key_unanchored``."""
+    distrustedEntriesTotal: int
     brokenOrgs: list[VaultScanBrokenOrg]
     """Capped at 100 entries."""
     truncated: bool
@@ -1847,8 +1902,11 @@ class VaultScanKeyRegistry(TypedDict, total=False):
 
 
 class VaultScanDistrustedEntry(TypedDict, total=False):
-    """A chain entry a distrusted key signed before a trusted key retired it,
-    listed by a vault scan as accounted for rather than broken."""
+    """A chain entry, or a vault checkpoint, a distrusted key signed before a
+    trusted key retired it, listed by a vault scan as accounted for rather than
+    broken. The item of both ``distrustedEntries`` and
+    ``distrustedCheckpoints``; on a checkpoint, ``position`` is the chain
+    position the checkpoint covers."""
 
     chain: VaultCheckpointChain
     recordId: str | None
@@ -1884,9 +1942,11 @@ class VaultScanResult(TypedDict):
     """The single field to branch on: true iff nothing broke across record
     chains, record-less chains, chain-less records and the read log, and the
     key-trust walk has no finding. It does not fold in ``unsupportedAlgorithm``,
-    nor ``distrustedEntries`` and ``keyRegistry.distrustedStatements`` (what a
-    leaked key signed before a trusted key retired it, which the operator's
-    ``VAULT_DISTRUSTED_KEYS`` entry accounts for)."""
+    nor ``distrustedEntries``, ``distrustedCheckpoints``,
+    ``orgAdminReads.distrustedEntries`` and ``keyRegistry.distrustedStatements``
+    (what a leaked key signed before a key the Server trusts retired it, which
+    the operator's ``VAULT_DISTRUSTED_KEYS`` entry accounts for and which is
+    never verified)."""
     recordsMissingChain: int
     missingChainRecords: list[str]
     """Ids behind ``recordsMissingChain``, newest first, capped at 100."""
@@ -1905,6 +1965,25 @@ class VaultScanResult(TypedDict):
     export of a chain carrying one answers ``chainIntegrity: false`` with
     ``signing_key_distrusted``."""
     distrustedEntriesTotal: NotRequired[int]
+    distrustedCheckpoints: NotRequired[list[VaultScanDistrustedEntry]]
+    """The vault checkpoints, of a record chain or a record-less one, that the
+    scan set aside: each signed by a ``VAULT_DISTRUSTED_KEYS`` key and written
+    by the database inside what that entry and the retirement a key the Server
+    trusts signed for it account for, and each above the newest checkpoint of
+    its chain that is not one. Such a checkpoint below that one is never read,
+    and a chain whose checkpoint cross-check reports a finding lists none.
+    Capped at 100; ``distrustedCheckpointsTotal`` is the full count set aside.
+
+    Never evidence: each chain is cross-checked against the newest checkpoint
+    that is not one, a record export does the same, and none of these moves
+    ``verified``, ``broken`` or ``healthy``. More than 1000 of them above that
+    checkpoint is a counted finding instead
+    (``checkpoint_accounted_run_exceeded``), and a chain with no entry whose
+    only checkpoints are such is broken (``accounted_checkpoint_only``). A
+    checkpoint such a key signed after that retirement is not listed: under a
+    key still anchored it is ``checkpoint_key_expired``, under one the distrust
+    entry leaves unanchored it is ``checkpoint_key_unanchored``."""
+    distrustedCheckpointsTotal: NotRequired[int]
     globalChains: NotRequired[VaultScanGlobalChains]
     """Present on a full scan; absent on a ``record_ids``-scoped scan."""
     orgAdminReads: NotRequired[VaultScanOrgAdminReads | None]
@@ -2580,17 +2659,34 @@ class ComplianceExport(BaseModel):
     #: Rows in the export. Capped at 10000, newest first. Read ``truncated``
     #: before treating this as the size of the match set.
     record_count: int | None = Field(None, alias="recordCount")
-    #: True when the filters matched more than the 10000-row export cap, so the
-    #: export holds only the newest 10000 rows. Window
-    #: with ``filters.from`` / ``filters.to`` to cover the rest. On a download
-    #: the same answer rides the ``X-AGLedger-Export-Truncated`` response
-    #: header, the only carrier for a ``csv`` download (the body is raw rows,
-    #: and a notice line would corrupt the parse). None on a Server that predates the field.
+    #: True when the filters matched more than the 10000-row export cap. The
+    #: export then holds the newest matching rows, at most 10000: it ends at a
+    #: millisecond boundary, so it holds fewer when rows at the cap share a
+    #: millisecond. To fetch the rest, create the export again with the same
+    #: filters and ``filters.to`` set to ``resume_to``, window by window, until
+    #: one comes back with ``truncated`` false. On a download the same answer
+    #: rides the ``X-AGLedger-Export-Truncated`` response header, the only
+    #: carrier for a ``csv`` download (the body is raw rows, and a notice line
+    #: would corrupt the parse). The read of an export returns the stored
+    #: answer the create gave. None on a Server that predates the field.
     truncated: bool | None = None
     #: Total rows the filters matched at creation time, before the cap. Equals
     #: ``record_count`` unless ``truncated``. Header twin on a download:
     #: ``X-AGLedger-Export-Total-Records``.
     total_records: int | None = Field(None, alias="totalRecords")
+    #: Present only when ``truncated``: the inclusive ``filters.to`` for the
+    #: next window, at microsecond precision. Create the next export with the
+    #: same filters and ``filters.to`` set to this value, copied verbatim, and it
+    #: holds exactly the matching records this one left out, with none
+    #: repeated. None when more than 10000 matching records share the
+    #: millisecond of the oldest one, which no time window can split: narrow by
+    #: ``filters.contractTypes``, ``filters.ref`` or ``filters.recordIds``
+    #: instead. On the read of an export it is derived from the export's oldest
+    #: ``createdAt``, so it can also be None there when the export did not carry
+    #: ``createdAt`` or every row it holds shares one millisecond; the create
+    #: response carries it in the first case. None on a Server that predates
+    #: the field.
+    resume_to: str | None = Field(None, alias="resumeTo")
     #: The read-transparency batch this export left: one manifest and one leaf
     #: per exported record on the org whose records were read, under one
     #: ``exportBatchId`` (keys ``exportBatchId``, ``manifestId``,

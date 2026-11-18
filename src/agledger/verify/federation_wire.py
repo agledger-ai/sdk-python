@@ -445,6 +445,13 @@ def extract_federation_wire(payload: Mapping[str, Any]) -> Mapping[str, Any] | L
     return w
 
 
+#: The allowance at both edges of a federation key's window, as the Server's
+#: receiver recipe gives it. ``wire["timestamp"]`` is the clock of the process
+#: that signed the message and the window's edges are the sender's database
+#: clock, so a message signed within this of a key change is on the right key.
+FEDERATION_KEY_WINDOW_SKEW_MS = 300_000
+
+
 @dataclass
 class FederationWireOutcome:
     outcome: Literal["ok", "unchecked", "invalid", "unsupported"]
@@ -508,8 +515,9 @@ def check_federation_wire(
     placed in a key's window by ``wire["timestamp"]``: the sender signed it, the
     receiver sealed it under its own signature after holding it to its
     clock-skew allowance, and it is read from the sender's clock, the clock the
-    history's windows are written by. The entry's ``createdAt`` is a column no
-    signature covers, so it places nothing."""
+    history's windows are written by, with :data:`FEDERATION_KEY_WINDOW_SKEW_MS`
+    allowed at each edge. The entry's ``createdAt`` is a column no signature
+    covers, so it places nothing."""
     if wire["scheme"] != FEDERATION_WIRE_SCHEME:
         return FederationWireOutcome(
             "invalid", f"Sealed message scheme is {json.dumps(wire['scheme'])}, not {FEDERATION_WIRE_SCHEME}."
@@ -573,14 +581,15 @@ def check_federation_wire(
                 "which is not an RFC 3339 instant, so it cannot be placed in its key's window.",
             )
         activated = rfc3339_ms(key.activated_at)
-        if activated is not None and at < activated:
+        if activated is not None and at < activated - FEDERATION_KEY_WINDOW_SKEW_MS:
             return FederationWireOutcome(
                 "invalid",
                 f"Sealed message from {wire['senderHubId']} is signed at {wire['timestamp']} under a federation "
-                f"key its history activates at {key.activated_at}, after the sender signed it.",
+                f"key its history activates at {key.activated_at}, more than "
+                f"{FEDERATION_KEY_WINDOW_SKEW_MS // 1000}s after the sender signed it.",
             )
         retired = rfc3339_ms(key.retired_at)
-        after_retirement = retired is not None and at > retired
+        after_retirement = retired is not None and at > retired + FEDERATION_KEY_WINDOW_SKEW_MS
     signature_hex = str(wire["signature"])
     try:
         signature = bytes.fromhex(signature_hex)

@@ -6,11 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **`agledger-verify` holds checkpoints and the read log to their signing key's window.** An AGLedger Server later than 2.2.0 reports a vault checkpoint, a read-log leaf or a read-log tree head written outside the signed window of the key that signed it, and a dump holding one verified clean here. Each is now placed by the time its row was written (`created_at`, `read_at`, `checkpoint_at`), after its signature verifies, by the rule chain entries are held to: `CHECKPOINT_KEY_NOT_YET_ACTIVE` and `CHECKPOINT_KEY_EXPIRED`, `TENANT_READ_KEY_NOT_YET_ACTIVE` and `TENANT_READ_KEY_EXPIRED`, `TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE` and `TENANT_CHECKPOINT_KEY_EXPIRED`. A row written exactly at the retirement passes. `place_in_key_window` and `distrust_accounts` are exported from `agledger.verify`.
+- **Checkpoints, leaves and tree heads a `--distrusted-key` entry accounts for are set aside.** The Server sets aside what a distrusted key signed before a trusted key retired it, on every signed artifact; here only chain entries were, so after a leaked-key response every checkpoint, leaf and tree head the old key had signed failed as unanchored. They are now listed and never evidence: `accounted_checkpoints` on the vault report (`accountedCheckpoints`, `accountedCheckpointCount` in JSON) and `accounted` on the read-log report (`AccountedReadLogEntry`). A leaf set aside keeps its index, hash and claim checks. A record or platform-ops chain with no entry whose only checkpoints are set aside is `CHECKPOINT_ACCOUNTED_ONLY`, and more than `ACCOUNTED_CHECKPOINT_RUN_CAP` (1000) set aside above the newest that is not is `CHECKPOINT_ACCOUNTED_RUN_EXCEEDED`.
+- `VaultScanResult` carries `distrustedCheckpoints` and `distrustedCheckpointsTotal`, and `VaultScanOrgAdminReads` carries `distrustedEntries` (`VaultScanOrgReadsDistrustedEntry`), `distrustedEntriesTotal` and `distrustedSigned`: what a scan on an AGLedger Server later than 2.2.0 set aside under a `VAULT_DISTRUSTED_KEYS` entry. None of them moves `verified`, `broken` or `healthy`.
+- `ComplianceExport.resume_to` (`resumeTo`): on a truncated export, the `filters.to` for the next window. Create the export again with the same filters and `filters.to` set to it, and that export holds exactly the records this one left out.
+- Reason codes from an AGLedger Server later than 2.2.0: `checkpoint_key_expired`, `checkpoint_key_not_yet_active` and `checkpoint_accounted_run_exceeded` on `AuditChainIntegrityReasonCode` and `VaultScanBreakReason`; `accounted_checkpoint_only` on `VaultScanBreakReason`; `leaf_key_expired`, `leaf_key_not_yet_active`, `checkpoint_key_expired` and `checkpoint_key_not_yet_active` on `OrgReadsBreakReason`.
+- Python 3.15 is supported and tested in CI.
+
 ### Changed
 
+- **A sealed federation message is placed in its key's window with 300 seconds allowed at each edge (`FEDERATION_KEY_WINDOW_SKEW_MS`)**, as the Server's receiver guidance gives it: the message's timestamp is the signing process's clock and the window is the peer's database clock. A message signed within that of a key change was failed or counted as after retirement; it now verifies on the key it names.
+- `federation.relay_signal(reason_code=...)` is typed as `FederationSignalReasonCode | None`, the six causes the Server accepts; an AGLedger Server later than 2.2.0 refuses any other with a 400. The docstring states the `failing_rule_ids` limits (at most 220 ids of at most 100 characters) and the `counter_signature` form (128 lowercase hex characters).
+- Scope profile descriptions in `agledger.scopes` are the text an AGLedger Server later than 2.2.0 serves. Scope lists are unchanged.
+- The read log's orgs are walked in the order the dump lists them, so findings and rows set aside are reported in a stable order.
 - Documentation describes what the caller observes instead of the Server's internals.
 - The README names the environment variable the client falls back to (`AGLEDGER_API_KEY`), and says that federation key history and schema import with a manifest digest need a Server 2.2 or later.
 - The source distribution contains only the package source and its README, LICENSE and CHANGELOG.
+
+### Fixed
+
+- **The `agledger-verify` text report on an `?evidence=true` export called the inlined evidence a display projection.** An AGLedger Server later than 2.2.0 lists `evidence` among the export's unsigned fields. Evidence bodies are held to the hash their entry signs; the note now leaves `evidence` out of the projections and points at the line that reports the check.
+- `RateLimitInfo.reset` is documented as the seconds until the window resets. It said a Unix timestamp.
+- `ComplianceExport.truncated` says how to fetch the rest with `resume_to`, and `get_org_config()` says what the dispute re-check does with `deadlineGraceSeconds`: it is added to the record's `tolerance.graceSeconds`, which `toleranceExpansion` does not multiply.
 
 ## [3.1.0] - 2026-11-05
 

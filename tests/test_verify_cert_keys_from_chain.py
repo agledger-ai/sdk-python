@@ -126,6 +126,8 @@ def test_not_from_an_unsigned_entry_even_on_a_chain_that_verifies() -> None:
     ]
     activated = (first_record_at - timedelta(milliseconds=1)).astimezone(UTC)
     d.signing_keys[0]["activated_at"] = activated.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    # A checkpoint the key signed before that would be outside its window.
+    d.vault_checkpoints = [c for c in d.vault_checkpoints if _instant(c["created_at"]) >= activated]
     report = verify_dump(d)
     assert report.ok, [f.to_json() for f in report.vault.failures]
     assert report.vault.cert_keys_from_chain == 0

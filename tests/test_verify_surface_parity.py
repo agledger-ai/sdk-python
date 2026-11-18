@@ -140,3 +140,22 @@ def test_verify_dump_dir_refuses_its_key_options_before_reading_the_directory() 
         verify_dump_dir("/nonexistent", trust_anchors=[pin], distrusted_keys=[f"{pin}@2026-09-01T00:00:00Z"])
     dump_dir = str(_CORPUS / "dump" / "valid")
     assert verify_dump_dir(dump_dir).to_json() == verify_dump(load_dump(dump_dir)).to_json()
+
+
+def test_inlined_evidence_is_not_called_a_display_projection_and_the_note_points_at_the_check_that_binds_it() -> None:
+    import dataclasses
+
+    from agledger.verify.cli import (
+        _format_export_text,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    result = verify_export(_export("valid.json"))
+    both = _format_export_text(dataclasses.replace(result, unsigned_projection_fields=["actorDisplayName", "evidence"]))
+    assert "1 unsigned display projection field(s) (actorDisplayName)" in both
+    assert (
+        "inlined evidence bodies sit outside the signature and count only as far as each was held to the hash "
+        'its entry signs; see "evidence bodies" above.'
+    ) in both
+    only = _format_export_text(dataclasses.replace(result, unsigned_projection_fields=["evidence"]))
+    assert "display projection" not in only
+    assert "inlined evidence bodies" in only

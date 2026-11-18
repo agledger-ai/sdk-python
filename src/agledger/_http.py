@@ -88,7 +88,8 @@ class RateLimitInfo:
     remaining: int
     """Requests remaining in the current window."""
     reset: int
-    """Unix timestamp (seconds) when the window resets."""
+    """Seconds until the window resets (the ``X-RateLimit-Reset`` header), not
+    a Unix timestamp."""
 
 
 def _parse_rate_limit_headers(headers: httpx.Headers) -> RateLimitInfo | None:

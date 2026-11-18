@@ -97,12 +97,15 @@ def test_compliance_export_surfaces_the_row_cap():
             "recordCount": 10000,
             "truncated": True,
             "totalRecords": 41337,
+            "resumeTo": "2026-07-31T23:59:59.999999Z",
         })
     )
     export = _client().compliance.export(format="json")
     assert export.truncated is True
     assert export.record_count == 10000
     assert export.total_records == 41337
+    # The next window's inclusive filters.to, passed back verbatim.
+    assert export.resume_to == "2026-07-31T23:59:59.999999Z"
 
 
 @respx.mock
@@ -119,3 +122,4 @@ def test_compliance_export_untruncated_on_an_older_server():
     export = _client().compliance.export(format="json")
     assert export.truncated is None
     assert export.total_records is None
+    assert export.resume_to is None

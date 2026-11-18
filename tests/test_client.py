@@ -1195,7 +1195,7 @@ def test_rate_limit_info_populated_from_headers():
             headers={
                 "x-ratelimit-limit": "1000",
                 "x-ratelimit-remaining": "987",
-                "x-ratelimit-reset": "1735689600",
+                "x-ratelimit-reset": "42",
             },
         )
     )
@@ -1206,7 +1206,7 @@ def test_rate_limit_info_populated_from_headers():
     assert isinstance(info, RateLimitInfo)
     assert info.limit == 1000
     assert info.remaining == 987
-    assert info.reset == 1735689600
+    assert info.reset == 42
 
 
 @respx.mock

@@ -501,6 +501,17 @@ class AdminResource:
         (``deadlineGraceSeconds``, ``toleranceExpansion``), null when the org has
         not configured one, and ``config.enforcement.defaultMaxRevisions`` is the
         rework cap new Records inherit.
+
+        The re-check on dispute open runs the inputs the gate ran (the record's
+        deadline, the completion's arrival, the org config and the record's
+        enforcement modes), with the tolerance alone widened.
+        ``toleranceExpansion`` (1 to 3) multiplies every numeric tolerance band
+        except ``graceSeconds``; ``deadlineGraceSeconds`` (0 to 86400) is added
+        to the record's ``tolerance.graceSeconds`` instead. A rule the gate
+        failed has to clear on its own evaluation: one that reads as passing
+        only because its enforcement mode became advisory or none after the
+        verdict leaves the dispute at the evidence window, with that rule in
+        ``failingRuleIds``.
         """
         return self._http.get(f"/v1/admin/orgs/{org_id}/config")
 

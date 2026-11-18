@@ -16,6 +16,20 @@ from agledger.types import (
     RiskClassification,
 )
 
+FederationSignalReasonCode = Literal[
+    "AUTO_FAIL",
+    "AUTO_SETTLE",
+    "AUTO_SETTLE_WITHIN_TOLERANCE",
+    "DISPUTE_OVERTURNED",
+    "PRINCIPAL_ACCEPT",
+    "PRINCIPAL_REJECT",
+]
+"""The ``reasonCode`` on a relayed Settlement Signal: one of the causes a Server
+stamps on a Settlement Signal. ``AUTO_SETTLE_WITHIN_TOLERANCE`` marks an
+auto-settle that cleared only via a non-zero tolerance band. Closed, because the
+route validates it as a strict enum; null (None) when the sender recorded no
+cause."""
+
 
 def _handshake_body(
     peer_hub_id: str, peer_url: str, signing_public_key: str, peering_token: str,
@@ -69,7 +83,7 @@ def _state_transition_body(
 def _signal_body(
     record_id: str, recommendation: FederationSettlementSignal, outcome_hash: str,
     valid_until: str, idempotency_key: str, outcome: FederationVerdict | None,
-    schema_ref: dict[str, Any], reason_code: str | None,
+    schema_ref: dict[str, Any], reason_code: FederationSignalReasonCode | None,
     failing_rule_ids: list[str] | None, counter_signature: str | None,
 ) -> dict[str, Any]:
     """``outcome``, ``reasonCode`` and ``failingRuleIds`` are required and
@@ -218,7 +232,7 @@ class FederationResource:
         valid_until: str,
         idempotency_key: str,
         schema_ref: dict[str, Any],
-        reason_code: str | None,
+        reason_code: FederationSignalReasonCode | None,
         failing_rule_ids: list[str] | None,
         counter_signature: str | None = None,
     ) -> dict[str, Any]:
@@ -230,10 +244,21 @@ class FederationResource:
 
         ``outcome``, ``reason_code`` and ``failing_rule_ids`` are required and
         nullable: pass None for a RELEASE that binds no verdict, a signal with
-        no classifiable cause, or a terminal no rule failed, and each goes out
-        as JSON null. Free text does not cross the federation wire, so the body
+        no recorded cause, or a terminal no rule failed, and each goes out as
+        JSON null. Free text does not cross the federation wire, so the body
         takes no ``reason``: ``reason_code`` and ``failing_rule_ids`` carry the
-        cause."""
+        cause.
+
+        ``reason_code`` is one of ``AUTO_FAIL``, ``AUTO_SETTLE``,
+        ``AUTO_SETTLE_WITHIN_TOLERANCE``, ``DISPUTE_OVERTURNED``,
+        ``PRINCIPAL_ACCEPT`` or ``PRINCIPAL_REJECT``; the Server refuses any
+        other value. ``failing_rule_ids`` names the rule ids that failed when a
+        gate evaluation produced this HOLD: at most 220 of them, each at most
+        100 characters (the registration cap on a fieldMapping ``ruleId``). A
+        Server relaying its own signal cuts a longer list or a longer id to
+        those bounds. ``counter_signature`` is the counterparty Server's
+        Ed25519 signature from ``submit_co_sign_request()``, 128 lowercase hex
+        characters, sent only when the record's Type opted into co-sign."""
         body = _signal_body(
             record_id, recommendation, outcome_hash, valid_until, idempotency_key,
             outcome, schema_ref, reason_code, failing_rule_ids, counter_signature,
@@ -358,10 +383,14 @@ class AsyncFederationResource:
         valid_until: str,
         idempotency_key: str,
         schema_ref: dict[str, Any],
-        reason_code: str | None,
+        reason_code: FederationSignalReasonCode | None,
         failing_rule_ids: list[str] | None,
         counter_signature: str | None = None,
     ) -> dict[str, Any]:
+        """See :meth:`FederationResource.relay_signal`: ``reason_code`` is one
+        of the six :data:`FederationSignalReasonCode` values or None,
+        ``failing_rule_ids`` at most 220 ids of at most 100 characters, and
+        ``counter_signature`` 128 lowercase hex characters."""
         body = _signal_body(
             record_id, recommendation, outcome_hash, valid_until, idempotency_key,
             outcome, schema_ref, reason_code, failing_rule_ids, counter_signature,

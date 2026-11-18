@@ -273,8 +273,10 @@ Options:
                               so entries sealed before the peer changed its
                               federation key verify. Each message is placed
                               by its signed wire.timestamp, never by the
-                              unsigned createdAt. One signed under a key
-                              before the key's activation fails; one signed
+                              unsigned createdAt, with 300 seconds allowed
+                              at each edge of the window. One signed under a
+                              key earlier than that before the key's
+                              activation fails; one signed later than that
                               after its retirement is counted as after
                               retirement, in order when the receiver's
                               federation.peer_revoked row for the peer comes
@@ -734,6 +736,17 @@ def _format_dump_text(
         lines.extend(
             f"    [{a.code}] {_chain_name(a)} pos {a.position} key {a.key_id}: {a.detail}" for a in report.vault.accounted
         )
+    if report.vault.accounted_checkpoints:
+        # Set aside the same way, and never evidence: no chain was compared with
+        # one of these.
+        lines.append(
+            f"  checkpoints set aside: {len(report.vault.accounted_checkpoints)} (signed by a distrusted key before "
+            "its retirement; not verified, and no chain was judged against them)"
+        )
+        lines.extend(
+            f"    [{a.code}] {_chain_name(a)} checkpoint pos {a.position} key {a.key_id}: {a.detail}"
+            for a in report.vault.accounted_checkpoints
+        )
     lines.append("")
     lines.append("org_admin_reads chain")
     lines.append(f"  orgs             : {report.org_admin_reads.org_count}")
@@ -751,6 +764,16 @@ def _format_dump_text(
     for f in report.org_admin_reads.failures:
         lines.append(f"    [{f.code}] {f.message}")
         lines.append(f"      -> {suggestion(f.code)}")
+    if report.org_admin_reads.accounted:
+        lines.append(
+            f"  accounted for    : {len(report.org_admin_reads.accounted)} (signed by a distrusted key before its "
+            "retirement; not verified, and no root was compared for a tree head)"
+        )
+        lines.extend(
+            f"    [{a.code}] Org {a.org_id} {f'leaf {a.at}' if a.kind == 'leaf' else f'tree head at size {a.at}'} "
+            f"key {a.key_id}: {a.detail}"
+            for a in report.org_admin_reads.accounted
+        )
     return "\n".join(lines)
 
 
@@ -862,7 +885,10 @@ def _format_export_text(
     # instead, actorOwnerId/actorId, IS signature-covered, so say whether this
     # run checked it. ``applied`` says the check ran, not that it passed, so a
     # failed run is not told its attribution agrees. As @agledger/verify says it.
-    fields = result.unsigned_projection_fields
+    # An export taken with ?evidence=true lists `evidence` among its unsigned
+    # fields. It is no display projection: each body is held to the hash its
+    # entry signs, and the evidence-bodies line above carries that result.
+    fields = [f for f in result.unsigned_projection_fields if f != "evidence"]
     if fields:
         if result.optional_checks.get("actor_attribution") != "applied":
             attribution = (
@@ -881,6 +907,11 @@ def _format_export_text(
         lines.append(
             f"  note              : {len(fields)} unsigned display projection field(s) ({', '.join(fields)}) are NOT "
             f"signature-covered. {attribution}"
+        )
+    if len(fields) < len(result.unsigned_projection_fields):
+        lines.append(
+            "  note              : inlined evidence bodies sit outside the signature and count only as far as each "
+            'was held to the hash its entry signs; see "evidence bodies" above.'
         )
     return "\n".join(lines)
 
@@ -999,12 +1030,20 @@ def _dump_report_with_flags(report: VerifyReport) -> VerifyReport:
                 dataclasses.replace(a, detail=_flag_wording(a.detail))
                 for a in report.vault.accounted
             ],
+            accounted_checkpoints=[
+                dataclasses.replace(a, detail=_flag_wording(a.detail))
+                for a in report.vault.accounted_checkpoints
+            ],
         ),
         org_admin_reads=dataclasses.replace(
             report.org_admin_reads,
             failures=[
                 dataclasses.replace(f, message=_flag_wording(f.message))
                 for f in report.org_admin_reads.failures
+            ],
+            accounted=[
+                dataclasses.replace(a, detail=_flag_wording(a.detail))
+                for a in report.org_admin_reads.accounted
             ],
         ),
     )

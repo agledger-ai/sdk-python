@@ -393,12 +393,18 @@ def test_chain_signing_key_unanchored_pinned_on_the_vault_key_fails_the_planted_
 
 def test_the_key_window_vectors_sign_the_window_they_test_and_grade_as_their_manifest_codes_pinned() -> None:
     # Each signs the window it tests and sets the column to the signed value,
-    # so pinned on the vault key there is no drift and no closure finding:
-    # only the code the manifest names, or nothing.
+    # so pinned on the vault key there is no drift and no closure finding: the
+    # code the manifest names, or nothing. The checkpoints and read-log rows
+    # the key signed are held to the same window, so a vector that fails its
+    # entries fails those rows beside them.
     for v in _PINNED:
         if v["file"] in ("dump/valid-rotation-boundary", "dump/chain-key-not-yet-active", "dump/chain-key-expired"):
-            want = [v["failureCode"]] if v["expect"] == "fail" else []
-            assert sorted(set(_grade(v["file"], v["options"]["trustAnchors"]))) == want, v["file"]
+            codes = _grade(v["file"], v["options"]["trustAnchors"])
+            assert "CHAIN_KEY_WINDOW_DRIFT" not in codes, v["file"]
+            if v["expect"] == "pass":
+                assert codes == [], v["file"]
+            else:
+                assert v["failureCode"] in codes, v["file"]
 
 
 def test_a_dump_without_anchors_passes_flagged_and_says_so() -> None:

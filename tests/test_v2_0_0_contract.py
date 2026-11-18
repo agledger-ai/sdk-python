@@ -274,6 +274,10 @@ SPEC_CHAIN_INTEGRITY_REASON = {
     # An entry a VAULT_DISTRUSTED_KEYS key signed before a trusted key retired
     # it, and key material that does not verify as a set.
     "signing_key_distrusted", "signing_key_material_invalid",
+    # A checkpoint written outside its key's published window, and a run of
+    # more accounted-for distrusted checkpoints than the Server walks past.
+    "checkpoint_key_not_yet_active", "checkpoint_key_expired",
+    "checkpoint_accounted_run_exceeded",
 }
 SPEC_CHAIN_FAILURE = {
     "agent_signature_invalid", "audit_vault_truncated", "cert_actor_drift", "cert_expired",
