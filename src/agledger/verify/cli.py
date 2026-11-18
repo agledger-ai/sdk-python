@@ -52,6 +52,7 @@ from agledger.verify.verify_dump import verify_dump
 from agledger.verify.verify_export import (
     AgentSignatureCounts,
     CheckApplicability,
+    EntryCount,
     EvidenceBindingCounts,
     VerifyExportResult,
     build_agent_key_registry,
@@ -513,6 +514,35 @@ def attach_federation_key_histories(keys: list[dict[str, Any]], paths: Sequence[
 _COUNTED_ON_SOUND_ENTRIES = ", counted on the entries that passed every other check"
 
 
+def _entry_count_summary(count: EntryCount, held: int) -> str:
+    """What the export's entry count was held to. A chain cut from the end
+    still verifies entry by entry, so the reader is told which stated count, if
+    any, stood behind the number above. Mirrors ``entryCountSummary`` in
+    ``@agledger/verify``."""
+    if count.expected_entries is not None:
+        expected = count.expected_entries
+        if held < expected:
+            return f"{held} where the checkpoint at position {expected} anchors {expected}"
+        return f"held to the checkpoint at position {expected}; {held - expected} newer than it"
+    if count.stated_entries is not None:
+        stated = count.stated_entries
+        if held < stated:
+            return f"{held} where the export states {stated}; it names no checkpoint for this record yet"
+        return f"held to the {stated} the export states; it names no checkpoint for this record yet"
+    return "the file's own; the export states no count and names no checkpoint"
+
+
+def _checkpointed_chains_summary(checkpointed: int, chains: int) -> str:
+    """How many chains a checkpoint holds the length of, and what the rest
+    rest on. Mirrors ``checkpointedChainsSummary`` in ``@agledger/verify``."""
+    rest = chains - checkpointed
+    if chains == 0:
+        return "0 of 0 chains"
+    if rest <= 0:
+        return f"{checkpointed} of {chains} chains, each held to a checkpoint"
+    return f"{checkpointed} of {chains} chains held to a checkpoint; the length of the other {rest} is the dump's own"
+
+
 def _evidence_binding_summary(counts: EvidenceBindingCounts, run_failed: bool = False) -> str:
     """One line on the evidence bodies an ``?evidence=true`` export inlines,
     worded so an export taken without them never reads as evidence that was
@@ -719,6 +749,9 @@ def _format_dump_text(
     lines.append(f"  entries     : {report.vault.entry_count}")
     lines.append(f"  checkpoints : {report.vault.checkpoint_count}")
     lines.append(
+        f"  checkpointed: {_checkpointed_chains_summary(report.vault.checkpointed_chain_count, report.vault.record_count)}"
+    )
+    lines.append(
         f"  agent sigs  : {_agent_signature_summary(report.vault.agent_signatures, report.vault.optional_checks['agent_signature'], keys_given, report.vault.cert_keys_from_chain, run_failed=bool(report.vault.failures))}"
     )
     lines.append(
@@ -813,6 +846,10 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
             "failed": result.evidence_binding.failed,
         },
         "unsignedProjectionFields": list(result.unsigned_projection_fields),
+        "entryCount": {
+            "expectedEntries": result.entry_count.expected_entries,
+            "statedEntries": result.entry_count.stated_entries,
+        },
     }
     if result.broken_at is not None:
         out["brokenAt"] = {
@@ -846,6 +883,7 @@ def _format_export_text(
     lines.append(
         f"  entries           : {result.verified_entries}/{result.total_entries} verified"
     )
+    lines.append(f"  entry count       : {_entry_count_summary(result.entry_count, result.total_entries)}")
     cov = result.signature_coverage
     lines.append(
         f"  signature coverage: signed={cov.signed} unsigned={cov.unsigned} "

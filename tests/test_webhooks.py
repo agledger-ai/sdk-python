@@ -120,7 +120,7 @@ def keypair():
     raw = base64.b64encode(
         pub.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     ).decode()
-    keys = [{"keyId": KEY_ID, "algorithm": "Ed25519", "publicKey": spki, "publicKeyRaw": raw, "status": "active"}]
+    keys = [{"keyId": KEY_ID, "algorithm": "Ed25519", "publicKey": spki, "publicKeyRaw": raw, "status": "active", "activatedAt": "2026-01-01T00:00:00.000000Z", "retiredAt": None}]
     return priv, spki, raw, keys
 
 
@@ -189,6 +189,46 @@ def test_rfc9421_stale_signature(keypair):
     priv, spki, _raw, _keys = keypair
     headers = _sign(priv, created=int(time.time()) - 600)
     assert verify_rfc9421(headers, RFC_BODY, spki) is False
+
+
+def test_rfc9421_key_window_from_key_list(keypair):
+    """`created` is held to the signing key's window, 300s allowed at each edge."""
+    from datetime import UTC, datetime
+
+    from agledger.types import VerificationKey
+
+    priv, spki, _raw, keys = keypair
+    now = int(time.time())
+
+    def at(seconds: int) -> str:
+        return datetime.fromtimestamp(seconds, UTC).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+    def listed(activated: object, retired: object, status: str = "retired") -> list[dict[str, object]]:
+        return [{**keys[0], "status": status, "activatedAt": activated, "retiredAt": retired}]
+
+    long_ago = at(now - 86_400)
+    fresh = _sign(priv, created=now)
+    # A retired key still verifies what it signed while active, and up to 300s after.
+    assert verify_rfc9421(_sign(priv, created=now - 100), RFC_BODY, listed(long_ago, at(now - 50))) is True
+    assert verify_rfc9421(fresh, RFC_BODY, listed(long_ago, at(now - 300))) is True
+    assert verify_rfc9421(fresh, RFC_BODY, listed(long_ago, at(now - 301))) is False
+    assert verify_rfc9421(fresh, RFC_BODY, listed(long_ago, at(now - 23 * 60))) is False
+    # Activation edge.
+    assert verify_rfc9421(fresh, RFC_BODY, listed(at(now + 300), None, "active")) is True
+    assert verify_rfc9421(fresh, RFC_BODY, listed(at(now + 301), None, "active")) is False
+    # A window that cannot be read places nothing.
+    assert verify_rfc9421(fresh, RFC_BODY, listed(None, None, "active")) is False
+    assert verify_rfc9421(fresh, RFC_BODY, listed("2026-01-01", None, "active")) is False
+    assert verify_rfc9421(fresh, RFC_BODY, listed(long_ago, "yesterday")) is False
+    assert verify_rfc9421(fresh, RFC_BODY, [{"keyId": KEY_ID, "publicKey": spki}]) is False
+    # The typed model the client returns is read the same way.
+    model = VerificationKey.model_validate({**listed(long_ago, at(now - 23 * 60))[0], "statements": []})
+    assert verify_rfc9421(fresh, RFC_BODY, [model]) is False
+    assert verify_rfc9421(fresh, RFC_BODY, [VerificationKey.model_validate({**keys[0], "statements": []})]) is True
+    # The same delivery under the pinned key string: no window to hold it to.
+    assert verify_rfc9421(fresh, RFC_BODY, spki) is True
+    with pytest.raises(SignatureVerificationError):
+        construct_event_rfc9421(fresh, RFC_BODY, listed(long_ago, at(now - 23 * 60)))
 
 
 def test_rfc9421_missing_headers(keypair):
@@ -264,7 +304,7 @@ def es256_keypair():
         )
     ).decode()
     # No publicKeyRaw on EC keys (R1 discovery reshape: SPKI only).
-    keys = [{"keyId": ES256_KEY_ID, "algorithm": "ES256", "coseAlgorithm": -7, "publicKey": spki, "status": "active"}]
+    keys = [{"keyId": ES256_KEY_ID, "algorithm": "ES256", "coseAlgorithm": -7, "publicKey": spki, "status": "active", "activatedAt": "2026-08-01T00:00:00.000000Z", "retiredAt": None}]
     return priv, spki, keys
 
 

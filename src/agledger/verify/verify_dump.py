@@ -613,12 +613,15 @@ def _verify_vault_checkpoints(
     keys: KeyCache,
     failures: list[Failure],
     accounted: list[AccountedEntry],
-) -> None:
+) -> bool:
     """Cross-check signed checkpoints against the live chain. A checkpoint
     outlives removed or rewritten chain entries, so a chain shorter than (or
     hash-mismatched with) its anchor is evidence of tampering. A checkpoint a
     ``distrusted_keys`` entry accounts for is set aside into ``accounted``
-    before anything about its row or chain is read."""
+    before anything about its row or chain is read.
+
+    Returns whether the chain was compared with at least one checkpoint, which
+    is what holds its length: one set aside is never compared with anything."""
     set_aside: set[int] = set()
     for cp in checkpoints:
         chain_key = _checkpoint_chain_key(cp)
@@ -792,8 +795,9 @@ def _verify_vault_checkpoints(
                         signing_key_id=kid,
                     )
                 )
+    held = len(checkpoints) > len(set_aside)
     if not set_aside:
-        return
+        return held
 
     chain_key = _checkpoint_chain_key(checkpoints[0])
     label = _chain_label(chain_key)
@@ -815,7 +819,7 @@ def _verify_vault_checkpoints(
                 position=_as_int(newest_first[ACCOUNTED_CHECKPOINT_RUN_CAP].get("chain_position")),
             )
         )
-        return
+        return held
     # Server mirror of `accounted_checkpoint_only`, which the Server reports
     # for a record chain and the platform-ops chain.
     if (
@@ -835,6 +839,7 @@ def _verify_vault_checkpoints(
                 position=0,
             )
         )
+    return held
 
 
 def verify_vault_chains(
@@ -904,6 +909,7 @@ def verify_vault_chains(
             record_count=record_count,
             entry_count=entry_count,
             checkpoint_count=len(checkpoints),
+            checkpointed_chain_count=checkpointed_chain_count,
             failures=failures,
             accounted=accounted,
             accounted_checkpoints=accounted_checkpoints,
@@ -925,10 +931,11 @@ def verify_vault_chains(
     open_chains: dict[str, list[DumpRow]] = {}
     closed: set[str] = set()
     chain_count = 0
+    checkpointed_chain_count = 0
     signed_entries = 0
 
     def close_chain(chain_key: str) -> None:
-        nonlocal chain_count, cert_keys_from_chain, signed_entries
+        nonlocal chain_count, checkpointed_chain_count, cert_keys_from_chain, signed_entries
         rows = open_chains.pop(chain_key, None)
         if rows is None:
             return
@@ -951,9 +958,10 @@ def verify_vault_chains(
             wire_counts,
         )
         signed_entries += sum(1 for r in results if r.signature == "ok")
-        _verify_vault_checkpoints(
+        if _verify_vault_checkpoints(
             {chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures, accounted_checkpoints
-        )
+        ):
+            checkpointed_chain_count += 1
         if len(failures) == failures_before:
             cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
 

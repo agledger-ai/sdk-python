@@ -213,6 +213,21 @@ class TestRowsADistrustedKeysEntryAccountsFor:
         assert (first.chain, first.key_id, first.code) == ("record", k1.key_id, "CHAIN_SIGNED_BY_DISTRUSTED_KEY")
         out = report.to_json()["vault"]
         assert (out["accountedCheckpointCount"], len(out["accountedCheckpoints"])) == (2, 2)
+        # A checkpoint set aside holds no chain's length; one the walk trusts does.
+        assert report.vault.checkpointed_chain_count == 0
+        first_entry = next(
+            e for e in dump.vault_entries if e["record_id"] == cp["record_id"] and e["chain_position"] == 1
+        )
+        dump.vault_checkpoints.append(
+            {
+                **build_vault_checkpoint("record-bbbb", 1, first_entry["payload_hash"], k2),
+                "created_at": "2026-07-01T00:00:00.000Z",
+            }
+        )
+        held = verify_dump(dump, **_distrusting(k1, k2))
+        assert _codes(held) == []
+        assert len(held.vault.accounted_checkpoints) == 2
+        assert held.vault.checkpointed_chain_count == 1
         text = _format_dump_text(report)
         assert re.search(r"checkpoints set aside: 2 ", text)
         assert f"Record {first.record_id} checkpoint pos 3 key {k1.key_id}" in text

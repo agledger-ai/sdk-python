@@ -310,8 +310,11 @@ except SignatureAlgorithmUnavailableError:
 `verify_rfc9421` recomputes the RFC 9530 Content-Digest, reconstructs the RFC 9421
 signature base, verifies the signature under the algorithm the resolved key
 commits to (Ed25519 or ES256), and enforces the `created` replay
-window (default/max 300s). `construct_event_rfc9421` verifies and parses in one
-step. This path needs the `cryptography` extra (`pip install 'agledger[verify]'`).
+window (default/max 300s). Given the key list, it also holds `created` to the
+signing key's `[activatedAt, retiredAt]` window, with 300s allowed at each
+edge, so a key retired between signing and your fetch still verifies what it
+signed while active and nothing it signs afterwards. `construct_event_rfc9421`
+verifies and parses in one step. This path needs the `cryptography` extra (`pip install 'agledger[verify]'`).
 
 If the host runtime cannot compute the key's algorithm, both functions raise
 `SignatureAlgorithmUnavailableError` instead of returning `False`. The usual
@@ -346,6 +349,13 @@ print(result.verdict)  # "unanchored" here: pass trust_anchors for a trusted ver
 Read `result.verdict` (`"trusted"`, `"unanchored"` or `"failed"`) rather than
 `result.valid` alone: a valid result with no `trust_anchors` is `"unanchored"`,
 which is not a trusted verdict.
+
+The chain's length is held to the two counts the export states: fewer entries
+than `exportMetadata.expectedEntries` (the position of the record's latest
+checkpoint) fails `CHECKPOINT_ROW_MISSING`, and fewer than
+`exportMetadata.totalEntries` (what the Server wrote) fails
+`CHAIN_POSITION_GAP`. `result.entry_count` reports both, each `None` when the
+export does not state it.
 
 Records written with the OIDC cert credential also carry the agent's own
 signature over each request body. Pass the certificate's public key to check
