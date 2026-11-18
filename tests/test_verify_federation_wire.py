@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from agledger.verify import (
+    FEDERATION_KEY_WINDOW_SKEW_MS,
     build_federation_key_registry,
     canonicalize_json,
     normalize_federation_key,
@@ -345,23 +346,47 @@ def test_without_the_history_the_earlier_key_fails_and_the_detail_says_what_to_s
     assert r.broken_at is not None and "agledger-federation-keys.json" in str(r.broken_at.detail)
 
 
-def test_a_message_signed_before_its_key_was_activated_fails():
-    r = verify_export(_under("K2", "2026-11-05T04:22:01.000Z"), federation_keys=[_pin("K3", _SUCCESSION)])
+# K2 is activated, and K1 retired, at 04:22:03.323630Z. The signing process's
+# clock and the sender's database clock may differ, so each edge carries
+# FEDERATION_KEY_WINDOW_SKEW_MS (300 s).
+
+
+def test_the_allowance_at_each_edge_is_300_seconds():
+    assert FEDERATION_KEY_WINDOW_SKEW_MS == 300_000
+
+
+def test_a_message_signed_more_than_the_allowance_before_its_key_was_activated_fails():
+    r = verify_export(_under("K2", "2026-11-05T04:17:03.322Z"), federation_keys=[_pin("K3", _SUCCESSION)])
     assert not r.valid
     assert r.broken_at is not None and "activates at 2026-11-05T04:22:03.323630Z" in str(r.broken_at.detail)
+    assert "more than 300s after the sender signed it" in str(r.broken_at.detail)
 
 
-def test_a_message_signed_after_its_key_was_retired_verifies_and_is_counted():
-    r = verify_export(_under("K1", "2026-11-05T04:22:05.000Z"), federation_keys=[_pin("K3", _SUCCESSION)])
+def test_a_message_signed_within_the_allowance_before_its_key_was_activated_verifies():
+    for signed_at in ("2026-11-05T04:22:01.000Z", "2026-11-05T04:17:03.323Z"):
+        r = verify_export(_under("K2", signed_at), federation_keys=[_pin("K3", _SUCCESSION)])
+        assert r.valid, signed_at
+        assert (r.federation_wire.verified, r.federation_wire.failed, r.federation_wire.after_retirement) == (1, 0, 0)
+
+
+def test_a_message_signed_more_than_the_allowance_after_its_key_was_retired_verifies_and_is_counted():
+    r = verify_export(_under("K1", "2026-11-05T04:27:03.324Z"), federation_keys=[_pin("K3", _SUCCESSION)])
     assert r.valid
     assert (r.federation_wire.verified, r.federation_wire.after_retirement) == (1, 1)
+
+
+def test_a_message_signed_within_the_allowance_after_its_key_was_retired_is_not_counted():
+    for signed_at in ("2026-11-05T04:22:05.000Z", "2026-11-05T04:27:03.323Z"):
+        r = verify_export(_under("K1", signed_at), federation_keys=[_pin("K3", _SUCCESSION)])
+        assert r.valid, signed_at
+        assert (r.federation_wire.verified, r.federation_wire.failed, r.federation_wire.after_retirement) == (1, 0, 0)
 
 
 def test_windows_come_from_the_signed_statements_not_the_keys_summary():
     doctored = json.loads(json.dumps(_SUCCESSION))
     for key in doctored["keys"]:
         key["activatedAt"] = None
-    assert not verify_export(_under("K2", "2026-11-05T04:22:01.000Z"), federation_keys=[_pin("K3", doctored)]).valid
+    assert not verify_export(_under("K2", "2026-11-05T04:16:00.000Z"), federation_keys=[_pin("K3", doctored)]).valid
 
 
 def test_a_genesis_by_digest_links_nothing_until_the_older_key_is_pinned_too():
@@ -423,7 +448,7 @@ def test_the_cli_takes_a_history_file_beside_the_key_for_its_hub(capsys: pytest.
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "export.json")
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(_under("K1", "2026-11-05T04:22:05.000Z"), fh)
+            json.dump(_under("K1", "2026-11-05T04:27:03.324Z"), fh)
         pin = f"{_HUB}={_FED_KEYS['K3']['publicKey']}"
         assert run([path, "--federation-key", pin, "--federation-key-history", history, "-f", "json"]) == 0
         out = json.loads(capsys.readouterr().out)

@@ -26,6 +26,10 @@ model: the vault-checkpoint cross-check against the live chain, and the
 org_admin_reads log (RFC 9162 leaf hashes and tree heads, via
 ``org_read_leaf_hash`` / ``org_read_merkle_root``) with its signed-tree-head and
 fork-detection passes. They emit the canonical CHECKPOINT_* / TENANT_* codes.
+Each checkpoint, leaf and tree head whose signature verifies is held to its
+key's window by the time its row was written, by the rule entries follow; one
+a ``distrusted_keys`` entry accounts for is set aside (listed, never evidence),
+as the Server's scan does.
 
 Fail-closed posture: an empty vault is CHAIN_EMPTY (never a silent pass); a row
 lacking ``cose_sign1`` is a pre-2.0 shape → UNSUPPORTED_FORMAT (not parsed
@@ -64,6 +68,7 @@ from agledger.verify.key_statements import (
 from agledger.verify.loader import load_dump
 from agledger.verify.types import (
     AccountedEntry,
+    AccountedReadLogEntry,
     Dump,
     DumpRow,
     Failure,
@@ -96,12 +101,14 @@ from agledger.verify.verify_export import (
     decode_cose_parts,
     decode_cose_predicate,
     describe_unsupported_algorithm,
+    distrust_accounts,
     earliest_key_activation,
     ed25519_jwk_thumbprint,
     js_text,
     optional_checks_report,
     org_read_leaf_hash,
     org_read_merkle_root,
+    place_in_key_window,
     position_key,
     safe_int,
     strict_eq,
@@ -329,6 +336,69 @@ def _undecided_message(at: str, key_id: object) -> str:
     )
 
 
+def _set_aside_under(keys: KeyCache, key_id: str, written_at: object, cose_sign1: object) -> RegisteredKey | None:
+    """The key a signed row is set aside under, when a ``distrusted_keys``
+    entry and the retirement a trusted key signed account for it
+    (:func:`~agledger.verify.verify_export.distrust_accounts`) and its
+    signature verifies under that key; ``None`` otherwise. A row set aside is
+    listed, never verified, and never evidence: no hash, root or claim of it is
+    read, so the holder of a leaked key cannot use one to raise a finding on an
+    intact chain or log. The Server's scan lists the same rows in
+    ``distrustedCheckpoints`` and ``orgAdminReads.distrustedEntries``. Mirrors
+    ``@agledger/verify``'s ``setAsideUnder``."""
+    key = keys.entry(key_id)
+    if key is None or not distrust_accounts(key, written_at):
+        return None
+    return key if verify_cose_sign1(_envelope_bytes(cose_sign1), key) == "ok" else None
+
+
+def _set_aside_detail(what: str, written_at: object, key_id: str, key: RegisteredKey) -> str:
+    """Why a row signed under a distrusted key is set aside, for the report."""
+    span = key.distrust_span
+    retired = span.retired_at if span is not None and span.retired_at is not None else "its retirement"
+    return (
+        f"{what} written {js_text(written_at)} is signed by key {key_id}, which distrustedKeys names, before "
+        f"{retired}, when a key the walk trusts retired it: the distrust entry accounts for it. Not verified, "
+        "and not a failure."
+    )
+
+
+def _key_window_failure(
+    key_id: str,
+    key: RegisteredKey,
+    written_at: object,
+    what: str,
+    at: str,
+    codes: tuple[FailureCode, FailureCode],
+) -> tuple[FailureCode, str] | None:
+    """Hold a row whose signature verified to its key's signed window, by the
+    time the row was written (Server mirror of ``checkpoint_key_not_yet_active``,
+    ``checkpoint_key_expired``, ``leaf_key_not_yet_active`` and
+    ``leaf_key_expired``). Runs after the signature check, as the Server orders
+    it. A row whose time cannot be read where its key has a window fails
+    closed. ``codes`` is the (not yet active, expired) pair; returns
+    ``(code, message)`` or ``None``."""
+    placed = place_in_key_window(key_id, key, written_at, what)
+    # ``accounted``: past the distrust instant with a verifying signature, set
+    # aside before this is reached, so nothing is left to report here.
+    if placed.placement in ("inside", "accounted"):
+        return None
+    code: FailureCode = (
+        codes[0]
+        if placed.placement == "not-yet-active"
+        else codes[1]
+        if placed.placement == "expired"
+        else "CHAIN_MALFORMED_ENTRY"
+    )
+    return code, f"{at}: {placed.detail}"
+
+
+#: How many checkpoints a ``distrusted_keys`` entry accounts for may sit above
+#: the newest one it does not, before the chain is reported
+#: (CHECKPOINT_ACCOUNTED_RUN_EXCEEDED). The Server's bound.
+ACCOUNTED_CHECKPOINT_RUN_CAP = 1000
+
+
 def _build_vault_key_registry(signing_keys: list[DumpRow]) -> KeyCache:
     registry: dict[str, RegisteredKey] = {}
     for k in signing_keys:
@@ -542,14 +612,37 @@ def _verify_vault_checkpoints(
     checkpoints: list[DumpRow],
     keys: KeyCache,
     failures: list[Failure],
+    accounted: list[AccountedEntry],
 ) -> None:
     """Cross-check signed checkpoints against the live chain. A checkpoint
     outlives removed or rewritten chain entries, so a chain shorter than (or
-    hash-mismatched with) its anchor is evidence of tampering."""
+    hash-mismatched with) its anchor is evidence of tampering. A checkpoint a
+    ``distrusted_keys`` entry accounts for is set aside into ``accounted``
+    before anything about its row or chain is read."""
+    set_aside: set[int] = set()
     for cp in checkpoints:
         chain_key = _checkpoint_chain_key(cp)
         label = _chain_label(chain_key)
         position = cp.get("chain_position")
+        # Set aside before anything about the row or the chain is read.
+        if cp.get("signing_key_id") is not None:
+            kid = str(cp.get("signing_key_id"))
+            under = _set_aside_under(keys, kid, cp.get("created_at"), cp.get("cose_sign1"))
+            if under is not None:
+                set_aside.add(id(cp))
+                chain, record_id, org_id = chain_of_scope(chain_key)
+                accounted.append(
+                    AccountedEntry(
+                        chain=chain,
+                        record_id=record_id,
+                        org_id=org_id,
+                        scope_id=chain_key,
+                        position=cast("int", position),
+                        key_id=kid,
+                        detail=_set_aside_detail("Checkpoint", cp.get("created_at"), kid, under),
+                    )
+                )
+                continue
         chain = by_chain.get(chain_key, [])
         idx = int(position) - 1 if isinstance(position, int) else -1
         entry = chain[idx] if 0 <= idx < len(chain) else None
@@ -679,6 +772,69 @@ def _verify_vault_checkpoints(
                     signing_key_id=_as_str(signing_key_id),
                 )
             )
+        elif signing_key_id is not None:
+            kid = str(signing_key_id)
+            window = _key_window_failure(
+                kid,
+                cast("RegisteredKey", keys.entry(kid)),
+                cp.get("created_at"),
+                "Checkpoint",
+                f"{label} pos {position}",
+                ("CHECKPOINT_KEY_NOT_YET_ACTIVE", "CHECKPOINT_KEY_EXPIRED"),
+            )
+            if window is not None:
+                failures.append(
+                    Failure(
+                        code=window[0],
+                        message=window[1],
+                        scope_id=chain_key,
+                        position=_as_int(position),
+                        signing_key_id=kid,
+                    )
+                )
+    if not set_aside:
+        return
+
+    chain_key = _checkpoint_chain_key(checkpoints[0])
+    label = _chain_label(chain_key)
+    # Server mirror of `checkpoint_accounted_run_exceeded`: the chain is judged
+    # against the newest checkpoint not set aside, and a longer run above it
+    # than a rotation leaves is rows planted under the leaked key.
+    newest_first = sorted(checkpoints, key=lambda c: position_key(c.get("chain_position")))
+    newest_first.reverse()
+    run = next((i for i, c in enumerate(newest_first) if id(c) not in set_aside), len(newest_first))
+    if run > ACCOUNTED_CHECKPOINT_RUN_CAP:
+        failures.append(
+            Failure(
+                code="CHECKPOINT_ACCOUNTED_RUN_EXCEEDED",
+                message=(
+                    f"{label}: {run} checkpoints a distrustedKeys entry accounts for sit above the newest one it "
+                    f"does not, more than the {ACCOUNTED_CHECKPOINT_RUN_CAP} a walk reads"
+                ),
+                scope_id=chain_key,
+                position=_as_int(newest_first[ACCOUNTED_CHECKPOINT_RUN_CAP].get("chain_position")),
+            )
+        )
+        return
+    # Server mirror of `accounted_checkpoint_only`, which the Server reports
+    # for a record chain and the platform-ops chain.
+    if (
+        not by_chain.get(chain_key)
+        and len(set_aside) == len(checkpoints)
+        and not chain_key.startswith("schema:")
+    ):
+        failures.append(
+            Failure(
+                code="CHECKPOINT_ACCOUNTED_ONLY",
+                message=(
+                    f"{label}: the dump holds no entry for this chain, and its only checkpoints "
+                    f"({len(checkpoints)}) are ones a distrustedKeys entry accounts for, so nothing vouches for the "
+                    "chain and nothing explains its absence"
+                ),
+                scope_id=chain_key,
+                position=0,
+            )
+        )
 
 
 def verify_vault_chains(
@@ -700,6 +856,7 @@ def verify_vault_chains(
     matches one. Anything that is not an Ed25519 JWK raises ``TypeError``."""
     failures: list[Failure] = []
     accounted: list[AccountedEntry] = []
+    accounted_checkpoints: list[AccountedEntry] = []
     # Caller keys first, then the cert keys each clean chain signs. A chain can
     # only use keys harvested from chains closed before it; the producer sorts
     # the platform-ops chain (the all-zero record id) first, so on a dump in
@@ -749,6 +906,7 @@ def verify_vault_chains(
             checkpoint_count=len(checkpoints),
             failures=failures,
             accounted=accounted,
+            accounted_checkpoints=accounted_checkpoints,
             agent_signatures_present=agent_counts.present,
             agent_signatures_verified=agent_counts.verified,
             federation_wire=wire_counts,
@@ -793,7 +951,9 @@ def verify_vault_chains(
             wire_counts,
         )
         signed_entries += sum(1 for r in results if r.signature == "ok")
-        _verify_vault_checkpoints({chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures)
+        _verify_vault_checkpoints(
+            {chain_key: rows}, checkpoints_by_chain.pop(chain_key, []), keys, failures, accounted_checkpoints
+        )
         if len(failures) == failures_before:
             cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
 
@@ -842,7 +1002,7 @@ def verify_vault_chains(
         close_chain(chain_key)
     # Checkpoints whose chain has no row left at all.
     for orphaned in checkpoints_by_chain.values():
-        _verify_vault_checkpoints({}, orphaned, keys, failures)
+        _verify_vault_checkpoints({}, orphaned, keys, failures, accounted_checkpoints)
     return report(chain_count, len(entries))
 
 
@@ -853,9 +1013,14 @@ def _group_by_org(rows: list[DumpRow]) -> dict[str, list[DumpRow]]:
     return by_org
 
 
-def _detect_checkpoint_forks(checkpoints: list[DumpRow], failures: list[Failure]) -> None:
+def _detect_checkpoint_forks(
+    checkpoints: list[DumpRow], set_aside: Mapping[int, object], failures: list[Failure]
+) -> None:
     by_key: dict[str, DumpRow] = {}
     for cp in checkpoints:
+        # A tree head set aside is not evidence, of a fork or of anything else.
+        if id(cp) in set_aside:
+            continue
         key = f"{cp.get('org_id')}:{cp.get('tree_size')}"
         prior = by_key.get(key)
         if prior is not None and prior.get("root_hash") != cp.get("root_hash"):
@@ -875,6 +1040,14 @@ def _detect_checkpoint_forks(checkpoints: list[DumpRow], failures: list[Failure]
             by_key[key] = cp
 
 
+@dataclass(frozen=True)
+class _SetAside:
+    """A read-log row set aside under a distrusted key (:func:`_set_aside_under`)."""
+
+    key_id: str
+    key: RegisteredKey
+
+
 @dataclass
 class _MustSign:
     """Whether an earlier leaf in this org's log names a real signing key."""
@@ -888,9 +1061,11 @@ def _check_leaf_signature(
     envelope: bytes,
     keys: KeyCache,
     must_sign: _MustSign,
-) -> Failure | None:
+) -> Failure | _SetAside | None:
     """Grade one read-log leaf's signature the way the Server does, after its
-    index and hash have been checked, or return None when it holds up.
+    index, hash and claim have been checked. Returns the failure, the key the
+    leaf is set aside under (:func:`_set_aside_under`), or None when it holds
+    up.
 
     The leaf has no signing-key column, so the envelope's signature-covered kid
     is the only marker it has. The unsigned sentinel kid is reduced coverage
@@ -934,6 +1109,9 @@ def _check_leaf_signature(
             leaf_index=leaf_index,
         )
     must_sign.signed_before = True
+    under = _set_aside_under(keys, kid, leaf.get("read_at"), leaf.get("cose_sign1"))
+    if under is not None:
+        return _SetAside(kid, under)
     key = keys.entry(kid)
     if key is None:
         return Failure(
@@ -963,7 +1141,14 @@ def _check_leaf_signature(
     # is a wiped signature, as the Server grades it.
     outcome = verify_cose_sign1(envelope, key)
     if outcome == "ok":
-        return None
+        window = _key_window_failure(
+            kid, key, leaf.get("read_at"), "Leaf", at, ("TENANT_READ_KEY_NOT_YET_ACTIVE", "TENANT_READ_KEY_EXPIRED")
+        )
+        if window is None:
+            return None
+        return Failure(
+            code=window[0], message=window[1], scope_id=org_id, leaf_index=leaf_index, signing_key_id=kid
+        )
     if outcome == "unsupported-key-algorithm":
         return Failure(
             code="CHAIN_UNSUPPORTED_ALGORITHM",
@@ -990,6 +1175,8 @@ def _verify_one_org_admin_reads_log(
     checkpoints: list[DumpRow],
     keys: KeyCache,
     failures: list[Failure],
+    set_aside_heads: Mapping[int, _SetAside],
+    accounted: list[AccountedReadLogEntry],
 ) -> None:
     leaves.sort(key=lambda r: position_key(r.get("leaf_index")))
     must_sign = _MustSign()
@@ -1046,14 +1233,37 @@ def _verify_one_org_admin_reads_log(
                 )
             )
             return
-        leaf_failure = _check_leaf_signature(org_id, leaf, envelope, keys, must_sign)
-        if leaf_failure is not None:
-            failures.append(leaf_failure)
+        graded = _check_leaf_signature(org_id, leaf, envelope, keys, must_sign)
+        if isinstance(graded, _SetAside):
+            accounted.append(
+                AccountedReadLogEntry(
+                    org_id=org_id,
+                    kind="leaf",
+                    at=i,
+                    key_id=graded.key_id,
+                    detail=_set_aside_detail("Leaf", leaf.get("read_at"), graded.key_id, graded.key),
+                )
+            )
+        elif graded is not None:
+            failures.append(graded)
             return  # one finding per org, the first met in leaf order
 
     leaf_hashes = [str(leaf.get("leaf_hash")) for leaf in leaves]
 
     for cp in checkpoints:
+        # Set aside before its leaf count, root or claim is read.
+        head = set_aside_heads.get(id(cp))
+        if head is not None:
+            accounted.append(
+                AccountedReadLogEntry(
+                    org_id=org_id,
+                    kind="checkpoint",
+                    at=cast("int", cp.get("tree_size")),
+                    key_id=head.key_id,
+                    detail=_set_aside_detail("Tree head", cp.get("checkpoint_at"), head.key_id, head.key),
+                )
+            )
+            continue
         raw_tree_size = cp.get("tree_size")
         tree_size = safe_int(raw_tree_size)
         if tree_size is None or tree_size > len(leaf_hashes):
@@ -1185,6 +1395,26 @@ def _verify_one_org_admin_reads_log(
                     signing_key_id=_as_str(signing_key_id),
                 )
             )
+        elif signing_key_id is not None:
+            kid = str(signing_key_id)
+            window = _key_window_failure(
+                kid,
+                cast("RegisteredKey", keys.entry(kid)),
+                cp.get("checkpoint_at"),
+                "Tree head",
+                f"Org {org_id}: checkpoint {cp.get('id')}",
+                ("TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE", "TENANT_CHECKPOINT_KEY_EXPIRED"),
+            )
+            if window is not None:
+                failures.append(
+                    Failure(
+                        code=window[0],
+                        message=window[1],
+                        scope_id=org_id,
+                        tree_size=tree_size,
+                        signing_key_id=kid,
+                    )
+                )
 
 
 def verify_org_admin_reads_chains(
@@ -1197,16 +1427,27 @@ def verify_org_admin_reads_chains(
     ``keys`` registry to share it with the vault pass; otherwise one is built
     from ``signing_keys``."""
     failures: list[Failure] = []
+    accounted: list[AccountedReadLogEntry] = []
     if keys is None:
         keys = _build_vault_key_registry(signing_keys)
     leaves_by_org = _group_by_org(reads)
     checkpoints_by_org = _group_by_org(checkpoints)
 
-    _detect_checkpoint_forks(checkpoints, failures)
+    set_aside_heads: dict[int, _SetAside] = {}
+    for cp in checkpoints:
+        if cp.get("signing_key_id") is None:
+            continue
+        kid = str(cp.get("signing_key_id"))
+        under = _set_aside_under(keys, kid, cp.get("checkpoint_at"), cp.get("cose_sign1"))
+        if under is not None:
+            set_aside_heads[id(cp)] = _SetAside(kid, under)
+    _detect_checkpoint_forks(checkpoints, set_aside_heads, failures)
 
     # Walk every org with leaves OR checkpoints: a checkpoint over an empty
     # leaf set would otherwise slip through silently.
-    org_ids = set(leaves_by_org) | set(checkpoints_by_org)
+    # In first-seen order, as @agledger/verify walks them, so the report lists
+    # each org's findings in the same order on every run.
+    org_ids = list(dict.fromkeys([*leaves_by_org, *checkpoints_by_org]))
     for org_id in org_ids:
         _verify_one_org_admin_reads_log(
             org_id,
@@ -1214,6 +1455,8 @@ def verify_org_admin_reads_chains(
             checkpoints_by_org.get(org_id, []),
             keys,
             failures,
+            set_aside_heads,
+            accounted,
         )
 
     # Witness cosignatures are reported, not verified: the Server cannot verify
@@ -1232,6 +1475,7 @@ def verify_org_admin_reads_chains(
         checkpoint_count=len(checkpoints),
         witness_cosigned_checkpoints=witness_cosigned,
         failures=failures,
+        accounted=accounted,
     )
 
 

@@ -115,6 +115,35 @@ class AccountedEntry:
 
 
 @dataclass
+class AccountedReadLogEntry:
+    """A read-log leaf or tree head set aside: signed by a ``distrusted_keys``
+    key, verifying under it, and written inside what that entry and the
+    retirement a trusted key signed account for. The Server's scan lists the
+    same rows in ``orgAdminReads.distrustedEntries``. Listed, never verified,
+    never a failure. A leaf keeps its index, hash and claim checks; a tree
+    head's leaf count and root are not compared. ``at`` is the leaf index or
+    the tree size. Mirrors ``@agledger/verify``'s ``AccountedReadLogEntry``,
+    field for field."""
+
+    org_id: str
+    kind: Literal["leaf", "checkpoint"]
+    at: int
+    key_id: str
+    detail: str
+    code: Literal["CHAIN_SIGNED_BY_DISTRUSTED_KEY"] = "CHAIN_SIGNED_BY_DISTRUSTED_KEY"
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "orgId": self.org_id,
+            "kind": self.kind,
+            "at": self.at,
+            "keyId": self.key_id,
+            "detail": self.detail,
+        }
+
+
+@dataclass
 class AgentSignatureCounts:
     """Agent signatures on the chain.
 
@@ -140,6 +169,15 @@ class VaultChainsReport:
     retirement of it account for (see :class:`AccountedEntry`). They fail
     nothing, and a report should list them. The JSON caps them as it caps
     ``failures``; ``accountedCount`` carries the true total."""
+    accounted_checkpoints: list[AccountedEntry] = field(default_factory=list[AccountedEntry])
+    """Vault checkpoints set aside the same way: signed by a
+    ``distrusted_keys`` key, verifying under it, and written inside what the
+    entry and the trusted retirement account for, as the Server's scan lists
+    them in ``distrustedCheckpoints``. A checkpoint set aside is never
+    evidence: its position and hash are not compared with the chain.
+    ``position`` is the checkpoint's chain position. The JSON caps them as it
+    caps ``failures`` (``accountedCheckpoints``); ``accountedCheckpointCount``
+    carries the true total."""
     agent_signatures_present: int = 0
     """Entries that passed every other check and whose signed payload carries
     ``predicate.on_behalf_of.agent_signature``, across every chain."""
@@ -204,6 +242,8 @@ class VaultChainsReport:
             "failureCount": len(self.failures),
             "accounted": [a.to_json() for a in self.accounted[:MAX_REPORTED_FAILURES]],
             "accountedCount": len(self.accounted),
+            "accountedCheckpoints": [a.to_json() for a in self.accounted_checkpoints[:MAX_REPORTED_FAILURES]],
+            "accountedCheckpointCount": len(self.accounted_checkpoints),
             "optionalChecks": dict(self.optional_checks),
             "agentSignatures": {
                 "present": self.agent_signatures_present,
@@ -236,6 +276,10 @@ class TenantAdminReadsReport:
     checkpoint_count: int = 0
     witness_cosigned_checkpoints: list[WitnessCosignedCheckpoint] = field(default_factory=list[WitnessCosignedCheckpoint])
     failures: list[Failure] = field(default_factory=list[Failure])
+    accounted: list[AccountedReadLogEntry] = field(default_factory=list[AccountedReadLogEntry])
+    """Leaves and tree heads set aside (see :class:`AccountedReadLogEntry`).
+    They fail nothing, and a report should list them. The JSON caps them as it
+    caps ``failures``; ``accountedCount`` carries the true total."""
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -247,6 +291,8 @@ class TenantAdminReadsReport:
             ],
             "failures": [f.to_json() for f in self.failures[:MAX_REPORTED_FAILURES]],
             "failureCount": len(self.failures),
+            "accounted": [a.to_json() for a in self.accounted[:MAX_REPORTED_FAILURES]],
+            "accountedCount": len(self.accounted),
         }
 
 

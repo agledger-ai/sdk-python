@@ -38,6 +38,7 @@ Install via ``pip install 'agledger[verify]'``.
 from agledger.verify.failures import FailureCode, suggestion
 from agledger.verify.federation_wire import (
     FEDERATION_KEY_STATEMENT_DOMAIN,
+    FEDERATION_KEY_WINDOW_SKEW_MS,
     FEDERATION_WIRE_SCHEME,
     FederationKeyRegistry,
     FederationTrustedKey,
@@ -77,6 +78,7 @@ from agledger.verify.key_statements import (
 from agledger.verify.loader import DumpLoadError, load_dump
 from agledger.verify.types import (
     AccountedEntry,
+    AccountedReadLogEntry,
     Dump,
     Failure,
     TenantAdminReadsReport,
@@ -85,7 +87,11 @@ from agledger.verify.types import (
     VerifyReport,
     chain_of_scope,
 )
-from agledger.verify.verify_dump import verify_dump, verify_dump_dir
+from agledger.verify.verify_dump import (
+    ACCOUNTED_CHECKPOINT_RUN_CAP,
+    verify_dump,
+    verify_dump_dir,
+)
 from agledger.verify.verify_export import (
     ACCOUNTED_ENTRY_CODE,
     AGENT_SIGNATURE_CONTEXT,
@@ -95,24 +101,30 @@ from agledger.verify.verify_export import (
     EvidenceBindingCounts,
     KeyProvenance,
     KeySource,
+    KeyWindowPlacement,
     SignatureCoverage,
     VerifyExportResult,
+    distrust_accounts,
     earliest_key_activation,
     ed25519_jwk_thumbprint,
     org_read_leaf_hash,
     org_read_merkle_root,
+    place_in_key_window,
     verify_export,
     verify_org_read_inclusion,
     written_while_signing,
 )
 
 __all__ = [
+    "ACCOUNTED_CHECKPOINT_RUN_CAP",
     "ACCOUNTED_ENTRY_CODE",
     "AGENT_SIGNATURE_CONTEXT",
     "FEDERATION_KEY_STATEMENT_DOMAIN",
+    "FEDERATION_KEY_WINDOW_SKEW_MS",
     "FEDERATION_WIRE_SCHEME",
     "KEY_STATEMENT_CTY",
     "AccountedEntry",
+    "AccountedReadLogEntry",
     "AgentSignatureCounts",
     "BrokenAt",
     "DistrustSpan",
@@ -137,6 +149,7 @@ __all__ = [
     "KeyTrustReport",
     "KeyTrustState",
     "KeyTrustStatus",
+    "KeyWindowPlacement",
     "SignatureCoverage",
     "TenantAdminReadsReport",
     "TrustKeyInput",
@@ -150,6 +163,7 @@ __all__ = [
     "chain_of_scope",
     "check_federation_wire",
     "compute_key_trust",
+    "distrust_accounts",
     "earliest_key_activation",
     "ed25519_jwk_thumbprint",
     "extract_federation_wire",
@@ -163,6 +177,7 @@ __all__ = [
     "org_read_merkle_root",
     "parse_distrusted_keys",
     "parse_trust_anchors",
+    "place_in_key_window",
     "settle_key_trust",
     "spki_sha256",
     "suggestion",

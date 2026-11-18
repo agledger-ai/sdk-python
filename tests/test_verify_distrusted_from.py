@@ -34,6 +34,7 @@ from agledger.verify.key_statements import (
 )
 from agledger.verify.types import (
     AccountedEntry,
+    AccountedReadLogEntry,
     Failure,
     TenantAdminReadsReport,
     VaultChainsReport,
@@ -578,6 +579,18 @@ def test_a_dump_report_rewords_failure_messages_and_details_never_ids_scopes_or_
                     detail="which distrustedKeys names",
                 )
             ],
+            accounted_checkpoints=[
+                AccountedEntry(
+                    code="CHAIN_SIGNED_BY_DISTRUSTED_KEY",
+                    chain="record",
+                    record_id="distrustedKeys",
+                    org_id="trustAnchors",
+                    scope_id="requireKeyId",
+                    position=0,
+                    key_id="agentKeys",
+                    detail="which distrustedKeys names",
+                )
+            ],
         ),
         org_admin_reads=TenantAdminReadsReport(
             failures=[
@@ -586,7 +599,12 @@ def test_a_dump_report_rewords_failure_messages_and_details_never_ids_scopes_or_
                     "pin it in trustAnchors",
                     scope_id="trustAnchors",
                 )
-            ]
+            ],
+            accounted=[
+                AccountedReadLogEntry(
+                    org_id="trustAnchors", kind="leaf", at=0, key_id="agentKeys", detail="which distrustedKeys names"
+                )
+            ],
         ),
         key_trust=KeyTrustReport(
             status="walked", detail="No trustAnchors were given", findings=[finding]
@@ -626,3 +644,19 @@ def test_a_dump_report_rewords_failure_messages_and_details_never_ids_scopes_or_
         **report.to_json()["orgAdminReads"]["failures"][0],
         "message": "pin it with --trust-anchor",
     }
+    checkpoint = worded["vault"]["accountedCheckpoints"][0]
+    assert (checkpoint["detail"], checkpoint["recordId"], checkpoint["keyId"]) == (
+        "which --distrusted-key names",
+        "distrustedKeys",
+        "agentKeys",
+    )
+    assert worded["vault"]["accountedCheckpointCount"] == 1
+    assert worded["orgAdminReads"]["accounted"][0] == {
+        "code": "CHAIN_SIGNED_BY_DISTRUSTED_KEY",
+        "orgId": "trustAnchors",
+        "kind": "leaf",
+        "at": 0,
+        "keyId": "agentKeys",
+        "detail": "which --distrusted-key names",
+    }
+    assert worded["orgAdminReads"]["accountedCount"] == 1

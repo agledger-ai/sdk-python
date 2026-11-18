@@ -472,6 +472,25 @@ that no trusted key has retired is `KEY_CLOSURE_INVALID`, naming the forced
 retire call that bounds it. `verify_dump_dir(path, ...)` loads and verifies a
 dump directory, refusing its key options before it reads anything.
 
+Vault checkpoints, read-log leaves and read-log tree heads are set aside by the
+same rule, as the Server's scan lists them in `distrustedCheckpoints` and
+`orgAdminReads.distrustedEntries`. A row set aside is never evidence: no chain
+is compared with a checkpoint set aside, no root is compared and no fork is
+read from a tree head set aside, so whoever holds the leaked key cannot use one
+to raise a finding on an intact chain or log. A leaf set aside keeps its index,
+hash and claim checks. They are listed in `vault.accounted_checkpoints` (each
+an `AccountedEntry`, `position` being the checkpoint's) and
+`org_admin_reads.accounted` (each an `AccountedReadLogEntry`: `org_id`, `kind`
+`"leaf"` or `"checkpoint"`, `at` the leaf index or tree size, `key_id`,
+`detail`); `agledger-verify` prints them as `checkpoints set aside` and
+`accounted for`, and its JSON carries `accountedCheckpoints` with
+`accountedCheckpointCount` and `orgAdminReads.accounted` with
+`accountedCount`. Two findings keep that from hiding a chain: a record or
+platform-ops chain with no entry in the dump whose only checkpoints are set
+aside is `CHECKPOINT_ACCOUNTED_ONLY`, and more than 1000
+(`ACCOUNTED_CHECKPOINT_RUN_CAP`) checkpoints set aside above the newest one
+that is not is `CHECKPOINT_ACCOUNTED_RUN_EXCEEDED`.
+
 `distrusted_keys` on an export is stricter than on a dump. A dump's
 `vault_key_statements` rows date what a distrusted key stored before its cutoff,
 as the Server does. An export's statements, and those on keys you pass, carry
@@ -579,6 +598,17 @@ claim inside each checkpoint, leaf and tree head is held to its row
 verdict: an `unanchored` report passes, and is not a trusted verdict until you
 give it a pin.
 
+A vault checkpoint, a read-log leaf and a read-log tree head whose signature
+verifies is held to the window of its key by the time its row was written
+(`created_at`, `read_at`, `checkpoint_at`), by the rule entries are held to.
+One written before the key's activation is `CHECKPOINT_KEY_NOT_YET_ACTIVE`,
+`TENANT_READ_KEY_NOT_YET_ACTIVE` or `TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE`; one
+written after its retirement is `CHECKPOINT_KEY_EXPIRED`,
+`TENANT_READ_KEY_EXPIRED` or `TENANT_CHECKPOINT_KEY_EXPIRED`. A row written
+exactly at the retirement passes, and a signature that does not verify is
+reported ahead of the window. With `trust_anchors` the window is the one the
+key's statements sign; without, the one its registry row lists.
+
 The org-read tree primitives are exported for checking an inclusion proof from
 `GET /v1/audit/org-reads/checkpoints/{id}/proof`:
 
@@ -631,7 +661,11 @@ reports count them under `federation_wire`. In code, pass `federation_keys=`
 `verify_export`. After a peer changes its federation key, give the peer's key
 history (`discovery.get_federation_keys()` on the peer, or
 `--federation-key-history <file>`) beside the key you pinned; each message is
-placed in its key's window by its signed `wire.timestamp`. Needs a Server 2.2 or later.
+placed in its key's window by its signed `wire.timestamp`, with 300 seconds
+(`FEDERATION_KEY_WINDOW_SKEW_MS`) allowed at each edge: one signed earlier
+than that before its key's activation fails, and one signed later than that
+after its retirement is counted under `federation_wire.after_retirement`.
+Needs a Server 2.2 or later.
 
 On an `/audit-export` taken with `evidence=True`, `verify_export` hashes each
 inlined evidence body (SHA-256 over its RFC 8785 form) against the
