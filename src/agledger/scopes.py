@@ -133,7 +133,9 @@ SCOPE_PROFILES: dict[ScopeProfileName, ScopeProfile] = {
         "allowed_roles": ("admin",),
         "scopes": (
             Scopes.ADMIN_KEYS,
+            Scopes.AGENTS_READ,
             Scopes.AGENTS_MANAGE,
+            Scopes.WEBHOOKS_READ,
             Scopes.WEBHOOKS_MANAGE,
             Scopes.SCHEMAS_READ,
             Scopes.SCHEMAS_WRITE,
