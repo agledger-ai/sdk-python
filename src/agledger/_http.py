@@ -74,7 +74,7 @@ SDK_VERSION = _resolve_sdk_version()
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
 
-def _should_retry(status: int, error: APIError, method: str, headers: dict[str, str]) -> bool:
+def _should_retry(status: int, error: APIError, method: str, headers: Mapping[str, str]) -> bool:
     """Whether a failed attempt is worth another try.
 
     429 and 5xx always are. A 409 is when the Server marks it ``retryable: true``
