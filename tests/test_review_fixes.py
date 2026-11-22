@@ -324,10 +324,20 @@ def test_a_boolean_rewritten_as_one_fails_the_binding():
     assert result.broken_at is not None and result.broken_at.code == "CHAIN_PAYLOAD_BINDING_MISMATCH"
 
 
-def test_a_row_on_behalf_of_that_is_not_an_object_is_ignored():
+def test_a_row_on_behalf_of_that_is_not_an_object_is_ignored_where_none_was_signed():
+    doc = json.loads((LIVE / "export-lifecycle.json").read_text())
+    entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("on_behalf_of"))
+    entry["payload"]["on_behalf_of"] = "an older row shape"
+    assert verify_export(doc).valid
+
+
+def test_a_signed_on_behalf_of_replaced_by_a_non_object_fails():
+    # The Server writes every signed on_behalf_of into the export payload.
     doc = json.loads((LIVE / "export-cert-lifecycle.json").read_text())
     _first_obo(doc)["on_behalf_of"] = "an older row shape"
-    assert verify_export(doc).valid
+    result = verify_export(doc)
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_PAYLOAD_BINDING_MISMATCH"
 
 
 # --- 7: the CLI does not tell a caller who passed keys to pass keys ---
