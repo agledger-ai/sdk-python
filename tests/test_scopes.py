@@ -29,7 +29,10 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         "admin:keys", "admin:system", "records:read", "records:write",
         "completions:read", "completions:write",
     ),
-    "admin-iac": ("admin:keys", "agents:manage", "webhooks:manage", "schemas:read", "schemas:write"),
+    "admin-iac": (
+        "admin:keys", "agents:read", "agents:manage", "webhooks:read", "webhooks:manage",
+        "schemas:read", "schemas:write",
+    ),
     "admin-schema": ("schemas:read", "schemas:write", "schemas:admin"),
     "agent-full": (
         "records:read", "records:write", "completions:read", "completions:write",
