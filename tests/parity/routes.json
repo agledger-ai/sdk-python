@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-05T03:32:35.216Z",
+  "generatedAt": "2026-11-22T16:01:08.550Z",
   "sourceKind": "local",
   "apiVersion": "2.2.0",
-  "count": 196,
+  "count": 192,
   "routes": [
     {
       "method": "DELETE",
@@ -480,6 +480,7 @@
       "responseCodes": [
         200,
         401,
+        403,
         429
       ]
     },
@@ -1960,6 +1961,67 @@
     },
     {
       "method": "GET",
+      "path": "/v1/records/counts",
+      "operationId": "countRecords",
+      "tag": "Records",
+      "requiredFields": [],
+      "bodyFields": [],
+      "queryFields": [
+        "category",
+        "correlationId",
+        "criteria",
+        "criteriaGt",
+        "criteriaGte",
+        "criteriaLt",
+        "criteriaLte",
+        "disputeStatus",
+        "externalTaskId",
+        "from",
+        "gateMode",
+        "groupBy",
+        "hasDispute",
+        "imported",
+        "limit",
+        "metadata",
+        "metadataGt",
+        "metadataGte",
+        "metadataLt",
+        "metadataLte",
+        "operatingMode",
+        "orgId",
+        "originRecordId",
+        "parentRecordId",
+        "performerAgentId",
+        "producedBy",
+        "projectRef",
+        "ref.id",
+        "ref.system",
+        "ref.type",
+        "role",
+        "source",
+        "status",
+        "superseded",
+        "supersedesRecordId",
+        "to",
+        "traceId",
+        "type",
+        "updatedAfter",
+        "updatedBefore"
+      ],
+      "pathParams": [],
+      "responseCodes": [
+        200,
+        400,
+        401,
+        403,
+        414,
+        429,
+        500,
+        503
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/v1/records/me/verdict-statistics",
       "operationId": "getOwnVerdictStatistics",
       "tag": "Records",
@@ -1988,6 +2050,10 @@
         "category",
         "correlationId",
         "criteria",
+        "criteriaGt",
+        "criteriaGte",
+        "criteriaLt",
+        "criteriaLte",
         "cursor",
         "disputeStatus",
         "externalTaskId",
@@ -1997,11 +2063,17 @@
         "imported",
         "limit",
         "metadata",
+        "metadataGt",
+        "metadataGte",
+        "metadataLt",
+        "metadataLte",
         "operatingMode",
         "order",
         "orgId",
+        "originRecordId",
         "parentRecordId",
         "performerAgentId",
+        "producedBy",
         "projectRef",
         "ref.id",
         "ref.system",
@@ -2013,6 +2085,7 @@
         "superseded",
         "supersedesRecordId",
         "to",
+        "traceId",
         "type",
         "updatedAfter",
         "updatedBefore",
@@ -2355,6 +2428,7 @@
         403,
         404,
         414,
+        422,
         429,
         500,
         503
@@ -3281,25 +3355,6 @@
     },
     {
       "method": "POST",
-      "path": "/v1/admin/auth-cache/flush",
-      "operationId": "adminFlushAuthCache",
-      "tag": "Admin",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        200,
-        401,
-        403,
-        414,
-        429,
-        500,
-        503
-      ]
-    },
-    {
-      "method": "POST",
       "path": "/v1/admin/discovery/reload",
       "operationId": "adminReloadDiscovery",
       "tag": "Admin",
@@ -3462,46 +3517,6 @@
         422,
         429,
         500,
-        503
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/admin/schemas/cache/flush",
-      "operationId": "flushSchemaCache",
-      "tag": "Admin",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        200,
-        401,
-        403,
-        414,
-        429,
-        500,
-        503
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/admin/support-bundle/upload",
-      "operationId": "adminUploadSupportBundle",
-      "tag": "Admin",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [],
-      "pathParams": [],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        414,
-        429,
-        500,
-        502,
         503
       ]
     },
@@ -3957,6 +3972,7 @@
         "platform",
         "platformRef",
         "principalAgentId",
+        "producedBy",
         "projectRef",
         "publisher",
         "references",
@@ -3975,6 +3991,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4003,6 +4020,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4029,6 +4047,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4109,6 +4128,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4137,6 +4157,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4166,6 +4187,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4188,6 +4210,7 @@
         "message",
         "notes",
         "reason",
+        "signatureMeaning",
         "verdict"
       ],
       "queryFields": [],
@@ -4200,6 +4223,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4250,7 +4274,8 @@
       "bodyFields": [
         "evidence",
         "evidenceHash",
-        "idempotencyKey"
+        "idempotencyKey",
+        "producedBy"
       ],
       "queryFields": [],
       "pathParams": [
@@ -4263,6 +4288,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4355,6 +4381,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4381,6 +4408,7 @@
         401,
         403,
         404,
+        409,
         414,
         422,
         429,
@@ -4430,6 +4458,7 @@
         400,
         401,
         403,
+        409,
         414,
         429,
         500,
@@ -4471,64 +4500,6 @@
         403,
         409,
         414,
-        429,
-        500,
-        503
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/schemas/{type}/check-compatibility",
-      "operationId": "checkSchemaCompatibility",
-      "tag": "Schemas",
-      "requiredFields": [
-        "completionSchema",
-        "recordSchema"
-      ],
-      "bodyFields": [
-        "completionSchema",
-        "recordSchema"
-      ],
-      "queryFields": [
-        "publisher"
-      ],
-      "pathParams": [
-        "type"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        414,
-        429,
-        500,
-        503
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/v1/schemas/{type}/export",
-      "operationId": "exportSchema",
-      "tag": "Schemas",
-      "requiredFields": [],
-      "bodyFields": [],
-      "queryFields": [
-        "orgId",
-        "publisher",
-        "versions"
-      ],
-      "pathParams": [
-        "type"
-      ],
-      "responseCodes": [
-        200,
-        400,
-        401,
-        403,
-        404,
-        414,
-        422,
         429,
         500,
         503
@@ -4682,6 +4653,7 @@
         400,
         401,
         403,
+        409,
         414,
         422,
         429,

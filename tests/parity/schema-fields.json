@@ -12,6 +12,7 @@
       "idempotencyKey",
       "lastVerdictReason",
       "nextSteps",
+      "producedBy",
       "recordId",
       "recordRead",
       "recordStatus",
@@ -109,6 +110,7 @@
       "requestId",
       "requiredFields",
       "requiredTier",
+      "retryAfterSeconds",
       "retryable",
       "revisionCount",
       "schemaUrl",
@@ -253,6 +255,8 @@
       "euAiActDomain",
       "expiredAt",
       "externalTaskId",
+      "federationLegs",
+      "federationOrigin",
       "federationStatus",
       "fulfilledAt",
       "gateMode",
@@ -283,6 +287,7 @@
       "platform",
       "platformRef",
       "principalAgentId",
+      "producedBy",
       "projectRef",
       "publisher",
       "recordRead",
@@ -304,6 +309,7 @@
       "supersedesRecordId",
       "terminalReason",
       "tolerance",
+      "traceId",
       "type",
       "updatedAt",
       "validTransitions",
@@ -339,6 +345,8 @@
       "euAiActDomain",
       "expiredAt",
       "externalTaskId",
+      "federationLegs",
+      "federationOrigin",
       "federationStatus",
       "fulfilledAt",
       "gateMode",
@@ -369,6 +377,7 @@
       "platform",
       "platformRef",
       "principalAgentId",
+      "producedBy",
       "projectRef",
       "publisher",
       "recordRead",
@@ -390,6 +399,7 @@
       "supersedesRecordId",
       "terminalReason",
       "tolerance",
+      "traceId",
       "type",
       "updatedAt",
       "validTransitions",
@@ -402,11 +412,13 @@
       "createdAt",
       "deliveredAt",
       "id",
+      "idempotencyKey",
       "nextRetryAt",
       "requestBody",
       "responseBody",
       "responseStatus",
       "signature",
+      "signatureInput",
       "status",
       "type"
     ],
@@ -431,7 +443,7 @@
       "url"
     ]
   },
-  "enumCount": 50,
+  "enumCount": 56,
   "enums": {
     "AgentClass": {
       "values": [
@@ -510,6 +522,18 @@
       "specSites": [
         "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/chainIntegrityReason",
         "paths//v1/records/{recordId}/audit-export/get/responses/200/content/application/json/schema/properties/exportMetadata/properties/chainIntegrityReason"
+      ]
+    },
+    "AuditExportFormat": {
+      "values": [
+        "cose",
+        "csv",
+        "html",
+        "json",
+        "ndjson"
+      ],
+      "specSites": [
+        "paths//v1/records/{recordId}/audit-export/get/parameters/format/schema"
       ]
     },
     "AutoProvisionScopeProfile": {
@@ -718,6 +742,44 @@
         "paths//v1/records/{recordId}/dispute/evidence/post/requestBody/content/application/json/schema/properties/evidenceType"
       ]
     },
+    "FederationLegErrorReason": {
+      "values": [
+        "co_sign_failed",
+        "co_sign_rejected",
+        "co_sign_signature_invalid",
+        "local_config",
+        "org_deactivated",
+        "peer_http_error",
+        "peer_inactive",
+        "peer_not_applied",
+        "peer_rejected",
+        "transport_error"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/federationLegs/items/properties/lastErrorReason",
+        "components/schemas/RecordRow/properties/settlementSignal/properties/coSignPeers/items/properties/lastErrorReason"
+      ]
+    },
+    "FederationLegKind": {
+      "values": [
+        "dispute",
+        "signal",
+        "state-transition"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/federationLegs/items/properties/kind"
+      ]
+    },
+    "FederationLegStatus": {
+      "values": [
+        "delivered",
+        "failed",
+        "pending"
+      ],
+      "specSites": [
+        "components/schemas/RecordRow/properties/federationLegs/items/properties/status"
+      ]
+    },
     "FederationPeerStatus": {
       "values": [
         "active",
@@ -849,6 +911,22 @@
         "paths//v1/audit/org-reads/checkpoints/get/responses/200/content/application/json/schema/properties/checkpointing/properties/source"
       ]
     },
+    "RecordCountGroupBy": {
+      "values": [
+        "category",
+        "createdDay",
+        "createdMonth",
+        "gateMode",
+        "operatingMode",
+        "performerAgentId",
+        "principalAgentId",
+        "status",
+        "type"
+      ],
+      "specSites": [
+        "paths//v1/records/counts/get/responses/200/content/application/json/schema/properties/groupBy"
+      ]
+    },
     "RecordFederationStatus": {
       "values": [
         "delivered",
@@ -967,6 +1045,18 @@
       ],
       "specSites": [
         "components/schemas/Completion/properties/settlementSignal/properties/recommendation"
+      ]
+    },
+    "SignatureMeaning": {
+      "values": [
+        "approval",
+        "authorship",
+        "responsibility",
+        "review"
+      ],
+      "specSites": [
+        "paths//v1/records/{id}/verdict/post/requestBody/content/application/json/schema/properties/signatureMeaning",
+        "paths//v1/records/{id}/verdict/post/responses/200/content/application/json/schema/properties/signature/properties/meaning"
       ]
     },
     "StatusComponentReason": {
