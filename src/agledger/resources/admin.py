@@ -955,23 +955,11 @@ class AdminResource:
         """Download a diagnostic support bundle."""
         return self._http.get("/v1/admin/support-bundle")
 
-    def upload_support_bundle(self) -> dict[str, Any]:
-        """Upload a support bundle to AGLedger support."""
-        return self._http.post("/v1/admin/support-bundle/upload", json={})
-
-    # --- Auth + schema cache ---
-
-    def flush_auth_cache(self) -> dict[str, Any]:
-        """Flush the authentication cache."""
-        return self._http.post("/v1/admin/auth-cache/flush", json={})
+    # --- Auth cache ---
 
     def get_auth_cache_stats(self) -> dict[str, Any]:
         """Get authentication cache statistics."""
         return self._http.get("/v1/admin/auth-cache/stats")
-
-    def flush_schema_cache(self) -> dict[str, Any]:
-        """Flush the schema cache."""
-        return self._http.post("/v1/admin/schemas/cache/flush", json={})
 
     # --- Rate-limit exemptions ---
 
@@ -1593,17 +1581,8 @@ class AsyncAdminResource:
     async def get_support_bundle(self) -> dict[str, Any]:
         return await self._http.get("/v1/admin/support-bundle")
 
-    async def upload_support_bundle(self) -> dict[str, Any]:
-        return await self._http.post("/v1/admin/support-bundle/upload", json={})
-
-    async def flush_auth_cache(self) -> dict[str, Any]:
-        return await self._http.post("/v1/admin/auth-cache/flush", json={})
-
     async def get_auth_cache_stats(self) -> dict[str, Any]:
         return await self._http.get("/v1/admin/auth-cache/stats")
-
-    async def flush_schema_cache(self) -> dict[str, Any]:
-        return await self._http.post("/v1/admin/schemas/cache/flush", json={})
 
     async def list_rate_limit_exemptions(self) -> dict[str, Any]:
         return await self._http.get("/v1/admin/rate-limit-exemptions")

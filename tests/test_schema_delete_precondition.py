@@ -20,7 +20,7 @@ import httpx
 import pytest
 import respx
 
-from agledger import AgledgerClient, AsyncAgledgerClient
+from agledger import AgledgerClient
 from agledger._errors import APIError
 from agledger.types import AccountProfile
 
@@ -86,30 +86,6 @@ def test_counts_are_none_when_the_engine_does_not_send_them() -> None:
     # The SDK does not invent content: absent stays None rather than 0.
     assert excinfo.value.pinned_records is None
     assert excinfo.value.unattributable_records is None
-
-
-@respx.mock
-def test_export_pins_a_publisher() -> None:
-    route = respx.post(f"{BASE}/v1/schemas/ruleskew-v1/export").mock(
-        return_value=httpx.Response(200, json={"type": "ruleskew-v1", "publisher": "peerco"})
-    )
-
-    client().schemas.export_schema("ruleskew-v1", publisher="peerco")
-
-    assert route.calls.last.request.url.params["publisher"] == "peerco"
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_async_export_pins_a_publisher() -> None:
-    route = respx.post(f"{BASE}/v1/schemas/ruleskew-v1/export").mock(
-        return_value=httpx.Response(200, json={"type": "ruleskew-v1", "publisher": "peerco"})
-    )
-
-    async with AsyncAgledgerClient(api_key="agl_adm_test", base_url=BASE, max_retries=0) as ac:
-        await ac.schemas.export_schema("ruleskew-v1", publisher="peerco")
-
-    assert route.calls.last.request.url.params["publisher"] == "peerco"
 
 
 @respx.mock

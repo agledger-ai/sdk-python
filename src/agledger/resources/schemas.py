@@ -126,29 +126,6 @@ class SchemasResource:
             params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
-    def export_schema(
-        self,
-        type: str,
-        *,
-        versions: str | None = None,
-        org_id: str | None = None,
-        publisher: str | None = None,
-    ) -> dict[str, Any]:
-        """Export a Type schema bundle.
-
-        Pin ``publisher`` on a type two publishers offer. Without it the Server
-        emits both registrations, whose ``versions`` entries can carry the same
-        number with nothing to tell them apart.
-        """
-        params: dict[str, Any] = {}
-        if versions is not None:
-            params["versions"] = versions
-        if org_id is not None:
-            params["orgId"] = org_id
-        if publisher is not None:
-            params["publisher"] = publisher
-        return self._http.post(f"/v1/schemas/{type}/export", params=params)
-
     def import_(
         self,
         manifest: dict[str, Any],
@@ -199,20 +176,6 @@ class SchemasResource:
         """
         return self._http.get(
             f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
-        )
-
-    def check_compatibility(
-        self, type: str, schemas: dict[str, Any], *, publisher: str | None = None
-    ) -> dict[str, Any]:
-        """Dry-run the compatibility check :meth:`register` runs, without registering.
-
-        The check is against the latest ACTIVE version of ``publisher`` in your
-        org, or the Server-wide one when your org has none. ``publisher``
-        defaults to ``local`` on the Server, as ``register``'s ``publisher``
-        field does; a publisher with no version of the type here answers
-        compatible."""
-        return self._http.post(
-            f"/v1/schemas/{type}/check-compatibility", json=schemas, params=_scope(publisher)
         )
 
     def update_version(
@@ -291,24 +254,6 @@ class AsyncSchemasResource:
             params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
-    async def export_schema(
-        self,
-        type: str,
-        *,
-        versions: str | None = None,
-        org_id: str | None = None,
-        publisher: str | None = None,
-    ) -> dict[str, Any]:
-        """Export a Type schema bundle. Pin ``publisher`` on an ambiguous type."""
-        params: dict[str, Any] = {}
-        if versions is not None:
-            params["versions"] = versions
-        if org_id is not None:
-            params["orgId"] = org_id
-        if publisher is not None:
-            params["publisher"] = publisher
-        return await self._http.post(f"/v1/schemas/{type}/export", params=params)
-
     async def import_(
         self,
         manifest: dict[str, Any],
@@ -336,13 +281,6 @@ class AsyncSchemasResource:
     ) -> dict[str, Any]:
         return await self._http.get(
             f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
-        )
-
-    async def check_compatibility(
-        self, type: str, schemas: dict[str, Any], *, publisher: str | None = None
-    ) -> dict[str, Any]:
-        return await self._http.post(
-            f"/v1/schemas/{type}/check-compatibility", json=schemas, params=_scope(publisher)
         )
 
     async def update_version(

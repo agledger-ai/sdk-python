@@ -35,7 +35,6 @@ DIFF_JSON = {
     "completion": {"changes": []},
     "overallCompatibility": {"backward": True, "forward": True},
 }
-EXPORT_JSON = {"exportVersion": 1, "type": "notarize-generic-v1", "versions": []}
 MANIFEST = {
     "manifestVersion": "1.0",
     "publisher": "acme",
@@ -45,7 +44,6 @@ MANIFEST = {
 }
 IMPORT_JSON = {"type": "my-custom-v1", "version": 1, "status": "ACTIVE", "publisher": "acme", "trustClass": "imported"}
 PREVIEW_JSON = {"valid": True, "compiled": {}}
-COMPAT_JSON = {"record": {"compatible": True, "changes": []}, "completion": {"compatible": True, "changes": []}}
 RULES_JSON = {"type": "notarize-generic-v1", "syncRuleIds": ["r1"], "asyncRuleIds": []}
 VALIDATE_JSON = {"valid": True}
 
@@ -131,16 +129,6 @@ def test_diff():
 
 
 @respx.mock
-def test_export_schema():
-    route = respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/export").mock(return_value=httpx.Response(200, json=EXPORT_JSON))
-    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    result = client.schemas.export_schema("notarize-generic-v1", versions="1,2")
-    assert result["type"] == "notarize-generic-v1"
-    url = str(route.calls[0].request.url)
-    assert "versions=1" in url
-
-
-@respx.mock
 def test_import():
     route = respx.post(f"{BASE}/v1/schemas/import").mock(return_value=httpx.Response(201, json=IMPORT_JSON))
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
@@ -179,28 +167,6 @@ def test_get_version():
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
     result = client.schemas.get_version("notarize-generic-v1", 1)
     assert result["version"] == 1
-
-
-@respx.mock
-def test_check_compatibility():
-    respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/check-compatibility").mock(return_value=httpx.Response(200, json=COMPAT_JSON))
-    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    result = client.schemas.check_compatibility("notarize-generic-v1", {"recordSchema": {}, "completionSchema": {}})
-    assert result["record"]["compatible"] is True
-
-
-@respx.mock
-def test_check_compatibility_within_a_publisher():
-    route = respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/check-compatibility").mock(
-        return_value=httpx.Response(200, json=COMPAT_JSON)
-    )
-    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key")
-    client.schemas.check_compatibility(
-        "notarize-generic-v1", {"recordSchema": {}, "completionSchema": {}}, publisher="acme-corp"
-    )
-    request = route.calls.last.request
-    assert request.url.params["publisher"] == "acme-corp"
-    assert json.loads(request.content) == {"recordSchema": {}, "completionSchema": {}}
 
 
 @respx.mock
@@ -244,15 +210,6 @@ async def test_async_diff():
         assert result["type"] == "notarize-generic-v1"
         url = str(route.calls[0].request.url)
         assert "from=1" in url
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_async_export_schema():
-    respx.post(f"{BASE}/v1/schemas/notarize-generic-v1/export").mock(return_value=httpx.Response(200, json=EXPORT_JSON))
-    async with AsyncAgledgerClient(base_url="https://agledger.example.com", api_key="test-key") as client:
-        result = await client.schemas.export_schema("notarize-generic-v1")
-        assert result["type"] == "notarize-generic-v1"
 
 
 @respx.mock
