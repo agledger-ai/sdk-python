@@ -200,16 +200,47 @@ def test_dump_manifest_present_and_nonempty() -> None:
     assert any(v["expect"] == "pass" for v in _DUMP_VECTORS)
 
 
+# A manifest option the runner does not map runs the vector without it, so a
+# vector passes or fails for the wrong reason. Fail on any key not mapped here.
+_MAPPED_DUMP_OPTIONS = {"trustAnchors", "distrustedKeys"}
+
+
+def test_dump_vectors_name_no_option_the_runner_ignores() -> None:
+    used = {k for v in _DUMP_VECTORS for k in (v.get("options") or {})}
+    assert used - _MAPPED_DUMP_OPTIONS == set()
+
+
+def _accounted_of(report: Any) -> dict[str, list[tuple[Any, ...]]]:
+    """The report's accounted-for artifacts in the manifest's ``expectAccounted`` form."""
+    return {
+        "entries": sorted((e.record_id or "", e.position) for e in report.vault.accounted),
+        "checkpoints": sorted((e.record_id or "", e.position) for e in report.vault.accounted_checkpoints),
+        "readLog": sorted((e.at, e.kind) for e in report.org_admin_reads.accounted),
+    }
+
+
 @pytest.mark.skipif(not _DUMP_VECTORS, reason="no dump vectors in conformance manifest")
 @pytest.mark.parametrize("vector", _DUMP_VECTORS, ids=[_dump_vector_id(v) for v in _DUMP_VECTORS])
 def test_dump_conformance_vector(vector: dict[str, Any]) -> None:
-    anchors = (vector.get("options") or {}).get("trustAnchors")
-    report = verify_dump(load_dump(str(_CONFORMANCE_DIR / vector["file"])), trust_anchors=anchors)
+    options = vector.get("options") or {}
+    anchors = options.get("trustAnchors")
+    report = verify_dump(
+        load_dump(str(_CONFORMANCE_DIR / vector["file"])),
+        trust_anchors=anchors,
+        distrusted_keys=options.get("distrustedKeys"),
+    )
     codes = report_codes(report)
 
     if vector["expect"] == "pass":
         assert report.ok, f"{vector['file']}: expected pass but got failures {codes}"
         assert report.verdict == ("trusted" if anchors else "unanchored")
+        want = vector.get("expectAccounted")
+        if want:
+            assert _accounted_of(report) == {
+                "entries": sorted((e["recordId"], e["position"]) for e in want["entries"]),
+                "checkpoints": sorted((e["recordId"], e["position"]) for e in want["checkpoints"]),
+                "readLog": sorted((e["at"], e["kind"]) for e in want["readLog"]),
+            }, vector["file"]
         return
 
     assert not report.ok, f"{vector['file']}: expected fail but verified clean"
