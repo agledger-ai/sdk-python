@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any, Literal
 
 from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
-from agledger.types import Completion, Page
+from agledger.types import Completion, Page, ProducedByInput
 
 # The listing filter is a strict enum server-side: `WARNING` is a value a
 # completion can carry but not one the filter accepts.
@@ -24,6 +24,7 @@ class CompletionsResource:
         evidence: dict[str, Any],
         evidence_hash: str | None = None,
         idempotency_key: str | None = None,
+        produced_by: ProducedByInput | None = None,
         on_behalf_of: str | None = None,
     ) -> Completion:
         """Submit a Completion (evidence of completion) for a Record.
@@ -35,12 +36,18 @@ class CompletionsResource:
         Type's ``completionSchema`` and put it inside ``evidence``; the server
         rejects unknown root-level keys.
 
+        ``produced_by`` records what produced this completion (``modelId``,
+        ``agentSoftware``, ``promptDigest`` and the other keys of
+        :class:`~agledger.types.ProducedByInput`). An ``idempotency_key`` binds
+        it with the evidence, so a replay must send the same ``produced_by``.
+
         ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
         ``records.create``.
         """
         body: dict[str, Any] = {"evidence": evidence}
         if evidence_hash is not None: body["evidenceHash"] = evidence_hash
         if idempotency_key is not None: body["idempotencyKey"] = idempotency_key
+        if produced_by is not None: body["producedBy"] = produced_by
         return Completion.model_validate(
             self._http.post(
                 f"/v1/records/{record_id}/completions", json=body, headers=on_behalf_of_headers(on_behalf_of)
@@ -93,6 +100,7 @@ class AsyncCompletionsResource:
         evidence: dict[str, Any],
         evidence_hash: str | None = None,
         idempotency_key: str | None = None,
+        produced_by: ProducedByInput | None = None,
         on_behalf_of: str | None = None,
     ) -> Completion:
         """Submit a Completion (evidence of completion) for a Record.
@@ -105,6 +113,7 @@ class AsyncCompletionsResource:
         body: dict[str, Any] = {"evidence": evidence}
         if evidence_hash is not None: body["evidenceHash"] = evidence_hash
         if idempotency_key is not None: body["idempotencyKey"] = idempotency_key
+        if produced_by is not None: body["producedBy"] = produced_by
         return Completion.model_validate(
             await self._http.post(
                 f"/v1/records/{record_id}/completions", json=body, headers=on_behalf_of_headers(on_behalf_of)

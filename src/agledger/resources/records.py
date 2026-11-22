@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Iterator
+from decimal import Decimal
 from typing import Any, Literal, overload
 
 from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
@@ -11,11 +13,15 @@ from agledger.types import (
     BulkCreateResult,
     DisputeStatus,
     Page,
+    ProducedByInput,
     RecordAuditExport,
+    RecordCountGroupBy,
+    RecordCounts,
     RecordRow,
     RecordRowCompact,
     RecordRowCompactPage,
     RecordView,
+    SignatureMeaning,
     VerdictResult,
     VerdictStatistics,
 )
@@ -65,6 +71,107 @@ def _build_list_params(
     }
 
 
+def _bound_value(key: str, value: int | float | str) -> str:
+    """A numeric search bound as the plain decimal the Server accepts.
+
+    The wire takes ``-12`` or ``1500.75``, at most 32 characters, and refuses an
+    exponent, so ``1e22`` is written out and ``nan``, ``inf`` and booleans are
+    refused here rather than sent."""
+    if isinstance(value, bool):
+        raise ValueError(f"bound for {key!r} must be a number or a decimal string, not a boolean")
+    if isinstance(value, str):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"bound for {key!r} must be finite")
+        return format(Decimal(repr(value)), "f")
+    return str(value)
+
+
+def _bounds(bounds: dict[str, int | float | str] | None) -> dict[str, str] | None:
+    if bounds is None:
+        return None
+    return {key: _bound_value(key, value) for key, value in bounds.items()}
+
+
+def _build_search_params(
+    *,
+    org_id: str | None, status: str | None, type: str | None, role: str | None,
+    performer_agent_id: str | None, category: str | None, project_ref: str | None,
+    from_date: str | None, to_date: str | None, external_task_id: str | None,
+    parent_record_id: str | None, correlation_id: str | None, updated_after: str | None,
+    updated_before: str | None, gate_mode: str | None, operating_mode: str | None,
+    superseded: bool | None, supersedes_record_id: str | None,
+    criteria: dict[str, Any] | None, metadata: dict[str, Any] | None,
+    has_dispute: bool | None, dispute_status: DisputeStatus | str | None,
+    imported: bool | None, source: str | None, ref_system: str | None,
+    ref_type: str | None, ref_id: str | None, trace_id: str | None,
+    origin_record_id: str | None, produced_by: dict[str, str] | None,
+    criteria_gt: dict[str, int | float | str] | None,
+    criteria_gte: dict[str, int | float | str] | None,
+    criteria_lt: dict[str, int | float | str] | None,
+    criteria_lte: dict[str, int | float | str] | None,
+    metadata_gt: dict[str, int | float | str] | None,
+    metadata_gte: dict[str, int | float | str] | None,
+    metadata_lt: dict[str, int | float | str] | None,
+    metadata_lte: dict[str, int | float | str] | None,
+) -> dict[str, Any]:
+    """The filters ``GET /v1/records/search`` and ``GET /v1/records/counts``
+    share, as wire parameters. Mappings go out in bracket notation
+    (``criteriaGte[amount]=500``) when the HTTP client serializes them."""
+    params: dict[str, Any] = {}
+    if org_id is not None: params["orgId"] = org_id
+    if status is not None: params["status"] = status
+    if type is not None: params["type"] = type
+    if role is not None: params["role"] = role
+    if performer_agent_id is not None: params["performerAgentId"] = performer_agent_id
+    if category is not None: params["category"] = category
+    if project_ref is not None: params["projectRef"] = project_ref
+    if from_date is not None: params["from"] = from_date
+    if to_date is not None: params["to"] = to_date
+    if external_task_id is not None: params["externalTaskId"] = external_task_id
+    if parent_record_id is not None: params["parentRecordId"] = parent_record_id
+    if correlation_id is not None: params["correlationId"] = correlation_id
+    if updated_after is not None: params["updatedAfter"] = updated_after
+    if updated_before is not None: params["updatedBefore"] = updated_before
+    if gate_mode is not None: params["gateMode"] = gate_mode
+    if operating_mode is not None: params["operatingMode"] = operating_mode
+    if superseded is not None: params["superseded"] = superseded
+    if supersedes_record_id is not None: params["supersedesRecordId"] = supersedes_record_id
+    if criteria is not None: params["criteria"] = criteria
+    if metadata is not None: params["metadata"] = metadata
+    if has_dispute is not None: params["hasDispute"] = has_dispute
+    if dispute_status is not None: params["disputeStatus"] = dispute_status
+    if imported is not None: params["imported"] = imported
+    if source is not None: params["source"] = source
+    if ref_system is not None: params["ref.system"] = ref_system
+    if ref_type is not None: params["ref.type"] = ref_type
+    if ref_id is not None: params["ref.id"] = ref_id
+    if trace_id is not None: params["traceId"] = trace_id
+    if origin_record_id is not None: params["originRecordId"] = origin_record_id
+    if produced_by is not None: params["producedBy"] = produced_by
+    for name, bound in (
+        ("criteriaGt", criteria_gt), ("criteriaGte", criteria_gte),
+        ("criteriaLt", criteria_lt), ("criteriaLte", criteria_lte),
+        ("metadataGt", metadata_gt), ("metadataGte", metadata_gte),
+        ("metadataLt", metadata_lt), ("metadataLte", metadata_lte),
+    ):
+        converted = _bounds(bound)
+        if converted is not None:
+            params[name] = converted
+    return params
+
+
+def _group_by_param(group_by: RecordCountGroupBy | list[RecordCountGroupBy] | None) -> str | None:
+    """``group_by`` as the comma-joined wire value; the Server takes at most two."""
+    if group_by is None:
+        return None
+    dimensions = [group_by] if isinstance(group_by, str) else list(group_by)
+    if not 1 <= len(dimensions) <= 2:
+        raise ValueError(f"group_by takes one or two dimensions, got {len(dimensions)}")
+    return ",".join(dimensions)
+
+
 def _page_params(limit: int | None, offset: int | None, cursor: str | None) -> dict[str, Any]:
     """Paging params for a listing that takes all three, dropping the unset ones."""
     return {k: v for k, v in (("limit", limit), ("offset", offset), ("cursor", cursor)) if v is not None}
@@ -109,6 +216,7 @@ class RecordsResource:
         auto_activate: bool | None = None,
         constraint_inheritance: str | None = None,
         enforcement_overrides: dict[str, Any] | None = None,
+        produced_by: ProducedByInput | None = None,
         on_behalf_of: str | None = None,
     ) -> RecordRow:
         """Create a Record. Admin keys pass ``principal_agent_id``; agent keys default
@@ -134,6 +242,12 @@ class RecordsResource:
         against a trusted issuer whose ``applies_to`` is ``principal`` or
         ``any`` and seals ``predicate.on_behalf_of`` into the signed chain
         entry.
+
+        ``produced_by`` records what produced the Record: ``modelProvider``,
+        ``modelId``, ``modelVersion``, ``agentSoftware``,
+        ``agentSoftwareVersion``, ``promptDigest`` and ``configDigest``, keyed
+        as on the wire (see :class:`~agledger.types.ProducedByInput`). It sits
+        inside the create-time signature, so an offline verifier reads it too.
         """
         body: dict[str, Any] = {"type": type, "criteria": criteria}
         if publisher is not None: body["publisher"] = publisher
@@ -166,6 +280,7 @@ class RecordsResource:
         if auto_activate is not None: body["autoActivate"] = auto_activate
         if constraint_inheritance is not None: body["constraintInheritance"] = constraint_inheritance
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
+        if produced_by is not None: body["producedBy"] = produced_by
         return RecordRow.model_validate(
             self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
         )
@@ -395,6 +510,17 @@ class RecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
@@ -433,6 +559,17 @@ class RecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
@@ -470,6 +607,17 @@ class RecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
@@ -489,41 +637,123 @@ class RecordsResource:
         ``view="compact"`` returns a :class:`RecordRowCompactPage`, whose rows
         leave out every top-level null field and whose ``next_steps`` entries
         carry only ``action``, ``method`` and ``href``.
+
+        ``trace_id`` is a W3C trace id (32 lowercase hex), matched against the
+        version-00 ``metadata.traceparent`` the Record was created with.
+        ``origin_record_id`` finds the Records received from a peer under that
+        id, whichever local ``id`` each holds. ``produced_by`` filters on up to
+        two of its keys, each an exact match: ``produced_by={"modelId": "..."}``.
+
+        ``criteria_gt``, ``criteria_gte``, ``criteria_lt`` and ``criteria_lte``
+        (and the ``metadata_*`` twins) bound a top-level numeric value:
+        ``criteria_gte={"amount": 500}`` is sent as ``criteriaGte[amount]=500``
+        and matches only Records whose ``criteria.amount`` is a JSON number of
+        at least 500. Bounds may be ints, floats or decimal strings; a float is
+        written as a plain decimal. Combine one lower and one upper bound on a
+        key for a window. ``criteria`` equality keys and range keys share five
+        slots per request. No index serves a range, so pair it with ``type``, a
+        time bound or an equality filter on a large org.
         """
-        params: dict[str, Any] = {}
-        if org_id is not None: params["orgId"] = org_id
-        if status is not None: params["status"] = status
-        if type is not None: params["type"] = type
-        if role is not None: params["role"] = role
-        if performer_agent_id is not None: params["performerAgentId"] = performer_agent_id
-        if category is not None: params["category"] = category
-        if project_ref is not None: params["projectRef"] = project_ref
-        if from_date is not None: params["from"] = from_date
-        if to_date is not None: params["to"] = to_date
+        params = _build_search_params(
+            org_id=org_id, status=status, type=type, role=role, performer_agent_id=performer_agent_id,
+            category=category, project_ref=project_ref, from_date=from_date, to_date=to_date,
+            external_task_id=external_task_id, parent_record_id=parent_record_id,
+            correlation_id=correlation_id, updated_after=updated_after, updated_before=updated_before,
+            gate_mode=gate_mode, operating_mode=operating_mode, superseded=superseded,
+            supersedes_record_id=supersedes_record_id, criteria=criteria, metadata=metadata,
+            has_dispute=has_dispute, dispute_status=dispute_status, imported=imported, source=source,
+            ref_system=ref_system, ref_type=ref_type, ref_id=ref_id, trace_id=trace_id,
+            origin_record_id=origin_record_id, produced_by=produced_by,
+            criteria_gt=criteria_gt, criteria_gte=criteria_gte, criteria_lt=criteria_lt,
+            criteria_lte=criteria_lte, metadata_gt=metadata_gt, metadata_gte=metadata_gte,
+            metadata_lt=metadata_lt, metadata_lte=metadata_lte,
+        )
         if sort is not None: params["sort"] = sort
         if order is not None: params["order"] = order
-        if external_task_id is not None: params["externalTaskId"] = external_task_id
-        if parent_record_id is not None: params["parentRecordId"] = parent_record_id
-        if correlation_id is not None: params["correlationId"] = correlation_id
-        if updated_after is not None: params["updatedAfter"] = updated_after
-        if updated_before is not None: params["updatedBefore"] = updated_before
-        if gate_mode is not None: params["gateMode"] = gate_mode
-        if operating_mode is not None: params["operatingMode"] = operating_mode
-        if superseded is not None: params["superseded"] = superseded
-        if supersedes_record_id is not None: params["supersedesRecordId"] = supersedes_record_id
-        if criteria is not None: params["criteria"] = criteria
-        if metadata is not None: params["metadata"] = metadata
-        if has_dispute is not None: params["hasDispute"] = has_dispute
-        if dispute_status is not None: params["disputeStatus"] = dispute_status
-        if imported is not None: params["imported"] = imported
-        if source is not None: params["source"] = source
-        if ref_system is not None: params["ref.system"] = ref_system
-        if ref_type is not None: params["ref.type"] = ref_type
-        if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
         if view is not None: params["view"] = view
         return _parse_page(self._http.get_page("/v1/records/search", params=params), view)
+
+    def counts(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
+        group_by: RecordCountGroupBy | list[RecordCountGroupBy] | None = None,
+        limit: int | None = None,
+    ) -> RecordCounts:
+        """Count the Records ``search()`` would list under the same filters and
+        the same key scoping, optionally grouped.
+
+        Every filter ``search()`` takes applies, including ``criteria``, the
+        numeric bounds and ``superseded``; there is no ``sort``, ``order``,
+        ``cursor`` or ``view``. ``group_by`` is one dimension or a list of up to
+        two of ``type``, ``status``, ``performerAgentId``, ``principalAgentId``,
+        ``category``, ``gateMode``, ``operatingMode``, ``createdDay`` and
+        ``createdMonth`` (sent comma-joined). Groups come largest first;
+        ``createdDay`` and ``createdMonth`` bucket in UTC. Omit ``group_by`` for
+        one group holding every match (or none when nothing matches).
+
+        ``limit`` (1 to 1000, default 100) caps the groups returned. ``total``
+        counts every match and ``group_count`` every group, and ``truncated`` is
+        True when some groups were left out. There is no cursor: narrow the
+        filters to read the smaller groups.
+        """
+        params = _build_search_params(
+            org_id=org_id, status=status, type=type, role=role, performer_agent_id=performer_agent_id,
+            category=category, project_ref=project_ref, from_date=from_date, to_date=to_date,
+            external_task_id=external_task_id, parent_record_id=parent_record_id,
+            correlation_id=correlation_id, updated_after=updated_after, updated_before=updated_before,
+            gate_mode=gate_mode, operating_mode=operating_mode, superseded=superseded,
+            supersedes_record_id=supersedes_record_id, criteria=criteria, metadata=metadata,
+            has_dispute=has_dispute, dispute_status=dispute_status, imported=imported, source=source,
+            ref_system=ref_system, ref_type=ref_type, ref_id=ref_id, trace_id=trace_id,
+            origin_record_id=origin_record_id, produced_by=produced_by,
+            criteria_gt=criteria_gt, criteria_gte=criteria_gte, criteria_lt=criteria_lt,
+            criteria_lte=criteria_lte, metadata_gt=metadata_gt, metadata_gte=metadata_gte,
+            metadata_lt=metadata_lt, metadata_lte=metadata_lte,
+        )
+        grouped = _group_by_param(group_by)
+        if grouped is not None: params["groupBy"] = grouped
+        if limit is not None: params["limit"] = limit
+        return RecordCounts.model_validate(self._http.get("/v1/records/counts", params=params))
 
     def update(self, record_id: str, **params: Any) -> RecordRow:
         """Update a Record's mutable fields."""
@@ -607,7 +837,8 @@ class RecordsResource:
 
     def bulk_create(self, records: list[dict[str, Any]]) -> BulkCreateResult:
         """Create multiple Records in a single request. Each item may carry an
-        ``idempotencyKey`` for replay-safe high-volume ingest."""
+        ``idempotencyKey`` for replay-safe high-volume ingest, and a
+        ``producedBy`` object (wire keys, as on ``create``)."""
         return BulkCreateResult.model_validate(
             self._http.post("/v1/records/bulk", json={"records": records})
         )
@@ -634,14 +865,28 @@ class RecordsResource:
         notes: str | None = None,
         reason: str | None = None,
         message: str | None = None,
+        signature_meaning: SignatureMeaning | None = None,
         on_behalf_of: str | None = None,
     ) -> VerdictResult:
         """Submit the principal verdict (accept or reject) on a Completion.
         ``reason`` and ``message`` are wire aliases of ``notes``; when several
         are sent the Server takes ``notes``, then ``reason``, then ``message``.
         ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
-        ``records.create``."""
+        ``records.create``.
+
+        ``signature_meaning`` (``authorship``, ``review``, ``approval`` or
+        ``responsibility``) signs the verdict as the person behind the
+        credential: the result's ``signature`` carries the meaning, the
+        signer's printed name, IdP and subject, and the time, and the same
+        object is sealed on the OUTCOME_REPORTED chain entry. It is taken only
+        on an ephemeral cert from the OIDC exchange (``oidc_cert_credential``).
+        On an API key, or with ``on_behalf_of``, the Server answers 422
+        ``signature_requires_oidc_identity``; when the IdP token carried no
+        name, 422 ``signature_requires_signer_name`` (``auth.get_me().oidc``
+        shows the ``name`` it will seal)."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
+        if signature_meaning is not None:
+            body["signatureMeaning"] = signature_meaning
         if checks is not None:
             body["checks"] = checks
         if notes is not None:
@@ -681,6 +926,9 @@ class RecordsResource:
         inline the completion evidence body at each COMPLETION_SUBMITTED entry:
         an UNSIGNED projection the chain binds by hash via
         ``payload.evidenceHash``. JSON/NDJSON only.
+
+        The result is parsed JSON, so ``format`` must be ``json`` (the default).
+        For the ``html`` copy use :meth:`get_audit_export_html`.
         """
         params: dict[str, Any] = {"format": format}
         if receipts is not None:
@@ -690,6 +938,34 @@ class RecordsResource:
         return RecordAuditExport.model_validate(
             self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
         )
+
+    def get_audit_export_html(
+        self,
+        record_id: str,
+        *,
+        receipts: bool | None = None,
+        evidence: bool | None = None,
+    ) -> str:
+        """Export the audit trail as the readable HTML copy, returned as the raw
+        page text.
+
+        The page holds the record, the Server's verification result, a table of
+        verdict signatures (printed name, meaning, time, IdP identity), the chain
+        entry by entry and the signing keys. It runs no script, loads nothing and
+        prints to PDF. The complete JSON export is inside it, in the
+        ``<script type="application/json" id="agledger-audit-export">`` element,
+        so the saved file verifies offline. ``receipts`` and ``evidence`` are as
+        on :meth:`get_audit_export`.
+        """
+        params: dict[str, Any] = {"format": "html"}
+        if receipts is not None:
+            params["receipts"] = "true" if receipts else "false"
+        if evidence is not None:
+            params["evidence"] = "true" if evidence else "false"
+        raw = self._http.get_bytes(
+            f"/v1/records/{record_id}/audit-export", accept="text/html", params=params
+        )
+        return raw.decode("utf-8")
 
     def get_attestation(self, record_id: str) -> bytes:
         """Fetch the canonical COSE_Sign1 envelope stream for a Record's chain.
@@ -769,6 +1045,7 @@ class AsyncRecordsResource:
         auto_activate: bool | None = None,
         constraint_inheritance: str | None = None,
         enforcement_overrides: dict[str, Any] | None = None,
+        produced_by: ProducedByInput | None = None,
         on_behalf_of: str | None = None,
     ) -> RecordRow:
         """Create a Record. ``max_revisions`` caps the rework cycles it allows;
@@ -805,6 +1082,7 @@ class AsyncRecordsResource:
         if auto_activate is not None: body["autoActivate"] = auto_activate
         if constraint_inheritance is not None: body["constraintInheritance"] = constraint_inheritance
         if enforcement_overrides is not None: body["enforcementOverrides"] = enforcement_overrides
+        if produced_by is not None: body["producedBy"] = produced_by
         return RecordRow.model_validate(
             await self._http.post("/v1/records", json=body, headers=on_behalf_of_headers(on_behalf_of))
         )
@@ -1027,6 +1305,17 @@ class AsyncRecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: Literal["full"] | None = None,
@@ -1065,6 +1354,17 @@ class AsyncRecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: Literal["compact"],
@@ -1102,6 +1402,17 @@ class AsyncRecordsResource:
         ref_system: str | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         view: RecordView | None = None,
@@ -1122,40 +1433,90 @@ class AsyncRecordsResource:
         leave out every top-level null field and whose ``next_steps`` entries
         carry only ``action``, ``method`` and ``href``.
         """
-        params: dict[str, Any] = {}
-        if org_id is not None: params["orgId"] = org_id
-        if status is not None: params["status"] = status
-        if type is not None: params["type"] = type
-        if role is not None: params["role"] = role
-        if performer_agent_id is not None: params["performerAgentId"] = performer_agent_id
-        if category is not None: params["category"] = category
-        if project_ref is not None: params["projectRef"] = project_ref
-        if from_date is not None: params["from"] = from_date
-        if to_date is not None: params["to"] = to_date
+        params = _build_search_params(
+            org_id=org_id, status=status, type=type, role=role, performer_agent_id=performer_agent_id,
+            category=category, project_ref=project_ref, from_date=from_date, to_date=to_date,
+            external_task_id=external_task_id, parent_record_id=parent_record_id,
+            correlation_id=correlation_id, updated_after=updated_after, updated_before=updated_before,
+            gate_mode=gate_mode, operating_mode=operating_mode, superseded=superseded,
+            supersedes_record_id=supersedes_record_id, criteria=criteria, metadata=metadata,
+            has_dispute=has_dispute, dispute_status=dispute_status, imported=imported, source=source,
+            ref_system=ref_system, ref_type=ref_type, ref_id=ref_id, trace_id=trace_id,
+            origin_record_id=origin_record_id, produced_by=produced_by,
+            criteria_gt=criteria_gt, criteria_gte=criteria_gte, criteria_lt=criteria_lt,
+            criteria_lte=criteria_lte, metadata_gt=metadata_gt, metadata_gte=metadata_gte,
+            metadata_lt=metadata_lt, metadata_lte=metadata_lte,
+        )
         if sort is not None: params["sort"] = sort
         if order is not None: params["order"] = order
-        if external_task_id is not None: params["externalTaskId"] = external_task_id
-        if parent_record_id is not None: params["parentRecordId"] = parent_record_id
-        if correlation_id is not None: params["correlationId"] = correlation_id
-        if updated_after is not None: params["updatedAfter"] = updated_after
-        if updated_before is not None: params["updatedBefore"] = updated_before
-        if gate_mode is not None: params["gateMode"] = gate_mode
-        if operating_mode is not None: params["operatingMode"] = operating_mode
-        if superseded is not None: params["superseded"] = superseded
-        if supersedes_record_id is not None: params["supersedesRecordId"] = supersedes_record_id
-        if criteria is not None: params["criteria"] = criteria
-        if metadata is not None: params["metadata"] = metadata
-        if has_dispute is not None: params["hasDispute"] = has_dispute
-        if dispute_status is not None: params["disputeStatus"] = dispute_status
-        if imported is not None: params["imported"] = imported
-        if source is not None: params["source"] = source
-        if ref_system is not None: params["ref.system"] = ref_system
-        if ref_type is not None: params["ref.type"] = ref_type
-        if ref_id is not None: params["ref.id"] = ref_id
         if limit is not None: params["limit"] = limit
         if cursor is not None: params["cursor"] = cursor
         if view is not None: params["view"] = view
         return _parse_page(await self._http.get_page("/v1/records/search", params=params), view)
+
+    async def counts(
+        self,
+        *,
+        org_id: str | None = None,
+        status: str | None = None,
+        type: str | None = None,
+        role: str | None = None,
+        performer_agent_id: str | None = None,
+        category: str | None = None,
+        project_ref: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        external_task_id: str | None = None,
+        parent_record_id: str | None = None,
+        correlation_id: str | None = None,
+        updated_after: str | None = None,
+        updated_before: str | None = None,
+        gate_mode: str | None = None,
+        operating_mode: str | None = None,
+        superseded: bool | None = None,
+        supersedes_record_id: str | None = None,
+        criteria: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        has_dispute: bool | None = None,
+        dispute_status: DisputeStatus | str | None = None,
+        imported: bool | None = None,
+        source: str | None = None,
+        ref_system: str | None = None,
+        ref_type: str | None = None,
+        ref_id: str | None = None,
+        trace_id: str | None = None,
+        origin_record_id: str | None = None,
+        produced_by: dict[str, str] | None = None,
+        criteria_gt: dict[str, int | float | str] | None = None,
+        criteria_gte: dict[str, int | float | str] | None = None,
+        criteria_lt: dict[str, int | float | str] | None = None,
+        criteria_lte: dict[str, int | float | str] | None = None,
+        metadata_gt: dict[str, int | float | str] | None = None,
+        metadata_gte: dict[str, int | float | str] | None = None,
+        metadata_lt: dict[str, int | float | str] | None = None,
+        metadata_lte: dict[str, int | float | str] | None = None,
+        group_by: RecordCountGroupBy | list[RecordCountGroupBy] | None = None,
+        limit: int | None = None,
+    ) -> RecordCounts:
+        """Count Records, optionally grouped: see the sync ``counts`` docstring."""
+        params = _build_search_params(
+            org_id=org_id, status=status, type=type, role=role, performer_agent_id=performer_agent_id,
+            category=category, project_ref=project_ref, from_date=from_date, to_date=to_date,
+            external_task_id=external_task_id, parent_record_id=parent_record_id,
+            correlation_id=correlation_id, updated_after=updated_after, updated_before=updated_before,
+            gate_mode=gate_mode, operating_mode=operating_mode, superseded=superseded,
+            supersedes_record_id=supersedes_record_id, criteria=criteria, metadata=metadata,
+            has_dispute=has_dispute, dispute_status=dispute_status, imported=imported, source=source,
+            ref_system=ref_system, ref_type=ref_type, ref_id=ref_id, trace_id=trace_id,
+            origin_record_id=origin_record_id, produced_by=produced_by,
+            criteria_gt=criteria_gt, criteria_gte=criteria_gte, criteria_lt=criteria_lt,
+            criteria_lte=criteria_lte, metadata_gt=metadata_gt, metadata_gte=metadata_gte,
+            metadata_lt=metadata_lt, metadata_lte=metadata_lte,
+        )
+        grouped = _group_by_param(group_by)
+        if grouped is not None: params["groupBy"] = grouped
+        if limit is not None: params["limit"] = limit
+        return RecordCounts.model_validate(await self._http.get("/v1/records/counts", params=params))
 
     async def update(self, record_id: str, **params: Any) -> RecordRow:
         return RecordRow.model_validate(await self._http.patch(f"/v1/records/{record_id}", json=params))
@@ -1250,14 +1611,28 @@ class AsyncRecordsResource:
         notes: str | None = None,
         reason: str | None = None,
         message: str | None = None,
+        signature_meaning: SignatureMeaning | None = None,
         on_behalf_of: str | None = None,
     ) -> VerdictResult:
         """Submit the principal verdict (accept or reject) on a Completion.
         ``reason`` and ``message`` are wire aliases of ``notes``; when several
         are sent the Server takes ``notes``, then ``reason``, then ``message``.
         ``on_behalf_of`` is sent as the ``AGLedger-On-Behalf-Of`` header, as on
-        ``records.create``."""
+        ``records.create``.
+
+        ``signature_meaning`` (``authorship``, ``review``, ``approval`` or
+        ``responsibility``) signs the verdict as the person behind the
+        credential: the result's ``signature`` carries the meaning, the
+        signer's printed name, IdP and subject, and the time, and the same
+        object is sealed on the OUTCOME_REPORTED chain entry. It is taken only
+        on an ephemeral cert from the OIDC exchange (``oidc_cert_credential``).
+        On an API key, or with ``on_behalf_of``, the Server answers 422
+        ``signature_requires_oidc_identity``; when the IdP token carried no
+        name, 422 ``signature_requires_signer_name`` (``auth.get_me().oidc``
+        shows the ``name`` it will seal)."""
         body: dict[str, Any] = {"completionId": completion_id, "verdict": verdict}
+        if signature_meaning is not None:
+            body["signatureMeaning"] = signature_meaning
         if checks is not None:
             body["checks"] = checks
         if notes is not None:
@@ -1293,6 +1668,24 @@ class AsyncRecordsResource:
         return RecordAuditExport.model_validate(
             await self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
         )
+
+    async def get_audit_export_html(
+        self,
+        record_id: str,
+        *,
+        receipts: bool | None = None,
+        evidence: bool | None = None,
+    ) -> str:
+        """The readable HTML copy of the audit export as text: see the sync docstring."""
+        params: dict[str, Any] = {"format": "html"}
+        if receipts is not None:
+            params["receipts"] = "true" if receipts else "false"
+        if evidence is not None:
+            params["evidence"] = "true" if evidence else "false"
+        raw = await self._http.get_bytes(
+            f"/v1/records/{record_id}/audit-export", accept="text/html", params=params
+        )
+        return raw.decode("utf-8")
 
     async def get_attestation(self, record_id: str) -> bytes:
         return await self._http.get_bytes(
