@@ -264,3 +264,134 @@ def test_retry_after_is_exposed_on_a_non_429_error():
         client.records.get("rec-123")
     assert excinfo.value.status == 503
     assert excinfo.value.retry_after == 4.0
+
+
+_IN_FLIGHT = {
+    "error": "CONFLICT",
+    "detail": "An earlier request under this Idempotency-Key is still running",
+    "reason": "IDEMPOTENCY_KEY_IN_FLIGHT",
+    "retryable": True,
+    "retryAfterSeconds": 3,
+}
+
+
+@respx.mock
+def test_a_retryable_409_is_resent_after_its_retry_after(monkeypatch: pytest.MonkeyPatch):
+    waits: list[float] = []
+    monkeypatch.setattr("agledger._http.time.sleep", lambda s: waits.append(s))
+    route = respx.post("https://agledger.example.com/v1/records")
+    route.side_effect = [
+        httpx.Response(409, json=_IN_FLIGHT, headers={"retry-after": "3"}),
+        httpx.Response(201, json=RECORD_JSON),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
+    record = client.records.create(type="notarize-generic-v1", criteria={})
+    assert record.id == "rec-123"
+    assert route.call_count == 2
+    assert 3.0 <= waits[0] <= 3.75
+    # The resend carries the same key, so the Server replays rather than repeats.
+    keys = {c.request.headers["idempotency-key"] for c in route.calls}
+    assert len(keys) == 1
+
+
+@respx.mock
+def test_a_retryable_409_waits_the_body_seconds_when_no_header(monkeypatch: pytest.MonkeyPatch):
+    waits: list[float] = []
+    monkeypatch.setattr("agledger._http.time.sleep", lambda s: waits.append(s))
+    route = respx.post("https://agledger.example.com/v1/records")
+    route.side_effect = [
+        httpx.Response(409, json={**_IN_FLIGHT, "reason": "GATE_PASS_IN_FLIGHT"}),
+        httpx.Response(201, json=RECORD_JSON),
+    ]
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
+    client.records.create(type="notarize-generic-v1", criteria={})
+    assert 3.0 <= waits[0] <= 3.75
+
+
+@respx.mock
+def test_a_committed_write_409_raises_at_once_with_its_refresh_url():
+    route = respx.post("https://agledger.example.com/v1/records")
+    route.mock(
+        return_value=httpx.Response(
+            409,
+            json={
+                "error": "CONFLICT",
+                "detail": "The first attempt committed",
+                "reason": "IDEMPOTENT_WRITE_COMMITTED",
+                "retryable": False,
+                "refreshUrl": "/v1/records/rec-123",
+            },
+        )
+    )
+    client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=3)
+    with pytest.raises(APIError) as excinfo:
+        client.records.create(type="notarize-generic-v1", criteria={})
+    assert route.call_count == 1
+    assert excinfo.value.reason == "IDEMPOTENT_WRITE_COMMITTED"
+    assert excinfo.value.refresh_url == "/v1/records/rec-123"
+    assert excinfo.value.retryable is False
+
+
+def test_a_retryable_409_is_resent_only_when_resending_is_safe():
+    from agledger._http import _should_retry  # pyright: ignore[reportPrivateUsage]
+
+    retryable = APIError(409, detail="busy", retryable=True)
+    committed = APIError(409, detail="done", retryable=False)
+    assert _should_retry(409, retryable, "POST", {"Idempotency-Key": "k"})
+    assert _should_retry(409, retryable, "GET", {})
+    # A write with no Idempotency-Key is not known to be safe to resend.
+    assert not _should_retry(409, retryable, "POST", {})
+    assert not _should_retry(409, committed, "POST", {"Idempotency-Key": "k"})
+    assert not _should_retry(409, APIError(409, detail="x"), "GET", {})
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_async_a_retryable_409_is_resent(monkeypatch: pytest.MonkeyPatch):
+    from agledger import AsyncAgledgerClient
+
+    waits: list[float] = []
+
+    async def fake_sleep(s: float) -> None:
+        waits.append(s)
+
+    monkeypatch.setattr("agledger._http.asyncio.sleep", fake_sleep)
+    route = respx.post("https://agledger.example.com/v1/records")
+    route.side_effect = [
+        httpx.Response(409, json=_IN_FLIGHT, headers={"retry-after": "3"}),
+        httpx.Response(201, json=RECORD_JSON),
+    ]
+    async with AsyncAgledgerClient(
+        base_url="https://agledger.example.com", api_key="test-key", max_retries=1
+    ) as client:
+        record = await client.records.create(type="notarize-generic-v1", criteria={})
+    assert record.id == "rec-123"
+    assert route.call_count == 2
+    assert 3.0 <= waits[0] <= 3.75
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_async_a_committed_write_409_raises_at_once():
+    from agledger import AsyncAgledgerClient
+
+    route = respx.post("https://agledger.example.com/v1/records")
+    route.mock(
+        return_value=httpx.Response(
+            409,
+            json={
+                "error": "CONFLICT",
+                "detail": "committed",
+                "reason": "IDEMPOTENT_WRITE_COMMITTED",
+                "retryable": False,
+                "refreshUrl": "/v1/records/rec-123",
+            },
+        )
+    )
+    async with AsyncAgledgerClient(
+        base_url="https://agledger.example.com", api_key="test-key", max_retries=3
+    ) as client:
+        with pytest.raises(APIError) as excinfo:
+            await client.records.create(type="notarize-generic-v1", criteria={})
+    assert route.call_count == 1
+    assert excinfo.value.refresh_url == "/v1/records/rec-123"

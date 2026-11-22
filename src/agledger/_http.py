@@ -67,11 +67,30 @@ def _resolve_sdk_version() -> str:
 SDK_VERSION = _resolve_sdk_version()
 
 # Aligned with TS SDK (http.ts:#DEFAULT_RETRY_STATUSES). 408 is excluded
-# because the API never emits it. 409 IDEMPOTENCY_CONFLICT is excluded
-# because auto-retrying it would mask a real client error: a 409 means
-# "this idempotency key was already used with a different request body",
-# which is structural, not transient.
+# because the API never emits it. A 409 is not retried by status: most are
+# structural ("this idempotency key was already used with a different request
+# body"). Only a 409 whose body says ``retryable: true`` is, see
+# :func:`_should_retry`. 503 covers ``SERVER_SHUTTING_DOWN``.
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _should_retry(status: int, error: APIError, method: str, headers: dict[str, str]) -> bool:
+    """Whether a failed attempt is worth another try.
+
+    429 and 5xx always are. A 409 is when the Server marks it ``retryable: true``
+    (``IDEMPOTENCY_KEY_IN_FLIGHT``, ``GATE_PASS_IN_FLIGHT``: the same request
+    succeeds once the first attempt or the gate pass finishes) and resending is
+    safe: the request carries an ``Idempotency-Key`` or is a read. A 409 with
+    ``retryable: false`` such as ``IDEMPOTENT_WRITE_COMMITTED`` is raised at
+    once; the first attempt committed, and ``refresh_url`` reads what it wrote.
+    """
+    if status in _RETRYABLE_STATUSES:
+        return True
+    return (
+        status == 409
+        and error.retryable is True
+        and ("Idempotency-Key" in headers or method.upper() in ("GET", "HEAD"))
+    )
 
 
 @dataclass(frozen=True)
@@ -599,7 +618,7 @@ class HttpClient:
                 error = build_error(response)
                 if keep_error_body:
                     error.raw_body = response.content
-                if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
+                if attempt < self._max_retries and _should_retry(response.status_code, error, method, headers):
                     time.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
                     attempt += 1
                     continue
@@ -898,7 +917,7 @@ class AsyncHttpClient:
                 error = build_error(response)
                 if keep_error_body:
                     error.raw_body = response.content
-                if response.status_code in _RETRYABLE_STATUSES and attempt < self._max_retries:
+                if attempt < self._max_retries and _should_retry(response.status_code, error, method, headers):
                     await asyncio.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
                     attempt += 1
                     continue
