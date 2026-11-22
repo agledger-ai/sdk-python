@@ -209,6 +209,119 @@ class EntityReference(BaseModel):
     created_by: str = Field(alias="createdBy")
 
 
+SignatureMeaning = Literal["approval", "authorship", "responsibility", "review"]
+"""What a verdict signer means by signing: ``records.submit_verdict(...,
+signature_meaning=...)``. Closed: the Server refuses any other value."""
+
+FederationLegKind = Literal["dispute", "signal", "state-transition"]
+"""The kind of outbound message a federation leg carries."""
+
+FederationLegStatus = Literal["delivered", "failed", "pending"]
+"""Delivery state of one federation leg."""
+
+FederationLegErrorReason = Literal[
+    "co_sign_failed",
+    "co_sign_rejected",
+    "co_sign_signature_invalid",
+    "local_config",
+    "org_deactivated",
+    "peer_http_error",
+    "peer_inactive",
+    "peer_not_applied",
+    "peer_rejected",
+    "transport_error",
+]
+"""Why a leg's last delivery attempt failed (``last_error_reason``). Fields that
+carry it add ``| str`` so a reason a newer Server adds parses instead of raising."""
+
+RecordCountGroupBy = Literal[
+    "category",
+    "createdDay",
+    "createdMonth",
+    "gateMode",
+    "operatingMode",
+    "performerAgentId",
+    "principalAgentId",
+    "status",
+    "type",
+]
+"""A dimension ``records.counts(group_by=...)`` groups by. Closed."""
+
+AuditExportFormat = Literal["cose", "csv", "html", "json", "ndjson"]
+"""The ``format`` of ``GET /v1/records/{id}/audit-export``. ``json`` is what
+``records.get_audit_export()`` parses; ``html`` is ``records.get_audit_export_html()``."""
+
+
+class ProducedByInput(TypedDict, total=False):
+    """What produced a Record or Completion, as sent on create, bulk create and
+    completion submit. Keys are the wire names. Send at least one; unknown keys
+    and an empty object are refused. A digest is ``sha256:``, ``sha384:`` or
+    ``sha512:`` followed by hex. Length caps: 256 for ``modelId`` and
+    ``agentSoftware``, 135 for a digest, 128 for the rest."""
+
+    modelProvider: str
+    modelId: str
+    modelVersion: str
+    agentSoftware: str
+    agentSoftwareVersion: str
+    promptDigest: str
+    configDigest: str
+
+
+class ProducedBy(BaseModel):
+    """What produced a Record or Completion, as the Server serves it back.
+    Every field is the caller's own assertion, held and signed as sent."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    model_provider: str | None = Field(None, alias="modelProvider")
+    model_id: str | None = Field(None, alias="modelId")
+    model_version: str | None = Field(None, alias="modelVersion")
+    agent_software: str | None = Field(None, alias="agentSoftware")
+    agent_software_version: str | None = Field(None, alias="agentSoftwareVersion")
+    prompt_digest: str | None = Field(None, alias="promptDigest")
+    config_digest: str | None = Field(None, alias="configDigest")
+
+
+class FederationOrigin(BaseModel):
+    """Where a Record received from a peer came from: the sending Server and the
+    id that Server uses for it. ``RecordRow.id`` is this Server's own id, which
+    differs from ``record_id`` when another row here already held the sent id."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    peer_hub_id: str = Field(alias="peerHubId")
+    record_id: str = Field(alias="recordId")
+
+
+class FederationLeg(BaseModel):
+    """One outbound federation message of a Record (one record, one peer, one
+    kind) and where its delivery stands."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    peer_hub_id: str = Field(alias="peerHubId")
+    kind: FederationLegKind | str
+    status: FederationLegStatus | str
+    state: str | None = None
+    """The Record state a ``state-transition`` leg carries, else ``None``."""
+    attempts: int | None = None
+    """Delivery attempts made."""
+    delivered_at: str | None = Field(None, alias="deliveredAt")
+    last_attempted_at: str | None = Field(None, alias="lastAttemptedAt")
+    last_error: str | None = Field(None, alias="lastError")
+    """Why the last attempt failed: the peer's refusal or the transport error."""
+    last_error_reason: FederationLegErrorReason | str | None = Field(
+        None, alias="lastErrorReason"
+    )
+
+
 CoSignStatus = Literal["not_required", "pending", "succeeded", "partial", "failed"]
 """State of the co-signature a Record's settlement may require.
 
@@ -246,6 +359,14 @@ class CoSignPeerLeg(BaseModel):
     counter_signature: str | None = Field(None, alias="counterSignature")
     """That peer's own counter-signature, verifiable offline against its
     published vault keys. None unless its ``status`` is ``succeeded``."""
+    attempts: int | None = None
+    """Delivery attempts made to this peer."""
+    last_attempted_at: str | None = Field(None, alias="lastAttemptedAt")
+    last_error: str | None = Field(None, alias="lastError")
+    """Why the last attempt failed. None when none has."""
+    last_error_reason: FederationLegErrorReason | str | None = Field(
+        None, alias="lastErrorReason"
+    )
 
 
 class SettlementSignalSummary(BaseModel):
@@ -564,6 +685,16 @@ class _RecordRowFields(BaseModel):
     """Peer Server IDs this Record has been shared to via federation."""
     share: bool | None = None
     """Whether this Record participates in revenue share, or None when not configured."""
+    trace_id: str | None = Field(None, alias="traceId")
+    """W3C trace id (32 lowercase hex) of the version-00 ``metadata.traceparent``
+    the Record was created with, or None when it carried none."""
+    produced_by: ProducedBy | None = Field(None, alias="producedBy")
+    """What produced the Record, as asserted at create, or None when not sent."""
+    federation_origin: FederationOrigin | None = Field(None, alias="federationOrigin")
+    """The sending Server and its id for this Record when it was received from a
+    peer. None on a local Record."""
+    federation_legs: list[FederationLeg] | None = Field(None, alias="federationLegs")
+    """Delivery state of each outbound federation message of this Record."""
     integrity: RecordIntegrity | None = None
     """Tamper-evidence result, present only when read with ``integrity=True``."""
 
@@ -616,6 +747,49 @@ class RecordRowCompactPage(BaseModel):
     leaves it None."""
     next_steps: list[NextStepCompact] | None = Field(None, alias="nextSteps")
     record_read: RecordReadCompletion | None = Field(None, alias="recordRead")
+
+
+class RecordCountGroup(BaseModel):
+    """One group of :meth:`~agledger.resources.records.RecordsResource.counts`:
+    the value of each ``group_by`` dimension the request named, and ``count``.
+    A dimension the request did not group by is None; a Record that leaves a
+    grouped dimension empty (``category``, ``performer_agent_id``) groups as None."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    count: int
+    type: str | None = None
+    status: str | None = None
+    performer_agent_id: str | None = Field(None, alias="performerAgentId")
+    principal_agent_id: str | None = Field(None, alias="principalAgentId")
+    category: str | None = None
+    gate_mode: str | None = Field(None, alias="gateMode")
+    operating_mode: str | None = Field(None, alias="operatingMode")
+    created_day: str | None = Field(None, alias="createdDay")
+    """``YYYY-MM-DD``, UTC."""
+    created_month: str | None = Field(None, alias="createdMonth")
+    """``YYYY-MM``, UTC."""
+
+
+class RecordCounts(BaseModel):
+    """Response of ``records.counts()``."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    data: list[RecordCountGroup]
+    """The largest ``limit`` groups, largest first."""
+    group_by: list[RecordCountGroupBy | str] = Field(alias="groupBy")
+    """The dimensions each entry is grouped by, in request order."""
+    total: int
+    """Records matching the filters, across all groups."""
+    group_count: int = Field(alias="groupCount")
+    """Groups the filters produce, including any past ``limit``."""
+    truncated: bool
+    """True when ``group_count`` exceeds the groups in ``data``."""
 
 
 class BulkCreateResultItem(BaseModel):
@@ -765,6 +939,8 @@ class Completion(BaseModel):
     or the inline run was skipped); read ``record_status`` and ``records.get(id)`` in that case."""
     validation_errors: list[Any] | None = Field(None, alias="validationErrors")
     """Schema validation errors, if any."""
+    produced_by: ProducedBy | None = Field(None, alias="producedBy")
+    """What produced this completion, as asserted at submit, or None when not sent."""
     idempotency_key: str | None = Field(None, alias="idempotencyKey")
     """Client-supplied idempotency key."""
     created_at: str = Field(alias="createdAt")
@@ -1112,6 +1288,27 @@ class Webhook(BaseModel):
     """Suggested next API calls after webhook creation."""
 
 
+class VerdictSignature(BaseModel):
+    """The signature on a verdict sent with ``signature_meaning``. Every field
+    but ``meaning`` comes from the credential, not the request."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="allow", populate_by_name=True
+    )
+
+    meaning: SignatureMeaning | str
+    """What the signer means by signing, as sent."""
+    signer_name: str = Field(alias="signerName")
+    """The printed name the IdP asserted for the signer."""
+    signer_iss: str = Field(alias="signerIss")
+    """The IdP that authenticated the signer."""
+    signer_sub: str = Field(alias="signerSub")
+    """The signer's subject at that IdP. With ``signer_iss``, the identity the
+    signature is bound to."""
+    signed_at: str = Field(alias="signedAt")
+    """Server time of the signature, equal to ``reported_at``."""
+
+
 class VerdictResult(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(
         extra="allow", populate_by_name=True
@@ -1135,6 +1332,9 @@ class VerdictResult(BaseModel):
     when an admin key in the Record's org rendered it on the principal's
     behalf."""
     reported_at: str = Field(alias="reportedAt")
+    signature: VerdictSignature | None = None
+    """The electronic signature this verdict carries, or None when it was sent
+    without ``signature_meaning``. Sealed on the OUTCOME_REPORTED chain entry."""
     next_steps: list[NextStep] | None = Field(None, alias="nextSteps")
     """Suggested next API calls after submitting the verdict."""
 
@@ -2278,7 +2478,11 @@ class AccountProfile(BaseModel):
     cert: dict[str, Any] | None = None
     """Present (non-null) only for ``ephemeral_cert`` sessions: the bound short-lived signing cert (``id``, ``thumbprint``, ``expiresAt``)."""
     oidc: dict[str, Any] | None = None
-    """Present (non-null) for OIDC-bound sessions: the upstream IdP identity (``iss``, ``sub``)."""
+    """Present (non-null) for OIDC-bound sessions: the upstream IdP identity
+    (``iss``, ``sub``, ``name``). ``name`` is the printed name the IdP asserted
+    for the person on an ``ephemeral_cert`` session, which a verdict sent with
+    ``signature_meaning`` seals as the signer's name; it is None when the token
+    carried none, and always None on an ``oidc`` session."""
 
 
 T = TypeVar("T")
@@ -2478,14 +2682,17 @@ class ConformanceResponse(BaseModel):
     """URL to list all type schemas (criteria + evidence structure)."""
     settlement_signals: list[str] | None = Field(None, alias="settlementSignals")
     """Supported settlement signal types (e.g. SETTLE, HOLD, RELEASE)."""
-    limits: dict[str, int] | None = None
+    limits: dict[str, int | dict[str, int]] | None = None
     """The numeric caps this install enforces, keyed by name:
     ``criteriaMaxBytesDefault``, ``referencesMaxPerRequest``,
     ``referencesMaxPerRecordDefault``, ``referenceAttributesMaxKeys``,
     ``metadataMaxProperties``, ``recordBodyMaxBytes``,
     ``delegationMaxDepthDefault``, ``delegationMaxDepthCeiling``,
-    ``cursorMaxLength``, ``paginationLimitMax``, ``searchCursorMaxLength``.
-    Several are org-configurable, so read these rather than hardcoding: the
+    ``cursorMaxLength``, ``paginationLimitMax``, ``searchCursorMaxLength``,
+    ``jsonBodyMaxDepth`` (levels of nesting a JSON request body may have; a
+    deeper one is a 400) and ``paginationLimitMaxByRoute``, the one value that
+    is a mapping: ``"<METHOD> <path>"`` to the ``?limit=`` cap of each listing
+    whose cap differs from ``paginationLimitMax``. Several are org-configurable, so read these rather than hardcoding: the
     value here is what THIS Server will accept. The three pagination caps bound
     what a paging client must handle: round-trip ``nextCursor`` verbatim, keep
     ``?limit=`` at or under ``paginationLimitMax`` for portability, and size
@@ -2539,6 +2746,11 @@ class AgentProfile(BaseModel):
     """Subject of the external identity bound to this agent, or null when unbound."""
     references: list[dict[str, Any]] | None = None
     created_at: str | None = Field(None, alias="createdAt")
+    origin_agent_id: str | None = Field(None, alias="originAgentId")
+    """The id the sending Server uses for this agent, on an agent synced from a
+    peer; None on a local agent. ``id`` is this Server's own id."""
+    origin_peer_hub_id: str | None = Field(None, alias="originPeerHubId")
+    """The peer Server a synced agent came from, or None on a local agent."""
     deactivated_at: str | None = Field(None, alias="deactivatedAt")
     """When this agent was deactivated, or ``None`` while it is active. A
     deactivated agent keeps its records and its history; what it loses is the
@@ -2563,6 +2775,11 @@ class AgentDirectoryEntry(BaseModel):
     org_unit: str | None = Field(None, alias="orgUnit")
     description: str | None = None
     created_at: str | None = Field(None, alias="createdAt")
+    origin_agent_id: str | None = Field(None, alias="originAgentId")
+    """The id the sending Server uses for this agent, on an agent synced from a
+    peer; None on a local agent."""
+    origin_peer_hub_id: str | None = Field(None, alias="originPeerHubId")
+    """The peer Server a synced agent came from, or None on a local agent."""
     deactivated_at: str | None = Field(None, alias="deactivatedAt")
     """When this agent was deactivated, or ``None`` while it is active. Rows with
     a value here appear only when the listing was asked for them with
@@ -2687,6 +2904,15 @@ class ComplianceExport(BaseModel):
     #: response carries it in the first case. None on a Server that predates
     #: the field.
     resume_to: str | None = Field(None, alias="resumeTo")
+    #: Present when the window had no ``filters.to``, or one at or past this
+    #: instant: the inclusive ``filters.from`` for the next incremental export.
+    #: Copy it verbatim and the next export starts with the first record this one
+    #: did not read, none repeated and none skipped. The export reads only
+    #: records created before this instant, the point below which every record
+    #: was already committed; records at or after it are absent, including ones
+    #: already committed. Distinct from ``resume_to``, which continues a
+    #: truncated export backward in time. None when absent.
+    next_from: str | None = Field(None, alias="nextFrom")
     #: The read-transparency batch this export left: one manifest and one leaf
     #: per exported record on the org whose records were read, under one
     #: ``exportBatchId`` (keys ``exportBatchId``, ``manifestId``,
