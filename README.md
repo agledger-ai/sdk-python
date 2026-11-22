@@ -2,7 +2,7 @@
 
 The official Python SDK for [AGLedger](https://agledger.ai): change control for AI agents. Agent memory, approvals, audit trail, and notifications: one API, one signed ledger, self-hosted.
 
-Requires an AGLedger Server 2.0 or later. For a 1.x Server, use `pip install "agledger==1.12.0"`, the last release that supports it.
+Requires an AGLedger Server 2.0 or later; the fields and methods that need 3.0.0 say so below. For a 1.x Server, use `pip install "agledger==1.12.0"`, the last release that supports it.
 
 **Learn more**
 
@@ -200,6 +200,35 @@ asyncio.run(main())
 `capabilities`, `discovery`, `references`, `federation`, `federation_admin`,
 `verification_keys`, `scitt` (SCITT/SCRAPI entries + Transparency Service keys),
 `predicates` (predicate schema discovery).
+
+### Provenance, search bounds and counts
+
+Needs AGLedger Server 3.0.0. `records.create()` and `completions.submit()` take `produced_by`, a dict of what produced the work, keyed as on the wire (`modelProvider`, `modelId`, `modelVersion`, `agentSoftware`, `agentSoftwareVersion`, `promptDigest`, `configDigest`; a digest is `sha256:`, `sha384:` or `sha512:` plus hex). It is signed into the entry, and read back as `record.produced_by`.
+
+```python
+record = principal.records.create(
+    type="notarize-generic-v1",
+    criteria={"summary": "Quarterly close", "amount": 1250},
+    produced_by={"modelProvider": "example", "modelId": "model-1", "agentSoftware": "close-bot"},
+)
+
+# Search by trace id, producer, or a numeric window on a criteria key.
+page = principal.records.search(
+    type="notarize-generic-v1",
+    produced_by={"modelId": "model-1"},
+    criteria_gte={"amount": 500},
+    criteria_lt={"amount": 5000},
+)
+
+# Count instead of paging: how many Records of each type ended in each status.
+counts = principal.records.counts(group_by=["type", "status"], from_date="2026-10-01T00:00:00Z")
+for group in counts.data:
+    print(group.type, group.status, group.count)
+if counts.truncated:
+    print(f"{counts.group_count} groups, showing {len(counts.data)}")
+```
+
+A verdict sent on an ephemeral cert from the OIDC exchange can carry an electronic signature: `records.submit_verdict(..., signature_meaning="approval")` returns it as `result.signature` (`meaning`, `signer_name`, `signer_iss`, `signer_sub`, `signed_at`). `records.get_audit_export_html(record.id)` returns the readable HTML copy of the audit export as a `str`; it embeds the full JSON export.
 
 ### When two publishers offer the same Type
 

@@ -113,7 +113,11 @@ class WebhooksResource:
         return Webhook.model_validate(data)
 
     def list_deliveries(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:
-        """List delivery attempts for a webhook."""
+        """List delivery attempts for a webhook.
+
+        Each item carries ``signatureInput`` and ``idempotencyKey`` (both
+        ``None`` when the delivery had none): the RFC 9421 ``Signature-Input``
+        the delivery was signed with, and the key a receiver can dedupe on."""
         return Page[dict[str, Any]].model_validate(self._http.get_page(f"/v1/webhooks/{webhook_id}/deliveries", params=params))
 
     def list_dlq(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:

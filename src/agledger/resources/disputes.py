@@ -58,7 +58,9 @@ class DisputesResource:
         response = self._http.post(f"/v1/records/{record_id}/dispute", json=body)
         # The create 201 is a { dispute, autoReadjudication } envelope. Read the
         # envelope through ``client.request()`` when you need the
-        # auto-readjudication result alongside the dispute.
+        # auto-readjudication result alongside the dispute: ``autoResolved``,
+        # ``outcome``, ``reason`` and, with ``reason: outside_expanded_band``,
+        # ``failingRuleIds``, the gate rules that failed the re-check.
         if isinstance(response, dict) and "dispute" in response:
             return Dispute.model_validate(response["dispute"])
         return Dispute.model_validate(response)
