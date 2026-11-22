@@ -273,7 +273,7 @@ class ProducedBy(BaseModel):
     Every field is the caller's own assertion, held and signed as sent."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        extra="allow", populate_by_name=True
+        extra="allow", populate_by_name=True, protected_namespaces=()
     )
 
     model_provider: str | None = Field(None, alias="modelProvider")
