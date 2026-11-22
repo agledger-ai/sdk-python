@@ -272,6 +272,9 @@ class _ChainRow:
     created_at: object
     binding: tuple[object, object, object] | None
     """(record id, entry type, payload) when the binding check has its inputs."""
+    extensions_projected: bool
+    """True on an export entry, whose payload the Server fills with every
+    envelope extension the entry signed; false on a dump row, which holds none."""
     oidc: tuple[object, object, object] | None
     """(iss, sub, synthesized) when the OIDC-actor check has its inputs."""
     attribution: tuple[object, object, object] | None
@@ -293,6 +296,7 @@ def chain_row(entry: Mapping[str, Any]) -> _ChainRow:
             signing_key_id=_field(r, "signing_key_id"),
             created_at=_field(r, "created_at"),
             binding=(_field(r, "record_id"), _field(r, "entry_type"), _field(r, "payload")),
+            extensions_projected=False,
             oidc=(r.get("actor_oidc_iss"), r.get("actor_oidc_sub"), _field(r, "actor_oidc_synthesized")),
             attribution=(_field(r, "actor_key_id"), _field(r, "actor_role"), _field(r, "actor_owner_id")),
         )
@@ -310,6 +314,7 @@ def chain_row(entry: Mapping[str, Any]) -> _ChainRow:
             if "payload" in entry and "entryType" in entry
             else None
         ),
+        extensions_projected=True,
         oidc=(
             (entry.get("actorOidcIss"), entry.get("actorOidcSub"), _UNDEFINED if synthesized is None else synthesized)
             if synthesized is not _UNDEFINED
@@ -1589,7 +1594,9 @@ def verify_entry(
             or decoded is None
             or rebuilt is None
             or not deep_equal(rebuilt, decoded)
-            or not envelope_extensions_match(cast("Mapping[str, Any]", row_payload), predicate)
+            or not envelope_extensions_match(
+                cast("Mapping[str, Any]", row_payload), predicate, row.extensions_projected
+            )
         ):
             return EntryVerificationResult(
                 position=position,
@@ -1968,7 +1975,9 @@ def deep_equal(a: object, b: object) -> bool:
 _TRACEPARENT = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 
-def envelope_extensions_match(row_payload: Mapping[str, Any], signed_predicate: Mapping[str, Any]) -> bool:
+def envelope_extensions_match(
+    row_payload: Mapping[str, Any], signed_predicate: Mapping[str, Any], projected: bool = False
+) -> bool:
     """Whether the envelope extensions a row's payload carries are the ones the
     entry signed. Mirrors verify-core ``envelopeExtensionsMatch``.
 
@@ -1985,21 +1994,27 @@ def envelope_extensions_match(row_payload: Mapping[str, Any], signed_predicate: 
     lifts only an object ``on_behalf_of`` and a v00 ``traceparent``, so a
     genuine older row holding another shape signed nothing for it.
 
-    A row without them is not a mismatch: the Server also signs an
-    ``on_behalf_of`` built from the request's authentication rather than from
-    the payload, and that one never reaches the row payload. Its identity is
-    held to the row's actor columns by the OIDC-actor check instead."""
+    ``projected`` says whether the payload is one the Server fills from the
+    signed predicate. An export entry's is: the Server writes every
+    ``on_behalf_of`` and v00 ``traceparent`` the entry signed into it,
+    including an ``on_behalf_of`` built from the request's authentication, so
+    a signed one the payload lacks was deleted after export. A vault row's
+    payload never holds them, so on a dump a row without them is not a
+    mismatch, and the identity is held to the row's actor columns by the
+    OIDC-actor check instead."""
     obo: object = row_payload.get("on_behalf_of")
-    if isinstance(obo, Mapping) and not deep_equal(
-        cast("Mapping[str, Any]", obo), signed_predicate.get("on_behalf_of", _ABSENT)
-    ):
+    row_obo = cast("Mapping[str, Any]", obo) if isinstance(obo, Mapping) else None
+    if row_obo is not None and not deep_equal(row_obo, signed_predicate.get("on_behalf_of", _ABSENT)):
         return False
-    traceparent = row_payload.get("traceparent")
-    return not (
-        isinstance(traceparent, str)
-        and _TRACEPARENT.match(traceparent)
-        and traceparent != signed_predicate.get("traceparent")
-    )
+    if projected and isinstance(signed_predicate.get("on_behalf_of"), Mapping) and row_obo is None:
+        return False
+    tp: object = row_payload.get("traceparent")
+    row_tp = tp if isinstance(tp, str) and _TRACEPARENT.match(tp) else None
+    if row_tp is not None and row_tp != signed_predicate.get("traceparent"):
+        return False
+    signed_tp: object = signed_predicate.get("traceparent")
+    signed_valid = isinstance(signed_tp, str) and _TRACEPARENT.match(signed_tp) is not None
+    return not (projected and signed_valid and row_tp is None)
 
 
 def _strip_envelope_extensions(predicate: dict[str, Any]) -> dict[str, Any]:

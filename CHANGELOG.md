@@ -25,6 +25,11 @@ Targets AGLedger Server 3.0.0.
 - The `admin-iac` scope profile holds `agents:read` and `webhooks:read`, as the Server serves it, and every profile description is the served text.
 - `federation_admin.recover_dlq()` documents that a dry run returns `recovered: 0` and that the eligible count is `inspected`. `federation_admin.list_dlq()` items carry `attempts`, `lastAttemptedAt` and `lastError`; `admin.get_ops_summary()` carries `federation.legs`; webhook deliveries carry `signatureInput` and `idempotencyKey`; a dispute's `autoReadjudication` carries `failingRuleIds`.
 
+### Fixed
+
+- **`agledger.verify`: a federation projection held under a fresh local record id verifies.** From AGLedger Server 3.0.0, a receiving Server that already holds the record id a peer names stores that projection under a new local id, and each entry it writes for a projection signs `origin`: the sending Server and the record id it sent. The sealed message keeps the id the sender named, so the verifier failed every such entry with `CHAIN_FEDERATION_WIRE_INVALID`. When an entry signs `origin`, the sealed message's record id is now compared with `origin.recordId`, and `origin.peerHubId` must be the sealed sender. Entries without `origin` are compared with their own record id, as before.
+- **`agledger.verify`: a signed `traceparent` or `on_behalf_of` deleted from an export entry's `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.** The Server writes every `on_behalf_of` and W3C `traceparent` an entry signed into that entry's export `payload`, so a copy that is missing, or replaced by a value the Server would not have written, was removed after export. A rewritten or added copy already failed; a deleted one verified. A vault dump row never holds either one, so the dump path still holds a row copy only when present.
+
 ### Removed
 
 - **`admin.upload_support_bundle()`**, **`admin.flush_auth_cache()`** and **`admin.flush_schema_cache()`**, whose routes are gone. Key changes already invalidate the auth cache across replicas and its entries expire after 30 seconds, and the schema cache retries a failed startup load on its own. `admin.get_support_bundle()` stays.

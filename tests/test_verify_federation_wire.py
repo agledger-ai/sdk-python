@@ -457,3 +457,55 @@ def test_the_cli_takes_a_history_file_beside_the_key_for_its_hub(capsys: pytest.
         assert "after-retirement=1" in capsys.readouterr().out
         assert run([path, "--federation-key-history", history]) == 2
         assert "no --federation-key names that hub" in capsys.readouterr().err
+
+
+# --- a projection held under a fresh local id ---------------------------------
+# The sender named WIRE_ID; the receiver already held it, so the projection
+# lives under RECORD_ID and its entries sign ``origin``. The sealed body keeps
+# the id the sender named.
+WIRE_ID = "0199a8f0-0000-7000-8000-0000000000bb"
+WIRE_BODY: dict[str, Any] = {**BODY, "recordId": WIRE_ID}
+
+
+def test_origin_naming_the_sender_and_the_sealed_record_id_verifies():
+    exp = _export(_projection(_sealed(SENDER, WIRE_BODY), origin={"peerHubId": SENDER_HUB, "recordId": WIRE_ID}))
+    result = verify_export(exp, federation_keys={SENDER_HUB: _spki(SENDER)})
+    assert result.broken_at is None
+    assert result.valid
+
+
+def test_origin_naming_the_entrys_own_record_verifies():
+    exp = _export(_projection(_sealed(SENDER, BODY), origin={"peerHubId": SENDER_HUB, "recordId": RECORD_ID}))
+    assert verify_export(exp).valid
+
+
+def test_origin_naming_another_record_than_the_sealed_one_fails():
+    exp = _export(_projection(_sealed(SENDER, WIRE_BODY), origin={"peerHubId": SENDER_HUB, "recordId": RECORD_ID}))
+    result = verify_export(exp)
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_FEDERATION_WIRE_INVALID"
+    assert f"Entry origin names record {RECORD_ID}, the sealed message names record {WIRE_ID}" in (
+        result.broken_at.detail or ""
+    )
+
+
+def test_origin_naming_another_sender_fails():
+    exp = _export(_projection(_sealed(SENDER, WIRE_BODY), origin={"peerHubId": "hub-other", "recordId": WIRE_ID}))
+    result = verify_export(exp)
+    assert result.broken_at is not None
+    assert "Entry origin names peer hub-other" in (result.broken_at.detail or "")
+
+
+def test_without_origin_a_sealed_message_naming_another_record_fails():
+    result = verify_export(_export(_projection(_sealed(SENDER, WIRE_BODY))))
+    assert result.broken_at is not None
+    assert f"Entry is on record {RECORD_ID}, the sealed message names record {WIRE_ID}" in (
+        result.broken_at.detail or ""
+    )
+
+
+@pytest.mark.parametrize("origin", ["hub-sender", [SENDER_HUB, WIRE_ID], {"peerHubId": SENDER_HUB}])
+def test_an_origin_that_is_not_an_object_naming_both_fields_fails(origin: object):
+    result = verify_export(_export(_projection(_sealed(SENDER, WIRE_BODY), origin=origin)))
+    assert result.broken_at is not None
+    assert result.broken_at.code == "CHAIN_FEDERATION_WIRE_INVALID"

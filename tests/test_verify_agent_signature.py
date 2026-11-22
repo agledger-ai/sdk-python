@@ -348,18 +348,19 @@ def test_a_rewritten_validated_flag_fails_the_binding():
 
 def test_a_row_copy_that_is_not_an_object_is_ignored():
     # The engine lifts only an object on_behalf_of, so a genuine older row
-    # holding another shape signed nothing for it (verify-core bf5d379).
-    doc = _load("export-cert-lifecycle.json")
-    _first_with_obo(doc)["on_behalf_of"] = "forged"
+    # holding another shape on an entry that signed none signed nothing for it.
+    doc = _load("export-lifecycle.json")
+    entry = next(e for e in doc["entries"] if e.get("payload") and not e["payload"].get("on_behalf_of"))
+    entry["payload"]["on_behalf_of"] = "forged"
     assert verify_export(doc).valid
 
 
-def test_a_row_without_the_block_still_verifies():
-    # The engine also signs an on_behalf_of from authentication that never
-    # reaches the row.
+def test_an_export_entry_without_the_signed_block_fails():
+    # The Server writes every signed on_behalf_of into the export payload,
+    # including one built from authentication, so a missing one was deleted.
     doc = _load("export-cert-lifecycle.json")
     del _first_with_obo(doc)["on_behalf_of"]
-    assert verify_export(doc).valid
+    _binding_broken(doc)
 
 
 def test_an_on_behalf_of_block_added_to_an_entry_that_signed_none_fails_the_binding():

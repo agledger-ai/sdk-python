@@ -535,11 +535,46 @@ def check_federation_wire(
         return FederationWireOutcome(
             "invalid", f"Entry names peer {peer}, the sealed message was sent by {wire['senderHubId']}."
         )
+    # A projection is keyed by its sending Server and the record id that Server
+    # named. When the receiver already held that id, the projection lives under
+    # a fresh local id and its entries sign ``origin``, the sender and the id it
+    # sent: the sealed body names ``origin.recordId``, not the entry's record.
+    # Entries written before ``origin`` was signed name the entry's own record.
+    origin: object = payload.get("origin")
+    expected_record_id: object = record_id
+    if origin is not None:
+        if not isinstance(origin, Mapping):
+            return FederationWireOutcome(
+                "invalid",
+                f"Entry origin is {canonicalize_json(origin)}, not an object naming the sending Server and the "
+                "record id it sent.",
+            )
+        o = cast("Mapping[str, Any]", origin)
+        origin_peer = o.get("peerHubId")
+        origin_record = o.get("recordId")
+        if not isinstance(origin_peer, str) or not isinstance(origin_record, str):
+            return FederationWireOutcome(
+                "invalid",
+                f"Entry origin {canonicalize_json(o)} does not name both peerHubId and recordId as strings.",
+            )
+        if origin_peer != wire["senderHubId"]:
+            return FederationWireOutcome(
+                "invalid",
+                f"Entry origin names peer {origin_peer}, the sealed message was sent by {wire['senderHubId']}.",
+            )
+        expected_record_id = origin_record
     body_record_id = body.get("recordId")
-    if record_id is not None and isinstance(body_record_id, str) and body_record_id != record_id:
-        return FederationWireOutcome(
-            "invalid", f"Entry is on record {record_id}, the sealed message names record {body_record_id}."
+    if (
+        isinstance(expected_record_id, str)
+        and isinstance(body_record_id, str)
+        and body_record_id.lower() != expected_record_id.lower()
+    ):
+        detail = (
+            f"Entry is on record {record_id}, the sealed message names record {body_record_id}."
+            if origin is None
+            else f"Entry origin names record {expected_record_id}, the sealed message names record {body_record_id}."
         )
+        return FederationWireOutcome("invalid", detail)
     for entry_field, body_field in _FIELD_PAIRS.get(str(entry_type), ()):
         mine = payload.get(entry_field)
         theirs = body.get(body_field)
