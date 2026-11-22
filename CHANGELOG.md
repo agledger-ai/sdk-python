@@ -6,36 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-Targets AGLedger Server 3.0.0.
-
-### Added
-
-- **`produced_by` on `records.create()` and `completions.submit()`**, and `producedBy` on each `records.bulk_create()` item: what produced the work (`modelProvider`, `modelId`, `modelVersion`, `agentSoftware`, `agentSoftwareVersion`, `promptDigest`, `configDigest`), keyed as on the wire (`ProducedByInput`). `RecordRow.produced_by` and `Completion.produced_by` read it back as `ProducedBy`. A completion `idempotency_key` binds it with the evidence.
-- **`records.search()` takes `trace_id`, `origin_record_id`, `produced_by` and numeric bounds**: `criteria_gt`, `criteria_gte`, `criteria_lt`, `criteria_lte` and the four `metadata_*` twins, sent as `criteriaGte[amount]=500`. A bound may be an int, a float (written as a plain decimal) or a decimal string.
-- **`records.counts()`** (sync and async) for `GET /v1/records/counts`: every search filter, plus `group_by` (one dimension or a list of up to two, sent comma-joined) and `limit`. It returns `RecordCounts` (`data`, `group_by`, `total`, `group_count`, `truncated`).
-- **`records.get_audit_export_html()`** (sync and async) returns the HTML audit export as a `str`. `AuditExportFormat` names the five formats; `get_audit_export()` still parses JSON.
-- **`signature_meaning` on `records.submit_verdict()`**, `VerdictResult.signature` (`VerdictSignature`: `meaning`, `signer_name`, `signer_iss`, `signer_sub`, `signed_at`, or `None`), and `oidc.name` on `auth.get_me()`. A signed verdict is refused with 422 `signature_requires_oidc_identity` (an API key, or `on_behalf_of`) or `signature_requires_signer_name`; both are on `APIError.reason`.
-- **Federation state on a Record**: `trace_id`, `federation_origin` (`FederationOrigin`: `peer_hub_id`, `record_id`) and `federation_legs` (`FederationLeg`), and `attempts`, `last_attempted_at`, `last_error` and `last_error_reason` on each `CoSignPeerLeg`. `origin_agent_id` and `origin_peer_hub_id` on `AgentProfile` and `AgentDirectoryEntry`.
-- `ComplianceExport.next_from` (`nextFrom`): the `filters.from` for the next incremental export. `ConformanceResponse.limits` carries `jsonBodyMaxDepth` and `paginationLimitMaxByRoute`, a mapping.
-- The named unions `SignatureMeaning`, `FederationLegKind`, `FederationLegStatus`, `FederationLegErrorReason` and `RecordCountGroupBy`.
-
-### Changed
-
-- **The client retries a 409 the Server marks `retryable: true`** (`IDEMPOTENCY_KEY_IN_FLIGHT`, `GATE_PASS_IN_FLIGHT`) when the request carries an `Idempotency-Key` or is a read, waiting out `Retry-After` or the body's `retryAfterSeconds`. A 409 `IDEMPOTENT_WRITE_COMMITTED` is raised at once: the first attempt committed, and `refresh_url` on the error reads what it wrote. 429 and 5xx, including 503 `SERVER_SHUTTING_DOWN`, were already retried.
-- The `admin-iac` scope profile holds `agents:read` and `webhooks:read`, as the Server serves it, and every profile description is the served text.
-- `federation_admin.recover_dlq()` documents that a dry run returns `recovered: 0` and that the eligible count is `inspected`. `federation_admin.list_dlq()` items carry `attempts`, `lastAttemptedAt` and `lastError`; `admin.get_ops_summary()` carries `federation.legs`; webhook deliveries carry `signatureInput` and `idempotencyKey`; a dispute's `autoReadjudication` carries `failingRuleIds`.
-
-### Fixed
-
-- **`agledger.verify`: a federation projection held under a fresh local record id verifies.** From AGLedger Server 3.0.0, a receiving Server that already holds the record id a peer names stores that projection under a new local id, and each entry it writes for a projection signs `origin`: the sending Server and the record id it sent. The sealed message keeps the id the sender named, so the verifier failed every such entry with `CHAIN_FEDERATION_WIRE_INVALID`. When an entry signs `origin`, the sealed message's record id is now compared with `origin.recordId`, and `origin.peerHubId` must be the sealed sender. Entries without `origin` are compared with their own record id, as before.
-- **`agledger.verify`: a signed `traceparent` or `on_behalf_of` deleted from an export entry's `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.** The Server writes every `on_behalf_of` and W3C `traceparent` an entry signed into that entry's export `payload`, so a copy that is missing, or replaced by a value the Server would not have written, was removed after export. A rewritten or added copy already failed; a deleted one verified. A vault dump row never holds either one, so the dump path still holds a row copy only when present.
-
-### Removed
-
-- **`admin.upload_support_bundle()`**, **`admin.flush_auth_cache()`** and **`admin.flush_schema_cache()`**, whose routes are gone. Key changes already invalidate the auth cache across replicas and its entries expire after 30 seconds, and the schema cache retries a failed startup load on its own. `admin.get_support_bundle()` stays.
-- **`schemas.check_compatibility()`** and **`schemas.export_schema()`**, whose routes are gone. `schemas.preview()` runs the same check and reports each incompatibility as a `COMPATIBILITY` error. `schemas.get_manifest()` with `schemas.import_()` moves a named-publisher Type to another Server; a `local` Type is registered there from `schemas.get_version()`.
-
 ## [3.2.0] - 2026-11-18
+
+Targets AGLedger Server 3.0.0.
 
 ### Added
 
@@ -47,6 +20,19 @@ Targets AGLedger Server 3.0.0.
 - Python 3.15 is supported and tested in CI.
 - **A record export cut from the end fails (`result.entry_count`).** `verify_export` and `agledger-verify` hold the export to the two entry counts it states: fewer entries than `exportMetadata.expectedEntries`, the position of the record's latest checkpoint, is `CHECKPOINT_ROW_MISSING`, and fewer than `exportMetadata.totalEntries` is `CHAIN_POSITION_GAP`. `result.entry_count` (`EntryCount`) carries both, each `None` when the export does not state it; the text report has an `entry count` line and the JSON `entryCount`. An export that verified on 3.1.0 with its tail removed now fails.
 - **A dump report counts the chains a checkpoint holds the length of.** `report.vault.checkpointed_chain_count` (`checkpointedChainCount` in JSON, `checkpointed` in the text report) is how many of the chains were compared with at least one checkpoint. The length of a chain with no checkpoint yet is the dump's own, and the report now says how many those are.
+- **`produced_by` on `records.create()` and `completions.submit()`**, and `producedBy` on each `records.bulk_create()` item: what produced the work (`modelProvider`, `modelId`, `modelVersion`, `agentSoftware`, `agentSoftwareVersion`, `promptDigest`, `configDigest`), keyed as on the wire (`ProducedByInput`). `RecordRow.produced_by` and `Completion.produced_by` read it back as `ProducedBy`. A completion `idempotency_key` binds it with the evidence.
+- **`records.search()` takes `trace_id`, `origin_record_id`, `produced_by` and numeric bounds**: `criteria_gt`, `criteria_gte`, `criteria_lt`, `criteria_lte` and the four `metadata_*` twins, sent as `criteriaGte[amount]=500`. A bound may be an int, a float (written as a plain decimal) or a decimal string.
+- **`records.counts()`** (sync and async) for `GET /v1/records/counts`: every search filter, plus `group_by` (one dimension or a list of up to two, sent comma-joined) and `limit`. It returns `RecordCounts` (`data`, `group_by`, `total`, `group_count`, `truncated`).
+- **`records.get_audit_export_html()`** (sync and async) returns the HTML audit export as a `str`. `AuditExportFormat` names the five formats; `get_audit_export()` still parses JSON.
+- **`signature_meaning` on `records.submit_verdict()`**, `VerdictResult.signature` (`VerdictSignature`: `meaning`, `signer_name`, `signer_iss`, `signer_sub`, `signed_at`, or `None`), and `oidc.name` on `auth.get_me()`. A signed verdict is refused with 422 `signature_requires_oidc_identity` (an API key, or `on_behalf_of`) or `signature_requires_signer_name`; both are on `APIError.reason`.
+- **Federation state on a Record**: `trace_id`, `federation_origin` (`FederationOrigin`: `peer_hub_id`, `record_id`) and `federation_legs` (`FederationLeg`), and `attempts`, `last_attempted_at`, `last_error` and `last_error_reason` on each `CoSignPeerLeg`. `origin_agent_id` and `origin_peer_hub_id` on `AgentProfile` and `AgentDirectoryEntry`.
+- `ComplianceExport.next_from` (`nextFrom`): the `filters.from` for the next incremental export. `ConformanceResponse.limits` carries `jsonBodyMaxDepth` and `paginationLimitMaxByRoute`, a mapping.
+- The named unions `SignatureMeaning`, `FederationLegKind`, `FederationLegStatus`, `FederationLegErrorReason` and `RecordCountGroupBy`.
+
+### Removed
+
+- **`admin.upload_support_bundle()`**, **`admin.flush_auth_cache()`** and **`admin.flush_schema_cache()`**, whose routes are gone. Key changes already invalidate the auth cache across replicas and its entries expire after 30 seconds, and the schema cache retries a failed startup load on its own. `admin.get_support_bundle()` stays.
+- **`schemas.check_compatibility()`** and **`schemas.export_schema()`**, whose routes are gone. `schemas.preview()` runs the same check and reports each incompatibility as a `COMPATIBILITY` error. `schemas.get_manifest()` with `schemas.import_()` moves a named-publisher Type to another Server; a `local` Type is registered there from `schemas.get_version()`.
 
 ### Changed
 
@@ -57,6 +43,9 @@ Targets AGLedger Server 3.0.0.
 - Documentation describes what the caller observes instead of the Server's internals.
 - The README names the environment variable the client falls back to (`AGLEDGER_API_KEY`), and says that federation key history and schema import with a manifest digest need a Server 2.2 or later.
 - The source distribution contains only the package source and its README, LICENSE and CHANGELOG.
+- **The client retries a 409 the Server marks `retryable: true`** (`IDEMPOTENCY_KEY_IN_FLIGHT`, `GATE_PASS_IN_FLIGHT`) when the request carries an `Idempotency-Key` or is a read, waiting out `Retry-After` or the body's `retryAfterSeconds`. A 409 `IDEMPOTENT_WRITE_COMMITTED` is raised at once: the first attempt committed, and `refresh_url` on the error reads what it wrote. 429 and 5xx, including 503 `SERVER_SHUTTING_DOWN`, were already retried.
+- The `admin-iac` scope profile holds `agents:read` and `webhooks:read`, as the Server serves it, and every profile description is the served text.
+- `federation_admin.recover_dlq()` documents that a dry run returns `recovered: 0` and that the eligible count is `inspected`. `federation_admin.list_dlq()` items carry `attempts`, `lastAttemptedAt` and `lastError`; `admin.get_ops_summary()` carries `federation.legs`; webhook deliveries carry `signatureInput` and `idempotencyKey`; a dispute's `autoReadjudication` carries `failingRuleIds`.
 
 ### Fixed
 
@@ -65,6 +54,9 @@ Targets AGLedger Server 3.0.0.
 - `ComplianceExport.truncated` says how to fetch the rest with `resume_to`, and `get_org_config()` says what the dispute re-check does with `deadlineGraceSeconds`: it is added to the record's `tolerance.graceSeconds`, which `toleranceExpansion` does not multiply.
 
 - **`verify_rfc9421` and `construct_event_rfc9421` hold a delivery to its signing key's window.** Given the list from `client.verification_keys.list()`, a delivery was accepted whenever its `keyid` matched a listed key and its signature verified, including one signed with a retired key long after its retirement. The delivery's `created` time must now fall inside that key's `[activatedAt, retiredAt]` window, with 300 seconds allowed at each edge, as the Server's receiver guidance gives it. `status` is not consulted. A listed key with no readable `activatedAt` verifies nothing. A single key passed as a string carries no window and behaves as before.
+- **`agledger.verify`: a federation projection held under a fresh local record id verifies.** From AGLedger Server 3.0.0, a receiving Server that already holds the record id a peer names stores that projection under a new local id, and each entry it writes for a projection signs `origin`: the sending Server and the record id it sent. The sealed message keeps the id the sender named, so the verifier failed every such entry with `CHAIN_FEDERATION_WIRE_INVALID`. When an entry signs `origin`, the sealed message's record id is now compared with `origin.recordId`, and `origin.peerHubId` must be the sealed sender. Entries without `origin` are compared with their own record id, as before.
+- **`agledger.verify`: a signed `traceparent` or `on_behalf_of` deleted from an export entry's `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.** The Server writes every `on_behalf_of` and W3C `traceparent` an entry signed into that entry's export `payload`, so a copy that is missing, or replaced by a value the Server would not have written, was removed after export. A rewritten or added copy already failed; a deleted one verified. A vault dump row never holds either one, so the dump path still holds a row copy only when present.
+
 ## [3.1.0] - 2026-11-05
 
 ### Added
