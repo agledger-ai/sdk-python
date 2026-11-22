@@ -449,7 +449,15 @@ class AdminResource:
         ``workerScheduled``). The last of those is the platform-wide read
         transparency sweep posture; per-org detail is
         ``audit.org_reads_checkpoints.list().checkpointing``, which is a
-        different shape."""
+        different shape.
+
+        ``federation.peers`` counts peers by delivery state; ``federation.legs``
+        counts delivery per leg (one record, one peer, one kind): ``retrying``
+        (pending after at least one failed attempt, retrying on their own),
+        ``failed``, and ``oldestRetryingAt`` (``None`` when none retries). A
+        peer reads ``delivering`` again after its next success on any record,
+        while a leg that keeps failing stays pending; a record's own legs are
+        ``federation_legs`` on ``records.get()``."""
         return self._http.get("/v1/admin/ops-summary")
 
     def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:

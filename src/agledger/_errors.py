@@ -61,7 +61,7 @@ class APIError(AgledgerError):
     - ``attempted_action`` / ``attempted_transition`` / ``attempted_state``: what a 422 refused
     - ``inapplicable_fields``: the fields a 422 ``notarize_only_field`` refused on a notarize-only create
     - ``retry_after``: seconds the Server or a proxy asked the client to wait, from the
-      ``Retry-After`` header on any status (a 429 body's ``retryAfterSeconds`` fills it too)
+      ``Retry-After`` header on any status (the body's ``retryAfterSeconds``, on a 429 or a retryable 409 such as ``GATE_PASS_IN_FLIGHT``, fills it too)
     - ``body``: the parsed error body as sent, every field included, for anything this
       class does not name
     """
@@ -108,8 +108,15 @@ class APIError(AgledgerError):
     ``ACCOUNT_DEACTIVATED``, ``RECORDS_REFERENCE_TYPE``, ``CONFLICTING_VERSION``,
     ``RESERVED_PUBLISHER_LABEL``, ``PROVISIONING_MANAGED``, ``OIDC_JTI_REPLAY``,
     ``ROW_HAS_DEPENDENT_RECORDS``, ``CHAIN_REWIND_DETECTED``,
-    ``VAULT_SCAN_IN_FLIGHT``, ``AGENT_NAME_IN_USE``, ``TRUSTED_ISSUER_EXISTS`` or
-    ``KEY_ALREADY_ROTATED``. Not every 409 names one (a duplicate agent
+    ``VAULT_SCAN_IN_FLIGHT``, ``AGENT_NAME_IN_USE``, ``TRUSTED_ISSUER_EXISTS``,
+    ``KEY_ALREADY_ROTATED``, ``IDEMPOTENCY_KEY_IN_FLIGHT`` (retryable: the
+    client waits and resends), ``IDEMPOTENT_WRITE_COMMITTED`` (not retryable:
+    the first attempt committed, read ``refresh_url``) or
+    ``GATE_PASS_IN_FLIGHT`` (retryable). On a 422 it is also the refusal's
+    reason, such as ``notarize_only_field``, ``signature_requires_oidc_identity``
+    (a verdict ``signature_meaning`` sent on an API key or with
+    ``on_behalf_of``) or ``signature_requires_signer_name`` (the IdP token
+    carried no name). Not every 409 names one (a duplicate agent
     ``displayName`` answers ``error: CONFLICT`` with no reason today), so branch
     on ``code`` first and on ``reason`` when present."""
     current_state: str | None
@@ -128,6 +135,8 @@ class APIError(AgledgerError):
     with. Present on 409 ``TRUSTED_ISSUER_EXISTS``: read or PATCH that row
     rather than creating another."""
     refresh_url: str | None
+    """Concrete GET URL to re-fetch: fresh state on a 422 ``INVALID_ACTION``, or
+    what the first attempt wrote on a 409 ``IDEMPOTENT_WRITE_COMMITTED``."""
     deadline: str | None
     """ISO deadline that had already passed on a system TIME_OUT 422 (API v1.3.2)."""
     title: str | None

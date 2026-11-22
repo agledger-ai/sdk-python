@@ -76,11 +76,23 @@ class FederationAdminResource:
         """List failed outbound federation messages in the dead-letter queue.
 
         Each item carries ``firstFailedAt`` alongside the latest attempt, so how
-        long a message has been stuck is readable without diffing two listings."""
+        long a message has been stuck is readable without diffing two listings.
+        ``attempts``, ``lastAttemptedAt`` and ``lastError`` (at most 500
+        characters) are read from the leg's delivery row, and are ``None`` when
+        this Server holds no delivery row for the leg the job names."""
         return self._http.get_page("/federation/v1/admin/dlq", params=params)
 
     def recover_dlq(self, **params: Any) -> dict[str, Any]:
-        """Recover stuck or failed outbound federation jobs."""
+        """Recover stuck or failed outbound federation jobs.
+
+        Takes ``limit`` (1 to 500, default 100) and ``dryRun``. The result is
+        ``recovered``, ``inspected`` and ``dryRun``: ``inspected`` is the
+        eligible jobs examined, capped by ``limit``, so re-run while it equals
+        ``limit`` to drain in batches. A dry run touches nothing and returns
+        ``recovered: 0``; the number a real call would try to replay is in
+        ``inspected``, and ``inspected: 0`` means nothing is eligible. This is
+        also the only call that moves a leg the background sweep abandoned at
+        its 24-hour horizon, for any leg that first failed within 30 days."""
         return self._http.post("/federation/v1/admin/dlq/recover", json=params)
 
     def get_instance(self) -> dict[str, Any]:
