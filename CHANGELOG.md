@@ -12,11 +12,11 @@ Targets AGLedger Server 3.0.0.
 
 ### Added
 
-- **`agledger-verify` holds checkpoints and the read log to their signing key's window.** AGLedger Server 3.0.0 reports a vault checkpoint, a read-log leaf or a read-log tree head written outside the signed window of the key that signed it, and a dump holding one verified clean here. Each is now placed by the time its row was written (`created_at`, `read_at`, `checkpoint_at`), after its signature verifies, by the rule chain entries are held to: `CHECKPOINT_KEY_NOT_YET_ACTIVE` and `CHECKPOINT_KEY_EXPIRED`, `TENANT_READ_KEY_NOT_YET_ACTIVE` and `TENANT_READ_KEY_EXPIRED`, `TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE` and `TENANT_CHECKPOINT_KEY_EXPIRED`. A row written exactly at the retirement passes. `place_in_key_window` and `distrust_accounts` are exported from `agledger.verify`.
-- **Checkpoints, leaves and tree heads a `--distrusted-key` entry accounts for are set aside.** The Server sets aside what a distrusted key signed before a trusted key retired it, on every signed artifact; here only chain entries were, so after a leaked-key response every checkpoint, leaf and tree head the old key had signed failed as unanchored. They are now listed and never evidence: `accounted_checkpoints` on the vault report (`accountedCheckpoints`, `accountedCheckpointCount` in JSON) and `accounted` on the read-log report (`AccountedReadLogEntry`). A leaf set aside keeps its index, hash and claim checks. A record or platform-ops chain with no entry whose only checkpoints are set aside is `CHECKPOINT_ACCOUNTED_ONLY`, and more than `ACCOUNTED_CHECKPOINT_RUN_CAP` (1000) set aside above the newest that is not is `CHECKPOINT_ACCOUNTED_RUN_EXCEEDED`.
-- `VaultScanResult` carries `distrustedCheckpoints` and `distrustedCheckpointsTotal`, and `VaultScanOrgAdminReads` carries `distrustedEntries` (`VaultScanOrgReadsDistrustedEntry`), `distrustedEntriesTotal` and `distrustedSigned`: what a scan on AGLedger Server 3.0.0 set aside under a `VAULT_DISTRUSTED_KEYS` entry. None of them moves `verified`, `broken` or `healthy`.
+- **`agledger-verify` holds checkpoints and the read log to their signing key's window.** A vault checkpoint, read-log leaf or read-log tree head written outside the signed window of the key that signed it used to verify clean in a dump. Each is now placed by the time its row was written (`created_at`, `read_at`, `checkpoint_at`), after its signature verifies, by the rule chain entries are held to: `CHECKPOINT_KEY_NOT_YET_ACTIVE` and `CHECKPOINT_KEY_EXPIRED`, `TENANT_READ_KEY_NOT_YET_ACTIVE` and `TENANT_READ_KEY_EXPIRED`, `TENANT_CHECKPOINT_KEY_NOT_YET_ACTIVE` and `TENANT_CHECKPOINT_KEY_EXPIRED`. A row written exactly at the retirement passes. `place_in_key_window` and `distrust_accounts` are exported from `agledger.verify`.
+- **Checkpoints, leaves and tree heads a `--distrusted-key` entry accounts for are set aside.** Before this, only chain entries were, so after a leaked-key response every checkpoint, leaf and tree head the old key had signed failed as unanchored. They are now listed and never counted as evidence: `accounted_checkpoints` on the vault report (`accountedCheckpoints`, `accountedCheckpointCount` in JSON) and `accounted` on the read-log report (`AccountedReadLogEntry`). A leaf set aside keeps its index, hash and claim checks. A record or platform-ops chain with no entry whose only checkpoints are set aside is `CHECKPOINT_ACCOUNTED_ONLY`, and more than `ACCOUNTED_CHECKPOINT_RUN_CAP` (1000) set aside above the newest that is not is `CHECKPOINT_ACCOUNTED_RUN_EXCEEDED`.
+- `VaultScanResult` carries `distrustedCheckpoints` and `distrustedCheckpointsTotal`, and `VaultScanOrgAdminReads` carries `distrustedEntries` (`VaultScanOrgReadsDistrustedEntry`), `distrustedEntriesTotal` and `distrustedSigned`: what a scan set aside under a `VAULT_DISTRUSTED_KEYS` entry. None of them moves `verified`, `broken` or `healthy`.
 - `ComplianceExport.resume_to` (`resumeTo`): on a truncated export, the `filters.to` for the next window. Create the export again with the same filters and `filters.to` set to it, and that export holds exactly the records this one left out.
-- Reason codes from AGLedger Server 3.0.0: `checkpoint_key_expired`, `checkpoint_key_not_yet_active` and `checkpoint_accounted_run_exceeded` on `AuditChainIntegrityReasonCode` and `VaultScanBreakReason`; `accounted_checkpoint_only` on `VaultScanBreakReason`; `leaf_key_expired`, `leaf_key_not_yet_active`, `checkpoint_key_expired` and `checkpoint_key_not_yet_active` on `OrgReadsBreakReason`.
+- Reason codes: `checkpoint_key_expired`, `checkpoint_key_not_yet_active` and `checkpoint_accounted_run_exceeded` on `AuditChainIntegrityReasonCode` and `VaultScanBreakReason`; `accounted_checkpoint_only` on `VaultScanBreakReason`; `leaf_key_expired`, `leaf_key_not_yet_active`, `checkpoint_key_expired` and `checkpoint_key_not_yet_active` on `OrgReadsBreakReason`.
 - Python 3.15 is supported and tested in CI.
 - **A record export cut from the end fails (`result.entry_count`).** `verify_export` and `agledger-verify` hold the export to the two entry counts it states: fewer entries than `exportMetadata.expectedEntries`, the position of the record's latest checkpoint, is `CHECKPOINT_ROW_MISSING`, and fewer than `exportMetadata.totalEntries` is `CHAIN_POSITION_GAP`. `result.entry_count` (`EntryCount`) carries both, each `None` when the export does not state it; the text report has an `entry count` line and the JSON `entryCount`. An export that verified on 3.1.0 with its tail removed now fails.
 - **A dump report counts the chains a checkpoint holds the length of.** `report.vault.checkpointed_chain_count` (`checkpointedChainCount` in JSON, `checkpointed` in the text report) is how many of the chains were compared with at least one checkpoint. The length of a chain with no checkpoint yet is the dump's own, and the report now says how many those are.
@@ -34,21 +34,20 @@ Targets AGLedger Server 3.0.0.
 
 ### Removed
 
-- **`admin.upload_support_bundle()`**, **`admin.flush_auth_cache()`** and **`admin.flush_schema_cache()`**, whose routes are gone. Key changes already invalidate the auth cache across replicas and its entries expire after 30 seconds, and the schema cache retries a failed startup load on its own. `admin.get_support_bundle()` stays.
+- **`admin.upload_support_bundle()`**, **`admin.flush_auth_cache()`** and **`admin.flush_schema_cache()`**, whose routes are gone. `admin.get_support_bundle()` stays.
 - **`schemas.check_compatibility()`** and **`schemas.export_schema()`**, whose routes are gone. `schemas.preview()` runs the same check and reports each incompatibility as a `COMPATIBILITY` error. `schemas.get_manifest()` with `schemas.import_()` moves a named-publisher Type to another Server; a `local` Type is registered there from `schemas.get_version()`.
 
 ### Changed
 
-- **Raised minimum versions:** `pydantic>=2.4.0`, and in the `verify` and `oidc` extras `cryptography>=49.0` and `cbor2>=5.9`. The old floors (pydantic 2.0, cryptography 42, cbor2 5.6) let a resolver install releases with published advisories, among them unbounded recursion in `cbor2.loads`, which decodes the CBOR inside an audit export, and the OpenSSL bundled in older `cryptography` wheels. The test suite runs at the new floors on Python 3.11 in CI.
+- **Raised minimum versions:** `pydantic>=2.4.0`, and in the `verify` and `oidc` extras `cryptography>=49.0` and `cbor2>=5.9`. The old floors (pydantic 2.0, cryptography 42, cbor2 5.6) allowed releases with published advisories, among them unbounded recursion in `cbor2.loads`, which decodes the CBOR inside an audit export.
 - **`verify_rfc9421` parses `Signature-Input` and `Signature` as RFC 8941 structured fields** and rebuilds `@signature-params` from the parsed value, with the same rules as the TypeScript SDK: a signature must cover exactly `content-digest` and `x-agledger-idempotency-key`, in that order and without component parameters, and name `created` as an Integer and `keyid` as a String; `expires` is enforced when present. A delivery carrying several signatures (an intermediary may add its own) verifies when one of them does; it used to be refused. A delivery the Server signs verifies exactly as before.
 - **A query parameter nested below the bracket form raises `ConfigurationError`.** `metadata={"k": "v"}` becomes `metadata[k]=v`; a mapping or list one level deeper was sent as its Python repr (`metadata[k]={'a': 1}`), which the Server read as a filter on that string.
 - **`max_retries` must be 0 or more.** A negative value raises `ConfigurationError` at construction, as in the TypeScript SDK.
 - The `CHAIN_PAYLOAD_BINDING_MISMATCH` detail on an export entry reads "Denormalised row payload does not match the canonical projection of the signed predicate.", the text `@agledger/verify-core` reports, word for word.
-- **A sealed federation message is placed in its key's window with 300 seconds allowed at each edge (`FEDERATION_KEY_WINDOW_SKEW_MS`)**, as the Server's receiver guidance gives it: the message's timestamp is the signing process's clock and the window is the peer's database clock. A message signed within that of a key change was failed or counted as after retirement; it now verifies on the key it names.
+- **A sealed federation message is placed in its key's window with 300 seconds allowed at each edge (`FEDERATION_KEY_WINDOW_SKEW_MS`)**. The message's timestamp is the signing process's clock and the window is the peer's clock, so a message signed within that of a key change was failed or counted as after retirement; it now verifies on the key it names.
 - `federation.relay_signal(reason_code=...)` is typed as `FederationSignalReasonCode | None`, the six causes the Server accepts; AGLedger Server 3.0.0 refuses any other with a 400. The docstring states the `failing_rule_ids` limits (at most 220 ids of at most 100 characters) and the `counter_signature` form (128 lowercase hex characters).
 - Scope profile descriptions in `agledger.scopes` are the text AGLedger Server 3.0.0 serves. Scope lists are unchanged.
 - The read log's orgs are walked in the order the dump lists them, so findings and rows set aside are reported in a stable order.
-- Documentation describes what the caller observes instead of the Server's internals.
 - The README names the environment variable the client falls back to (`AGLEDGER_API_KEY`), and says that federation key history and schema import with a manifest digest need a Server 2.2 or later.
 - The source distribution contains only the package source and its README, LICENSE and CHANGELOG.
 - **The client retries a 409 the Server marks `retryable: true`** (`IDEMPOTENCY_KEY_IN_FLIGHT`, `GATE_PASS_IN_FLIGHT`) when the request carries an `Idempotency-Key` or is a read, waiting out `Retry-After` or the body's `retryAfterSeconds`. A 409 `IDEMPOTENT_WRITE_COMMITTED` is raised at once: the first attempt committed, and `refresh_url` on the error reads what it wrote. 429 and 5xx, including 503 `SERVER_SHUTTING_DOWN`, were already retried.
@@ -71,11 +70,10 @@ Targets AGLedger Server 3.0.0.
 - **The `agledger-verify` text report on an `?evidence=true` export called the inlined evidence a display projection.** AGLedger Server 3.0.0 lists `evidence` among the export's unsigned fields. Evidence bodies are held to the hash their entry signs; the note now leaves `evidence` out of the projections and points at the line that reports the check.
 - `RateLimitInfo.reset` is documented as the seconds until the window resets. It said a Unix timestamp.
 - `ComplianceExport.truncated` says how to fetch the rest with `resume_to`, and `get_org_config()` says what the dispute re-check does with `deadlineGraceSeconds`: it is added to the record's `tolerance.graceSeconds`, which `toleranceExpansion` does not multiply.
-
 - **`verify_rfc9421` and `construct_event_rfc9421` hold a delivery to its signing key's window.** Given the list from `client.verification_keys.list()`, a delivery was accepted whenever its `keyid` matched a listed key and its signature verified, including one signed with a retired key long after its retirement. The delivery's `created` time must now fall inside that key's `[activatedAt, retiredAt]` window, with 300 seconds allowed at each edge, as the Server's receiver guidance gives it. `status` is not consulted. A listed key with no readable `activatedAt` verifies nothing. A single key passed as a string carries no window and behaves as before.
 - **`agledger.verify`: a federation projection held under a fresh local record id verifies.** From AGLedger Server 3.0.0, a receiving Server that already holds the record id a peer names stores that projection under a new local id, and each entry it writes for a projection signs `origin`: the sending Server and the record id it sent. The sealed message keeps the id the sender named, so the verifier failed every such entry with `CHAIN_FEDERATION_WIRE_INVALID`. When an entry signs `origin`, the sealed message's record id is now compared with `origin.recordId`, and `origin.peerHubId` must be the sealed sender. Entries without `origin` are compared with their own record id, as before.
 - **`agledger.verify`: a signed `traceparent` or `on_behalf_of` deleted from an export entry's `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.** The Server writes every `on_behalf_of` and W3C `traceparent` an entry signed into that entry's export `payload`, so a copy that is missing, or replaced by a value the Server would not have written, was removed after export. A rewritten or added copy already failed; a deleted one verified. A vault dump row never holds either one, so the dump path still holds a row copy only when present.
-- **An export's record id is the one its entries sign.** `result.record_id` was copied from the unsigned `exportMetadata.recordId`, so editing it changed what a passing result was about. It is now the id the entries' signed predicates and `recordId` columns name, and a metadata id (or an entry) that disagrees fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.
+- **An export's record id is the one its entries sign.** `result.record_id` was copied from the unsigned `exportMetadata.recordId`, so editing it changed what a passing result was about. It is now the id the entries' signed predicates and `recordId` fields name, and a metadata id (or an entry) that disagrees fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.
 - **An export that does not state `exportFormatVersion` or `canonicalization` fails `UNSUPPORTED_FORMAT`.** Deleting either used to skip the format gate.
 - **Deleting an entry's `payload` or `entryType` no longer turns its checks off.** Once any entry of an export carries them, or `federation_keys` are supplied, an entry without them fails `CHAIN_PAYLOAD_BINDING_MISMATCH` and the `payload_binding` (and, with `federation_keys`, `federation_wire`) check reads `not_checked`.
 
@@ -121,7 +119,7 @@ There is no 2.x release of this package.
 
 ### Changed
 
-- **The org_admin_reads tree is RFC 9162.** `verify_dump` recomputes leaf hashes and tree-head roots as the RFC 9162 section 2.1 SHA-256 tree. New primitives: `org_read_leaf_hash(cose_sign1)`, `org_read_merkle_root(leaf_hashes)` and `verify_org_read_inclusion(leaf_hash, leaf_index, tree_size, path, root)`. The old `merkle_root` is removed. A value that is not 64 lowercase hex characters is refused.
+- **The read-log tree is RFC 9162.** `verify_dump` recomputes leaf hashes and tree-head roots as the RFC 9162 section 2.1 SHA-256 tree. New primitives: `org_read_leaf_hash(cose_sign1)`, `org_read_merkle_root(leaf_hashes)` and `verify_org_read_inclusion(leaf_hash, leaf_index, tree_size, path, root)`. The old `merkle_root` is removed. A value that is not 64 lowercase hex characters is refused.
 - **"Out-of-band" keys are now "supplied" keys**, as in `@agledger/verify-core` 2.0. `verify_export(require_out_of_band_keys=)` is `require_supplied_keys=`, `KeySource` `"out-of-band"` is `"supplied"`, `KeyProvenance.out_of_band` is `KeyProvenance.supplied`, the CLI's `--require-out-of-band-keys` is `--require-supplied-keys` (and its JSON `keyProvenance.outOfBand` is `supplied`), and `agledger.verify.cli.load_out_of_band_keys` is `load_supplied_keys`. Behavior is unchanged. Trust now comes from the new `trust_anchors`.
 - **Results carry the key-trust walk.** `VerifyExportResult` has `key_trust` (a `KeyTrustReport`), `optional_checks` gains `key_anchoring`, and `VerifyReport` gains `verdict` (`"trusted"`, `"unanchored"` or `"failed"`) and `key_trust`. Without trust anchors a passing result stays `valid` / `ok` but is flagged: `key_trust.status` is `"no_anchor"` and the CLI prints `[VERIFIED, NOT ANCHORED]`. A trusted pass is `[PASS]` and a failure `[FAIL]`.
 - **A dump is six files.** `load_dump` also reads `vault_key_statements.ndjson` into `Dump.key_statements`; a directory without it raises `DumpLoadError`.
@@ -211,7 +209,7 @@ There is no 2.x release of this package.
 - **A read-log leaf's signature is verified.** A leaf that names a key must name one in the dumped registry (`CHAIN_SIGNATURE_MISSING_KEY`) and carry a signature that verifies (`TENANT_READ_SIGNATURE_INVALID`).
 - **A pin over an artifact with nothing signed by an anchored key is not a trusted pass.** `key_trust.status` (`KeyTrustStatus`) gains `"no_anchored_signature"`, `verify_dump` gives the verdict `"unanchored"`, and the CLI prints `[VERIFIED, NOT ANCHORED]`. `settle_key_trust(report, anchored_signatures)` makes that call, `VaultChainsReport.signed_entries` counts verified vault entries, and `optional_checks["key_anchoring"]` is `"not_checked"` when anchors were given but no entry reached the check.
 - **An entry with no readable `createdAt` fails closed** with `CHAIN_MALFORMED_ENTRY` wherever the walk needs the time, and `written_while_signing` returns True for such a row once signing began.
-- **Malformed rows are failure codes, not exceptions.** A null or dropped `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`, a dropped or retyped actor column fails `CHAIN_ACTOR_ATTRIBUTION_MISMATCH` or `CHAIN_OIDC_ACTOR_MISMATCH`, a key row with no `public_key` is `CHAIN_SIGNATURE_MISSING_KEY`, a statement row with no readable `created_at` or `subject_key_id` is `KEY_STATEMENT_INVALID`, and a non-object entry or `integrity` block fails `CHAIN_MALFORMED_ENTRY`. A document with no `exportMetadata` object or `entries` that is not a list raises `TypeError`. Verdicts and codes match `@agledger/verify`.
+- **Malformed rows are failure codes, not exceptions.** A null or dropped `payload` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`, a dropped or retyped actor field fails `CHAIN_ACTOR_ATTRIBUTION_MISMATCH` or `CHAIN_OIDC_ACTOR_MISMATCH`, a key row with no `public_key` is `CHAIN_SIGNATURE_MISSING_KEY`, a statement row with no readable `created_at` or `subject_key_id` is `KEY_STATEMENT_INVALID`, and a non-object entry or `integrity` block fails `CHAIN_MALFORMED_ENTRY`. A document with no `exportMetadata` object or `entries` that is not a list raises `TypeError`. Verdicts and codes match `@agledger/verify`.
 - **A distrust cutoff is not a retirement.** `distrust_cutoff` is carried apart from `retired_at` on `KeyTrustEntry`, and an entry written after the cutoff fails `CHAIN_KEY_EXPIRED` worded as written after the `distrustedKeys` instant.
 - `verify_export` refuses `distrusted_keys` without `trust_anchors` with `TypeError`.
 - **A dump failure names the chain it is on.** Failures read `Chain schema:<org> pos N` for schema chains and `Record <id> pos N` for record chains; checkpoint failures use the same labels.
@@ -223,11 +221,11 @@ Targets AGLedger API 1.8.0. Adds OIDC workload identity: an agent can authentica
 ### Added
 
 - **`bearer_token=` on `AgledgerClient` and `AsyncAgledgerClient`**, beside `api_key=`. Pass exactly one; both at once raises `ConfigurationError`. It takes a string, a function the client calls before every request (async functions on the async client), or a credential object implementing `BearerCredential` (`AsyncBearerCredential` on the async client). `AGLEDGER_API_KEY` still backs `api_key` only.
-- **`oidc_cert_credential(get_oidc_token=..., agent_id=None, refresh_fraction=0.5)`** and **`async_oidc_cert_credential(...)`**. The credential generates an Ed25519 key pair in memory, exchanges a fresh OIDC token at `POST /v1/auth/oidc/cert` for a certificate bound to that key, and sends `Authorization: Bearer <certJws>`. It exchanges again once `refresh_fraction` of the certificate lifetime has passed and when the Server refuses the certificate with a 401. Every request with a body also carries `X-Agent-Signature` and `X-Agent-Signature-Content-Hash`, an Ed25519 signature over the bytes sent, which the Server seals into the chain entry. Needs the new `oidc` extra: `pip install 'agledger[oidc]'`. A refused exchange raises `OidcCertExchangeError` (an `APIError`) carrying the Server's `recovery_hint`, with the OIDC token scrubbed from its message and `details`. `get_oidc_token` must return a new token, with a new `jti`, on every call, since the Server accepts each token id once. If a scheduled refresh fails while the current certificate is still valid, the request goes out on that certificate and the exchange is retried shortly after.
+- **`oidc_cert_credential(get_oidc_token=..., agent_id=None, refresh_fraction=0.5)`** and **`async_oidc_cert_credential(...)`**. The credential generates an Ed25519 key pair in memory, exchanges a fresh OIDC token at `POST /v1/auth/oidc/cert` for a certificate bound to that key, and sends `Authorization: Bearer <certJws>`. It exchanges again once `refresh_fraction` of the certificate lifetime has passed and when the Server refuses the certificate with a 401. Every request with a body also carries `X-Agent-Signature` and `X-Agent-Signature-Content-Hash`, an Ed25519 signature over the bytes sent, which the Server seals into the chain entry. Needs the new `oidc` extra: `pip install 'agledger[oidc]'`. A refused exchange raises `OidcCertExchangeError` (an `APIError`) carrying the Server's `recovery_hint`, with the OIDC token removed from its message and `details`. `get_oidc_token` must return a new token, with a new `jti`, on every call, since the Server accepts each token id once. If a scheduled refresh fails while the current certificate is still valid, the request goes out on that certificate and the exchange is retried shortly after.
 - **`agent_keys=` on `agledger.verify.verify_export` and `verify_dump`, and `--agent-keys` on `agledger-verify`.** Pass the certificate's public key (`credential.public_key_jwk`) and every agent signature sealed in the chain is re-verified offline. A failure is `CHAIN_AGENT_SIGNATURE_INVALID`. `VerifyExportResult` gains `agent_signatures` (present and verified counts) and `agent_signature_check` (`applied` or `skipped_no_input`). The key file may hold one JWK, a list, a `{"keys": [...]}` JWK Set, or entries wrapping a key as `{"publicKeyJwk": ...}`; anything that is not an Ed25519 JWK is exit 2.
 - **`--keys`, `--require-key-id` and `--require-out-of-band-keys` on `agledger-verify`.** `--keys` takes a `{keyId: ...}` map, a `[{keyId, publicKey}]` list, or a saved `GET /v1/verification-keys` response. They apply to an `/audit-export` file only; a dump directory rejects them with exit 2. A malformed or unreadable key file is exit 2.
 - **The export text report warns when a pass is not independent**, that is, when it verified only against keys embedded in the export.
-- **`optional_checks` on `VerifyExportResult`.** The export path runs the OIDC-actor cross-check and the temporal key-validity check whenever the export carries their inputs (`actorOidcSynthesized` and the `actorOidc*` columns, `exportMetadata.signingKeyWindows`).
+- **`optional_checks` on `VerifyExportResult`.** The export path runs the OIDC-actor cross-check and the temporal key-validity check whenever the export carries their inputs (`actorOidcSynthesized` and the `actorOidc*` fields, `exportMetadata.signingKeyWindows`).
 - **`on_behalf_of=` on `records.create`, `records.transition`, `records.submit_verdict`, `completions.submit`, `a2a.dispatch` and `a2a.call`**, sent as the `AGLedger-On-Behalf-Of` header (an RFC 8693 delegation token). `client.request()` also takes `headers=`.
 - **API key administration**: `create_api_key(allowed_ips=)`; `list_api_keys` and `list_all_api_keys` take `last_used_before=` and `never_used=`; `update_api_key(allowed_ips=)` replaces or (with `None`) removes the IP allow-list; and `bulk_revoke_api_keys` takes `owner_id`, `role`, `created_before`, `last_used_before`, `never_used` and `reason` as well as ids. Listed keys carry `revokedAt`, `revokedByKeyId`, `revocationReason` and `rotatedFromKeyId`.
 - **Trusted issuers** take `jti_single_use=` and `subject_allowlist=` on create and update.
@@ -239,7 +237,7 @@ Targets AGLedger API 1.8.0. Adds OIDC workload identity: an agent can authentica
 
 ### Changed
 
-- `LICENSE` follows SDK License Template 1.9: section 1 states that AGLedger LLC does not receive, inspect or use the data you process through your deployment and collects no product usage information from it; section 7 names AGLedger and Settlement Signal as trademarks of AGLedger LLC; section 8 refers to issued or pending U.S. patents.
+- `LICENSE` section 1 states that AGLedger LLC does not receive, inspect or use the data you process through your deployment and collects no product usage information from it; section 7 names AGLedger and Settlement Signal as trademarks of AGLedger LLC; section 8 refers to issued or pending U.S. patents.
 - **The payload binding compares with JSON types kept apart**, as in `@agledger/verify-core`: a row that rewrote `true` as `1` no longer binds. An agent key the host runtime refuses to load (an OpenSSL FIPS provider) is reported per entry as `CHAIN_UNSUPPORTED_ALGORITHM` instead of raising. `Webhook.secret` no longer appears in the model's `repr`.
 - **The offline verifier binds the row copy of `on_behalf_of` and `traceparent` to what the entry signed.** A row copy that differs from the signed `predicate.on_behalf_of` / `predicate.traceparent` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`; a row without them is fine.
 - **`chainIntegrityReason` and `chainIntegrityDetail.failure` on an audit export are open unions.** A value added by a newer Server reads as a plain string.
@@ -264,7 +262,7 @@ Targets AGLedger API 1.8.0. Adds OIDC workload identity: an agent can authentica
 
 ## [1.11.0] - 2026-09-10
 
-Tracks the API build that follows 1.6.0. It replaces agent reputation with agent drift, removes the dispute tier ladder in favour of a single rendered outcome, drops the negotiation counter-offer, and removes commission from the record. There are no deprecation shims: a call to a removed method is an attribute error.
+Replaces agent reputation with agent drift, removes the dispute tier ladder in favour of a single rendered outcome, drops the negotiation counter-offer, and removes commission from the record. There are no deprecation shims: a call to a removed method is an attribute error.
 
 ### Removed
 
@@ -325,7 +323,7 @@ Tracks the API build that follows 1.6.0. It replaces agent reputation with agent
 ### Added
 
 - **`compliance.stream()` and `compliance.stream_all()` take `cursor`.** `since` starts a walk and `cursor` continues one; passing both raises `ValueError`.
-- **`AuditStreamResult.holdback_seconds`**, from `X-AGLedger-Stream-Holdback-Seconds`: the whole seconds by which a page stops short of now because a transaction that stamped rows has not committed. `0` means the page runs up to the present, `None` means the Server did not say.
+- **`AuditStreamResult.holdback_seconds`**, from `X-AGLedger-Stream-Holdback-Seconds`: the whole seconds by which a page stops short of now because rows still being written are not yet visible. `0` means the page runs up to the present, `None` means the Server did not say.
 - **`audit.org_reads_checkpoints.list_reads()`** lists the read-transparency log leaves the signed checkpoints cover (`GET /v1/audit/org-reads`). Rows carry `leaf_index` and `leaf_hash`, which `proof()` verifies against a checkpoint.
 - **`events.list()` and `events.list_all()` take `until`, `record_id`, `event_type` and `offset`.** `since` is inclusive and `until` is exclusive, so consecutive windows compose without overlap. `event_type` takes the new `EventType` union. `order` is no longer defaulted to `"desc"`; the Server's default (`asc`) applies unless you pass it.
 - **`EventType`, `FederationPeer`, `FederationPeerStatus`, `PeerHandshakeResult`, `OrgAdminRead`, `OrgReadsCheckpointing`, `OrgReadsCheckpointingSource` and `OrgReadsCheckpointPage`** are exported from the package root.
@@ -422,7 +420,7 @@ Tracks the API build that follows 1.6.0. It replaces agent reputation with agent
 
 ## [1.6.1] - 2026-08-07
 
-No code change from 1.6.0. This release is built and published by the tagged release workflow with PEP 740 attestations; prefer it over 1.6.0 if you check attestations.
+No code change from 1.6.0. This release carries PEP 740 attestations, which 1.6.0 does not.
 
 ## [1.6.0] - 2026-08-05
 
@@ -545,7 +543,7 @@ Tracks AGLedger API 1.0.3. Additive.
 
 ### Changed
 
-- `LICENSE` is updated to the current AGLedger SDK license template (v1.5): trademarks are AGLedger and Settlement Signal, export language follows ENC section 740.17(b)(1), and section 1 states that AGLedger does not inspect your data, train on it or collect usage data. No code changes.
+- `LICENSE` is updated: trademarks are AGLedger and Settlement Signal, export language follows ENC section 740.17(b)(1), and section 1 states that AGLedger does not inspect your data, train on it or collect usage data. No code changes.
 
 ## [1.0.0] - 2026-06-08
 
@@ -559,294 +557,4 @@ General availability, tracking AGLedger API 1.0.0. No breaking changes from the 
 
 - `agledger.__version__` and the `User-Agent` header report the installed package version.
 
-## [0.8.15] - 2026-06-04
-
-- Maintenance release with no user-facing changes.
-
-## [0.8.14] - 2026-06-04
-
-- Maintenance release with no user-facing changes.
-
-## [0.8.13] - 2026-06-04
-
-- Maintenance release with no user-facing changes.
-
-## [0.8.12] - 2026-06-02
-
-### Added
-
-- **`agledger-verify` console script** (installed with the `[verify]` extra: `pip install 'agledger[verify]'`) for offline verification of an audit dump. A directory is a five-file NDJSON dump; a file is a single `/audit-export` JSON document. Exit codes: `0` clean, `1` verification failure, `2` usage or IO error. Supports `--report-format text|json` and `--quiet`; makes no network calls.
-- **`verify_dump(load_dump(dir)) -> VerifyReport`.** Walks every per-record and per-org schema-event hash chain, cross-checks vault checkpoints against the live chain, and verifies the `org_admin_reads` Merkle log and signed tree heads, including fork detection.
-- New dump-path failure codes: `CHAIN_OIDC_ACTOR_MISMATCH`, `CHAIN_KEY_EXPIRED`, `CHECKPOINT_ROW_MISSING`, `CHECKPOINT_HASH_MISMATCH`, `CHECKPOINT_SIGNATURE_INVALID` and the `TENANT_*` set. The `FailureCode` taxonomy is in `agledger.verify.failures` with a `suggestion(code)` helper.
-
-### Changed
-
-- `RiskClassification` gains `unacceptable`; the AI-impact-assessment `domain` enum follows the API's Annex III high-risk set (`EuAiActRiskTier`, `EuAiActDomain`).
-- `WebhookEventType` matches the API set (37 event types plus the `*` wildcard; open literal).
-- The built-in ACH-* contract-type model is removed. Orgs own their entire type namespace, with four editable samples seeded.
-
-### Fixed
-
-- `compliance.create_assessment` (sync and async) takes typed snake_case keyword arguments (`risk_level`, `domain`, `human_oversight`, `testing_results`) instead of raw camelCase `**params`.
-
-## [0.8.11] - 2026-06-02
-
-### Fixed
-
-- **`RecordRow`** renames `vault_completion` to `signed_statement` and `self_commitment` to `self_principal`, drops `no_op`, and adds `settlement_signal`, `counter_signature`, `co_sign_required`, `co_sign_status`, `federation_status`, `dispute_id`, `dispute_status`, `has_dispute`, `has_children`, `latest_completion_id`, `terminal_reason`, `expired_at`, `awaiting_actor`, `share`, `shared_to_peers`, `source` and `imported`.
-- `VaultCompletion` is renamed `SignedStatement` (drops `signature`, adds `url`). New `SettlementSignalSummary` model.
-- `Completion` gains `verdict` and `last_verdict_reason`. `NextStep` gains `after_this`, `workflow_label`, `workflow_step` and `workflow_total`.
-- `Webhook` has the full subscription shape: `secret_grace_active`, `secret_grace_expires_at`, `circuit_state`, `consecutive_failures`, `last_successful_at`, `last_failure_at`.
-- `WebhookEventType` adds `dispute.escalated`, `dispute.evidence_window_closed`, `record.released` and `record.settled`.
-- New `EntityReference` and `DisputeEvidence` models (`DisputeResponse.evidence` is typed).
-- `records.list` and `list_all` (sync and async) gain `type`, `performer_agent_id`, `role`, `from_`, `to`, `has_dispute`, `dispute_status`, `imported` and `source` filters.
-
-## [0.8.10] - 2026-05-29
-
-### Fixed
-
-- `records.get_chain()` returns the chain's `RecordRow` items.
-
-### Added
-
-- `verify_export()` detects a rewritten denormalised `payload`: when an export entry carries the row `payload` and `entryType`, it is compared against the signed predicate decoded from `coseSign1`, and a mismatch fails `CHAIN_PAYLOAD_BINDING_MISMATCH`.
-
-## [0.8.9] - 2026-05-28
-
-### Fixed
-
-- `records.get_audit_export()` parses current exports. `AuditExportEntry` uses `human_readable_label` (optional) instead of `description`, and gains `actor_owner_id`, `actor_display_name` and `actor_owner_type`.
-- `completions.submit()` no longer sends a root-level `notes` key, which the API rejects. It gains `evidence_hash` (for encrypted mode); carry AI-agent rationale inside `evidence` via a `completionSchema` field.
-- Response models match the current wire shapes: `AgentProfile` / `AgentDirectoryEntry` (`displayName`), `Event` (`type` and `data`), `OrgReadsCheckpoint` (`checkpointAt`, `coseSign1Base64`), `OrgReadsInclusionProof` (`path`, no `checkpointId`), `ReputationScore` (nullable scores, numeric `confidence_level`, integer `formula_version`, `lifetime_*` counters and `reversals`) and `AiImpactAssessment.human_oversight` (an object).
-- Request bodies match the API: `records.create()` drops `category` and `proposal_message`; `records.reject()` sends `message`; `webhooks.update()` takes `is_paused` and drops `format`; `admin.update_api_key()` no longer takes `expires_at` / `allowed_ips`; federation `submit_state_transition()` and `relay_signal()` follow the current contract.
-
-### Removed
-
-- **`compliance.get_ai_act_report()`.** The route does not exist.
-
-## [0.8.8] - 2026-05-28
-
-### Fixed
-
-- `client.verification_keys.list()` parses real responses (`hashAlgorithm` is optional).
-- `RecordAuditExport.entries[].position` / `timestamp` read the current `chainPosition` and `createdAt`, and `AuditExportEntry` gains `actorId`, `actorRole`, `actorOidcIss`, `actorOidcSub`, `actorOidcSynthesized` and `recordId`.
-- `agledger.verify.verify_export(public_keys=...)` accepts the `client.verification_keys.list().data` list (`VerificationKey` models or dicts) as well as the `{keyId: spki_b64}` mapping. A wrong shape raises `TypeError`.
-- `Verdict` is widened to `Literal["accept", "reject"] | str`.
-
-### Added
-
-- `agledger.RateLimitInfo` and the `client.rate_limit_info` / `async_client.rate_limit_info` properties, populated from `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
-
-### Changed
-
-- **Retry policy:** `DEFAULT_MAX_RETRIES = 3` (was 2), `MAX_BACKOFF = 30.0s` (was 8.0s), retried statuses `{429, 500, 502, 503, 504}` (409 and 408 are no longer retried; a 409 IDEMPOTENCY_CONFLICT is not transient). Worst-case retry latency on persistent 5xx is about 63s.
-
-## [0.8.7] - 2026-05-27
-
-### Changed
-
-- **Breaking, `agledger.verify` result shape:** failure reasons are canonical `FailureCode` values, and `broken_at.reason` is renamed `broken_at.code`.
-- The result reports key provenance: whether each verified entry's key was supplied by the caller or embedded in the export.
-- New `require_out_of_band_keys` option fails unless every signature is verified against a caller-supplied key.
-
-## [0.8.6] - 2026-05-27
-
-### Fixed
-
-- `agledger.verify` reads `chainPosition` on each export entry (v0.25 and later exports), falling back to `position` for older exports.
-
-## [0.8.5] - 2026-05-27
-
-Tracks AGLedger API 0.25.5. The second pillar is renamed Verify to Gate; "verify" now refers only to cryptographic verification. `agledger.verify`, webhook signature verification and `client.verification_keys` are unchanged.
-
-### Changed
-
-- **Breaking, Verify to Gate:**
-  - `client.verification` is `client.gate`; `verification.verify()` is `gate.evaluate()`; `gate.get_status()` calls `/gate-status`; `lastVerifiedAt` is `lastEvaluatedAt`.
-  - `records.report_outcome()` is `records.submit_verdict()`; param `outcome` is `verdict`; values `PASS` / `FAIL` are `accept` / `reject`; adds optional `notes` and `reason`.
-  - `VerificationMode` is `GateMode` (`"auto" | "principal"`); `verification_mode` is `gate_mode` on create, search and `RecordRow`.
-  - `RecordRow.verification_checks` is `verdict_checks`; `RecordRow.verification_outcome` is `verdict` (accept / reject).
-  - `VerificationResult` is `GateEvaluationResult`; `VerificationStatus` is `GateStatus`; `OutcomeResult` is `VerdictResult` (field `signal` is `recommendation`). Adds the `Verdict` literal.
-  - `VerdictStatistics` is `{ agent_id, as_principal, as_performer }`, each `{ data, total }`, with `verdictAcceptCount` and `verdictRejectCount` per pair.
-  - Webhook events: `record.verification_complete` is `record.gate_complete`; `cascading.verification.complete` is `cascading.gate.complete`.
-
-### Fixed
-
-- `GateStatus` models the real `/gate-status` shape (`phase1_status`, `phase2_status`, `last_evaluated_at`, `pending_rules`).
-
-## [0.8.4] - 2026-05-25
-
-Tracks AGLedger API 0.25.4.
-
-### Added
-
-- **`verify_rfc9421()` and `construct_event_rfc9421()`** in `agledger.webhooks` verify ed25519 webhook deliveries (RFC 9421 HTTP Message Signatures) against `/v1/verification-keys`, matched by `keyid`. They check the RFC 9530 Content-Digest and enforce the `created` replay window (default and maximum 300s). Needs the `cryptography` extra (`pip install 'agledger[verify]'`).
-- **`webhooks.create(signing_alg=...)` and `Webhook.signing_alg`** (`"hmac" | "ed25519"`). Settlement-event subscriptions default to `ed25519` when the Server has a vault signing key; requesting `ed25519` without one returns 422.
-- **`VerificationKey.public_key_raw`**: base64 of the raw 32-byte Ed25519 key, alongside the SPKI-DER `public_key`.
-- **`AccountProfile.auth_type`, `cert` and `oidc`** for OIDC ephemeral-cert and OIDC bearer sessions.
-
-### Fixed
-
-- `WebhookEventType` matches the API's set (35). Added `signal.received`, `federation.dispute` and the eight `record.federation_*` events. Removed `federation.record.offered`, `federation.record.accepted`, `federation.gateway.registered`, `federation.gateway.revoked`, `record.settled` and `record.remediated`.
-
-## [0.8.3] - 2026-05-25
-
-### Fixed
-
-- `RecordAuditExport` parses chain-integrity reasons `oidc_actor_drift`, `cert_actor_drift`, `cert_expired`, `cert_missing` and `agent_signature_invalid`.
-
-### Added
-
-- `ConformanceResponse.capabilities` (feature flags such as `oidcWorkloadIdentity`, `ephemeralCerts`, `trustedIssuers`, `agentSignatureCoSign`) and `VerificationKeysResponse.signature_input_template`.
-
-## [0.8.2] - 2026-05-25
-
-Tracks AGLedger API 0.25.2.
-
-### Added
-
-- `auth.issue_ephemeral_cert()`: OIDC token to ephemeral signing cert exchange (`POST /v1/auth/oidc/cert`).
-- `admin.trusted_issuers` sub-resource: `list`, `create`, `get`, `update`, `delete`, `revoke_certs`.
-- `admin.revoke_ephemeral_cert(cert_id)`, `admin.get_ops_summary()` and `admin.vault.scan.list()`.
-- `agents.list_peers()` for federated agents synced from peers.
-- `scitt.get_configuration()` (unauthenticated) and `scitt.get_checkpoint()`.
-
-All new methods exist on both the sync and async clients.
-
-### Removed
-
-- The `admin.strings` sub-resource (`list_keys`, `list_overrides`, `get_override`, `set_override`, `delete_override`, `list_drift`); the routes were removed from the API.
-
-## [0.8.1] - 2026-05-21
-
-Tracks AGLedger API 0.24.0.
-
-### Changed
-
-- **Breaking, `tenant` and `enterprise` become `org`:**
-  - `admin.list_enterprises()` is `admin.list_orgs()`; `admin.create_enterprise()` is `admin.create_org()` (takes `display_name` and `config`; no `slug` or `email`); `admin.get_enterprise_config()` is `admin.get_org_config()`; `admin.update_enterprise_config()` is `admin.update_org_config()` (PATCH semantics); `admin.replace_enterprise_config()` is removed.
-  - `admin.deactivate_account(...)` is split into `admin.deactivate_org(org_id, *, reason=None)` and `admin.deactivate_agent(agent_id, *, reason=None)`.
-  - `admin.create_agent()` takes a required `org_id` instead of `enterprise_id` (no `slug` or `email`). `admin.records.import_()` takes `org_id`.
-  - `audit.tenant_reads_checkpoints` is `audit.org_reads_checkpoints`; `TenantReadsCheckpoint` / `TenantReadsInclusionProof` are `OrgReadsCheckpoint` / `OrgReadsInclusionProof`; paths move from `/v1/audit/tenant-reads/*` to `/v1/audit/org-reads/*`.
-  - `RecordRow.enterprise_id` is `org_id`; `OrgReadsCheckpoint.enterprise_id` is `org_id`; `RecordRow.parent_principal_enterprise_matches_performer` is `parent_principal_org_matches_performer`.
-  - The `enterprise_id` kwarg is `org_id` on `records.list()`, `records.list_all()`, `records.search()`, `records.create()` and the schema export and import options.
-  - Predicate kind `tenant-read` is `org-read`.
-- `RecordRow.agent_id` is `RecordRow.performer_agent_id`, and `records.create()` and `records.search()` no longer accept an `agent_id` kwarg; use `performerAgentId`.
-
-### Removed
-
-- `FederationResource` (sync and async): `register()`, `heartbeat()`, `register_agent()`, `list_agents()`, `catch_up()`, `stream()`, `list_types()`, `get_type()`, `publish_schema()`, `confirm_schema_publish()`, `get_record_criteria()`, `submit_record_criteria()`, `broadcast_revocations()`, `rotate_key()`, `revoke()`.
-- `FederationAdminResource` (sync and async): `create_registration_token()`, `list_gateways()`, `revoke_gateway()`, `get_health()`, `get_gateway_status()`, `query_records()`, `get_audit_log()`, `reset_sequence()`, `rotate_hub_key()`, `list_hub_keys()`, `activate_hub_key()`, `expire_hub_key()`, `register_peer()`, `delete_schema_version()`, `list_reputation_contributions()`, `reset_reputation()`, `get_record_criteria_encryption_metadata()`. The outbound-DLQ methods `list_dlq`, `retry_dlq` and `delete_dlq` are replaced by the consolidated DLQ methods below.
-
-### Added
-
-- `federation.peer_handshake()`, `federation.submit_co_sign_request()` and `federation.submit_dispute_protocol()`.
-- `federation_admin.list_dlq()`, `recover_dlq()`, `get_instance()` and `delete_peer()`.
-- `federation_admin.create_peering_token(label=...)` requires `label`, and `federation_admin.revoke_peer(hub_id, reason=...)` requires `reason`.
-
-## [0.8.0] - 2026-05-19
-
-Tracks AGLedger API 0.23.0. SCITT vocabulary alignment, a canonical COSE_Sign1 chain envelope, and a SCITT Transparency Service (SCRAPI) surface.
-
-### Changed
-
-- **Breaking, Receipt becomes Completion.** "Receipt" now means only the SCITT Merkle inclusion proof; the performer's evidence submission is a Completion.
-  - `client.receipts` is `client.completions`; `ReceiptsResource` / `AsyncReceiptsResource` are `CompletionsResource` / `AsyncCompletionsResource`; `Receipt`, `VaultReceipt` and `RecordReadReceipt` are `Completion`, `VaultCompletion` and `RecordReadCompletion`.
-  - Fields: `receipt_id` is `completion_id` on `OutcomeResult`, `VerificationResult` and `ReportOutcomeParams`; `receipt_hint` is `completion_hint` and `vault_receipt` is `vault_completion` on `RecordRow`; `VerificationResult.receipts` is `.completions`; `cancel_after_receipt_count` is `cancel_after_completion_count`.
-  - `schemas.validate_receipt(...)` is `schemas.validate_completion(...)`, with `receipt_ids` as `completion_ids`.
-  - Route `/v1/records/{id}/receipts` is `/v1/records/{id}/completions`.
-  - Scopes `receipts:read` / `receipts:write` are `completions:read` / `completions:write` (`Scopes.COMPLETIONS_READ` / `COMPLETIONS_WRITE`).
-  - Webhook events `record.receipt_submitted` and `record.receipt_invalid` are `record.completion_submitted` and `record.completion_invalid`. `WebhookEventType` has the full 30-value set the API publishes.
-  - `AuditExportEntry.integrity.receipt` keeps its name: it is the optional SCITT Receipt, opt-in via `receipts=True` on `get_audit_export`.
-- **Breaking, offline verifier format 1.0 to 2.0.** `agledger.verify.verify_export()` decodes canonical COSE_Sign1 envelopes (RFC 9052, tag 18, EdDSA) over in-toto v1 Statement payloads. The `[verify]` extra now requires `cbor2>=5.6` as well as `cryptography>=42.0`. New `EntryFailureReason` values `"cose_decode_failed"` and `"cose_header_mismatch"`. New `VerifyExportResult.signature_coverage` (signed, unsigned, skipped, total): read it or `integrity_level` rather than concluding "Ed25519-verified" from `chain_integrity: True`. New `chain_integrity_reason` value `"payload_drift"`, and a `chain_integrity_detail` field on `AuditExportMetadata`. The `canonicalize()` helper is removed.
-
-### Added
-
-- **SCITT Transparency Service (`client.scitt`)**, implementing `draft-ietf-scitt-scrapi-09` over `application/cose`, with RFC 9290 CBOR problem details on errors. `client.scitt.entries.register(signed_statement: bytes) -> bytes` returns the Receipt; `client.scitt.entries.get(entry_id) -> bytes` returns a Transparent Statement; `client.scitt.keys.list()` and `client.scitt.keys.get(kid)` return a COSE_KeySet (unauthenticated). Async parity on `AsyncAgledgerClient`. `APIError.raw_body: bytes | None` holds error bytes (decode with `cbor2.loads(error.raw_body)`).
-- **Predicate schema discovery:** `client.predicates.list()` and `client.predicates.get(kind, version='v1')`, sync and async.
-- **Attestation export:** `client.records.get_attestation(record_id) -> bytes` (an `application/cose-sequence` stream of COSE_Sign1 envelopes), `client.records.get_attestation_bundle(record_id) -> dict` (sigstore-bundle v0.3.2 projection, for structural interop only), and `get_audit_export(record_id, receipts=True)` to include SCITT Receipts.
-- **Vault checkpoints:** `client.audit.vault_checkpoints.list(record_id=..., cursor=..., limit=...)`, signed Merkle anchors for offline checkpoint cross-checks.
-- **Binary I/O** on `HttpClient` / `AsyncHttpClient` (`get_bytes()`, `post_bytes()`) with the same retry and idempotency behavior as the JSON path.
-
-## [0.7.3] - 2026-05-02
-
-### Fixed
-
-- `BulkCreateResultItem.status` is `Literal["created", "replayed", "error"]` (was `int`), so `bulk_create()` parses.
-
-## [0.7.2] - 2026-05-02
-
-### Fixed
-
-- `agledger.verify.verify_export()` accepts the typed `RecordAuditExport` model returned by `client.records.get_audit_export()` as well as a raw `dict`.
-- `auth.get_me()` returns the typed `AccountProfile`, and `records.bulk_create()` returns the typed `BulkCreateResult`.
-- `RecordAuditExport.export_metadata` is a typed `AuditExportMetadata` sub-model.
-- `agledger.verify` raises `ImportError` at import time when `cryptography` is missing. The install message is unchanged: `pip install 'agledger[verify]'`.
-
-### Added
-
-- Typed models `AuditExportMetadata`, `BulkCreateResult`, `BulkCreateResultItem` and `BulkCreateSummary`.
-
-## [0.7.1] - 2026-04-30
-
-Tracks AGLedger API 0.22.13. Adds 10 routes: tenant string overrides admin (`AdminStringsResource`), `federation_admin.get_gateway_status()`, the `agents.list()` peer directory, `compliance.list_vault_checkpoints()` and `disputes.withdraw()`.
-
-## [0.7.0] - 2026-04-27
-
-Tracks AGLedger API 0.21.0, the customer-facing vocabulary change.
-
-### Changed
-
-- **Breaking, Mandate becomes Record.** Every `/v1/mandates/*` route is `/v1/records/*` and the resource is `client.records` (was `client.mandates`). Path params `{contractType}` are `{type}`.
-  - Types: `Mandate` is `RecordRow`; `MandateStatus` is `RecordStatus` (adds `RECORDED`); `MandateTransitionAction` is `RecordTransitionAction` (`register | propose | activate | cancel`); `ContractType` is `RecordType`.
-  - Record fields: `principal_type` is removed; added `category`, `outcome`, `correlation_id`, `requested_by`, `vault_receipt`, `acceptance_status`, `acceptance_responded_at`, `parent_principal_enterprise_matches_performer`, `commission_amount`, `self_commitment`, `parent_record_id`, `root_record_id`, `child_record_ids`. `parent_mandate_id` is `parent_record_id` and `mandate_id` is `record_id`.
-  - Webhook events `mandate.*` are `record.*`; scopes `MANDATES_READ` / `MANDATES_WRITE` are `RECORDS_READ` / `RECORDS_WRITE`.
-  - The per-Record audit export is `client.records.get_audit_export()`; `compliance.export_mandate()` is removed.
-  - The capabilities body field stays `contractTypes`; the Python kwarg is `contract_types`.
-  - Conformance is on `client.discovery.get_conformance()` only; `client.health.conformance()` is removed.
-  - Removed types: `AuditChain`, `AccountType`, `MandateStatusSummary`, `DashboardSummary`, `DashboardAgent`, `DashboardAlert`, `Project`, `EnterpriseAgentRecord`, `ApprovalConfig`. `client.events.get_audit_chain()` is removed.
-- `VerifyExportResult.mandate_id` is `record_id`; the verifier reads `recordId` from export metadata, falling back to `mandateId` for older exports.
-
-### Added
-
-- `client.records.my_verdict_statistics()`, `list_proposals()`, `batch_get([...])`, `bulk_create([...])` (per-item `idempotency_key` supported) and `get_audit_export()`.
-- `client.disputes.list(...)` (`GET /v1/disputes`).
-- `client.audit.tenant_reads_checkpoints.{list, get, cosign, proof}`.
-- `client.admin.records.{list, import_}` and `client.admin.vault.{anchors{list, verify}, scan{run, status}, signing_keys{list, rotate}}`.
-- `client.schemas.meta_schema()`, `blank()`, `import_()`, `preview()`, `disable()` and `enable()`.
-- `agledger.record_lifecycle` with `RECORD_TRANSITIONS`, `TERMINAL_STATUSES`, `can_transition_to()`, `get_valid_transitions()` and `is_terminal_status()`, re-exported from `agledger`.
-- Errors surface `recovery_hint` and `refresh_url` (RFC 9457), and the top-level `missingScopes` of problem+json bodies is parsed in addition to `details.missingScopes`.
-
-## [0.6.0] - 2026-04-23
-
-Tracks AGLedger API 0.20.0, the principal-model change.
-
-### Changed
-
-- **Breaking, API key role `enterprise` is `admin`.** `ApiKeyRole` is `Literal["admin", "agent", "platform"]`, and the key prefix `ach_(ent|age|pla)_*` is `agl_(adm|agt|plt)_*`.
-- **Breaking, scope profiles are renamed and trimmed to 7:** `admin-standard` (default admin), `admin-observer`, `admin-iac`, `admin-schema`, `agent-full` (default agent), `agent-readonly`, `agent-performer-only`. `ScopeProfile` exposes `allowed_roles`. The scope constants `DASHBOARD_READ` and `AUDIT_ANALYZE` are removed and `ADMIN_TRUST` is `ADMIN_BACKFILL`.
-- **Breaking, principal model.** Every mandate has a required `principal_agent_id`, and self-commitment is valid. Agent keys default the principal to themselves; admin keys must name the principal. `POST /v1/mandates` is unified across admin, agent and platform callers.
-- The audit route `/v1/audit/stream` is `/v1/siem/stream`, and the auth surface is `GET /v1/auth/me` and `POST /v1/auth/keys/rotate`.
-
-### Added
-
-- `client.auth.get_me()` and `client.auth.rotate_key()`; `client.discovery.get_scope_profiles()`, `get_conformance()` and `get_lifecycle()`; the `default_profile_for(role)` helper; and the `agent-performer-only` scope profile.
-
-### Removed
-
-- Resources `dashboard`, `proxy`, `notarize`, `projects`, `registration` and `enterprises`.
-- Types `DashboardSummary`, `DashboardAgent`, `DashboardAlert`, `EnterpriseAgentRecord`, `Project`, `ApprovalConfig`, `MandateStatusSummary` and the trust-level types.
-- Methods `compliance.analyze()`, `mandates.get_summary()`, the trust-level admin methods and `/v1/audit/enterprise-report*`.
-
-## [0.1.0] - 2026-04-02
-
-### Added
-
-- `AgledgerClient` (sync) and `AsyncAgledgerClient` (async) with 23 resource sub-clients each.
-- Error hierarchy: `APIError`, `AuthenticationError`, `PermissionDeniedError` (with `missing_scopes`), `NotFoundError`, `BadRequestError`, `ConflictError`, `UnprocessableError`, `RateLimitError`, `APIConnectionError`, `APITimeoutError`, `SignatureVerificationError`, with `doc_url` and `suggestion` on API errors.
-- Auto-pagination via generators (`list_all()` methods).
-- Retry with exponential backoff and jitter, honoring `Retry-After`; auto-generated idempotency keys on mutations.
-- Webhook signature verification via `agledger.webhooks`.
-- Context manager support and an `AGLEDGER_API_KEY` environment fallback.
-- Typed Pydantic v2 models with `py.typed` (PEP 561).
-- Requires Python 3.10 or newer; depends on httpx >= 0.27.0 and pydantic >= 2.0.0.
+Releases before 1.0.0 are listed on PyPI (https://pypi.org/project/agledger/#history).
