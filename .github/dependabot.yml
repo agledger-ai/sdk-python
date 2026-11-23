@@ -11,6 +11,10 @@ updates:
         patterns: ["*"]
   - package-ecosystem: "pip"
     directory: "/"
+    # A library's >= floors are the oldest versions it is tested against
+    # (the CI floors job), not the newest release: only move a requirement
+    # when a release falls outside it. Security updates still raise floors.
+    versioning-strategy: increase-if-necessary
     schedule:
       interval: "weekly"
     cooldown:
