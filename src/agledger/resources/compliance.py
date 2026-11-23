@@ -24,6 +24,8 @@ from agledger.types import (
     Page,
 )
 
+_TEXT_ACCEPT = "text/csv, text/html, application/json"
+
 _NO_CURSOR_MESSAGE = (
     "The SIEM stream returned events but no X-AGLedger-Stream-Cursor, so the walk "
     "cannot resume and stopped after {yielded} event(s) with the feed still open. "
@@ -46,8 +48,21 @@ class ComplianceResource:
         return ComplianceExport.model_validate(self._http.get(f"/v1/compliance/export/{export_id}"))
 
     def download_export(self, export_id: str) -> dict[str, Any]:
-        """Download a completed compliance export."""
+        """Download a completed compliance export created with ``format="json"``.
+
+        An export created as ``csv`` or ``html`` is served in that format:
+        :meth:`download_export_text` returns it.
+        """
         return self._http.get(f"/v1/compliance/export/{export_id}/download")
+
+    def download_export_text(self, export_id: str) -> str:
+        """Download a completed compliance export as the text the Server sent:
+        the CSV file or the HTML report for an export created with
+        ``format="csv"`` or ``"html"`` (a ``json`` export comes back as its
+        JSON text).
+        """
+        raw = self._http.get_bytes(f"/v1/compliance/export/{export_id}/download", accept=_TEXT_ACCEPT)
+        return raw.decode("utf-8")
 
     def wait_for_export(
         self,
@@ -255,6 +270,11 @@ class AsyncComplianceResource:
 
     async def download_export(self, export_id: str) -> dict[str, Any]:
         return await self._http.get(f"/v1/compliance/export/{export_id}/download")
+
+    async def download_export_text(self, export_id: str) -> str:
+        """The export as text: see the sync docstring."""
+        raw = await self._http.get_bytes(f"/v1/compliance/export/{export_id}/download", accept=_TEXT_ACCEPT)
+        return raw.decode("utf-8")
 
     async def wait_for_export(
         self,

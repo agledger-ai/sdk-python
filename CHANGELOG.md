@@ -26,6 +26,7 @@ Targets AGLedger Server 3.0.0.
 - **`records.get_audit_export_html()`** (sync and async) returns the HTML audit export as a `str`. `AuditExportFormat` names the five formats; `get_audit_export()` still parses JSON.
 - **`signature_meaning` on `records.submit_verdict()`**, `VerdictResult.signature` (`VerdictSignature`: `meaning`, `signer_name`, `signer_iss`, `signer_sub`, `signed_at`, or `None`), and `oidc.name` on `auth.get_me()`. A signed verdict is refused with 422 `signature_requires_oidc_identity` (an API key, or `on_behalf_of`) or `signature_requires_signer_name`; both are on `APIError.reason`.
 - **Federation state on a Record**: `trace_id`, `federation_origin` (`FederationOrigin`: `peer_hub_id`, `record_id`) and `federation_legs` (`FederationLeg`), and `attempts`, `last_attempted_at`, `last_error` and `last_error_reason` on each `CoSignPeerLeg`. `origin_agent_id` and `origin_peer_hub_id` on `AgentProfile` and `AgentDirectoryEntry`.
+- **`compliance.download_export_text()`** (sync and async) returns a compliance export created with `format="csv"` or `"html"` as the text the Server sent. `download_export()` parses JSON, so it reads only a `json` export.
 - `ComplianceExport.next_from` (`nextFrom`): the `filters.from` for the next incremental export. `ConformanceResponse.limits` carries `jsonBodyMaxDepth` and `paginationLimitMaxByRoute`, a mapping.
 - The named unions `SignatureMeaning`, `FederationLegKind`, `FederationLegStatus`, `FederationLegErrorReason` and `RecordCountGroupBy`.
 
