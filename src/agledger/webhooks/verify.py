@@ -19,6 +19,13 @@ from agledger._errors import (
     SignatureVerificationError,
 )
 from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
+from agledger.webhooks._structured_fields import (
+    ByteSequence,
+    InnerList,
+    Item,
+    parse_dictionary,
+    serialize_inner_list,
+)
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
@@ -140,22 +147,18 @@ def _parse_webhook_event(raw_body: str) -> dict[str, Any]:
 # excluded because proxies rewrite them. Requires the optional ``cryptography``
 # dependency (``pip install 'agledger[verify]'``).
 
-_SIG_INPUT_RE = re.compile(r"^([^=]+)=(\(.*\);.*)$", re.DOTALL)
-_CREATED_RE = re.compile(r";created=(\d+)(?:;|$)")
-_KEYID_RE = re.compile(r';keyid="([^"]*)"')
-_ALG_RE = re.compile(r';alg="([^"]*)"')
 
 
 def _normalize_headers(headers: Mapping[str, Any]) -> dict[str, str]:
-    """Lowercase header keys and join multi-value headers into single strings."""
+    """Lowercase header keys and build each field's component value as RFC 9421
+    section 2.1 does: every value trimmed, obsolete line folding replaced by a
+    space, multiple values joined with ``, ``."""
     out: dict[str, str] = {}
     for k, v in headers.items():
         if v is None:
             continue
-        if isinstance(v, (list, tuple)):
-            out[k.lower()] = ", ".join(str(x) for x in cast("Sequence[Any]", v))
-        else:
-            out[k.lower()] = str(v)
+        values = [str(x) for x in cast("Sequence[Any]", v)] if isinstance(v, (list, tuple)) else [str(v)]
+        out[k.lower()] = ", ".join(re.sub(r"\n\s*", " ", x.strip()) for x in values)
     return out
 
 
@@ -287,51 +290,79 @@ def verify_rfc9421(
 
     h = _normalize_headers(headers)
 
-    sig_input = h.get("signature-input")
-    sig_header = h.get("signature")
     content_digest = h.get("content-digest")
     idempotency_key = h.get("x-agledger-idempotency-key")
-    if not (sig_input and sig_header and content_digest and idempotency_key):
+    sig_input_field = h.get("signature-input")
+    sig_field = h.get("signature")
+    if not (sig_input_field and sig_field and content_digest and idempotency_key):
         return False
 
     # RFC 9530 body integrity.
     if content_digest != _content_digest(raw_body):
         return False
 
-    m = _SIG_INPUT_RE.match(sig_input)
-    if not m:
-        return False
-    label, params = m.group(1), m.group(2)
-
-    # Signature header: ``<label>=:<base64>:`` (must use the same label).
-    sig_prefix = f"{label}="
-    if not sig_header.startswith(sig_prefix):
-        return False
-    sig_field = sig_header[len(sig_prefix):]
-    if not (sig_field.startswith(":") and sig_field.endswith(":")):
-        return False
-    try:
-        signature = base64.b64decode(sig_field[1:-1])
-    except Exception:
+    inputs = parse_dictionary(sig_input_field)
+    signatures = parse_dictionary(sig_field)
+    if inputs is None or signatures is None:
         return False
 
-    # Covered components, in declared order: only the two known header
-    # components are supported (derived components are deliberately excluded).
-    inner = params[params.index("(") + 1 : params.index(")")]
-    covered = [c.strip().strip('"') for c in inner.split()] if inner.strip() else []
-    if covered != list(RFC9421_COVERED_COMPONENTS):
-        return False
-
-    created_m = _CREATED_RE.search(params)
-    if not created_m:
-        return False
-    created = int(created_m.group(1))
     tolerance = min(tolerance_seconds, MAX_TOLERANCE_SECONDS)
-    if abs(int(time.time()) - created) > tolerance:
+    now = time.time()
+    component_values = {"content-digest": content_digest, "x-agledger-idempotency-key": idempotency_key}
+
+    # The delivery verifies when one of its signatures does; a sender may add
+    # signatures of its own (an intermediary's), which are passed over. A host
+    # that cannot compute a key's algorithm is a receiver fault, raised once no
+    # signature verified, never turned into False.
+    unavailable: SignatureAlgorithmUnavailableError | None = None
+    for label, sig_input in inputs.items():
+        if not isinstance(sig_input, InnerList):
+            continue
+        sig = signatures.get(label)
+        if not (isinstance(sig, Item) and isinstance(sig.value, ByteSequence)):
+            continue
+        try:
+            if _verify_one(sig_input, sig.value.data, component_values, key, tolerance, now, InvalidSignature):
+                return True
+        except SignatureAlgorithmUnavailableError as err:
+            unavailable = unavailable or err
+    if unavailable is not None:
+        raise unavailable
+    return False
+
+
+def _verify_one(
+    sig_input: InnerList,
+    signature: bytes,
+    component_values: dict[str, str],
+    key: str | Sequence[Any],
+    tolerance: int,
+    now: float,
+    invalid_signature: type[Exception],
+) -> bool:
+    """One signature: it must cover exactly ``content-digest`` then
+    ``x-agledger-idempotency-key`` with no component parameters, and name
+    ``created`` (an Integer) and ``keyid`` (a String). ``expires`` is held when
+    present. The same rules as the TypeScript SDK."""
+    covered = [item.value for item in sig_input.items]
+    if covered != list(RFC9421_COVERED_COMPONENTS) or any(item.params for item in sig_input.items):
         return False
 
-    keyid_m = _KEYID_RE.search(params)
-    keyid = keyid_m.group(1) if keyid_m else None
+    params = sig_input.params
+    created = params.get("created")
+    keyid = params.get("keyid")
+    expires = params.get("expires")
+    alg = params.get("alg")
+    if isinstance(created, bool) or not isinstance(created, int) or not isinstance(keyid, str):
+        return False
+    if expires is not None and (isinstance(expires, bool) or not isinstance(expires, int) or now > expires + tolerance):
+        return False
+    if alg is not None and not isinstance(alg, str):
+        return False
+
+    # The replay window, symmetric as on the HMAC path.
+    if abs(now - created) > tolerance:
+        return False
 
     try:
         resolved = _resolve_public_key(key, keyid)
@@ -346,15 +377,10 @@ def verify_rfc9421(
     if window is not None and not _inside_key_window(created, window):
         return False
 
-    component_values = {"content-digest": content_digest, "x-agledger-idempotency-key": idempotency_key}
-    lines = [f'"{c}": {component_values[c]}' for c in covered]
-    lines.append(f'"@signature-params": {params}')
+    lines = [f'"{c}": {component_values[c]}' for c in RFC9421_COVERED_COMPONENTS]
+    lines.append(f'"@signature-params": {serialize_inner_list(sig_input)}')
     base = "\n".join(lines).encode("utf-8")
-
-    alg_m = _ALG_RE.search(params)
-    declared_alg = alg_m.group(1) if alg_m else None
-
-    return _verify_rfc9421_signature(public_key, signature, base, declared_alg, InvalidSignature)
+    return _verify_rfc9421_signature(public_key, signature, base, alg, invalid_signature)
 
 
 def _assert_runtime_can_compute(alg_name: str) -> None:
