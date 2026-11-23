@@ -61,6 +61,7 @@ from agledger.verify.key_statements import (
     compute_key_trust,
     key_statement_from_dump_row,
     parse_trust_anchors,
+    pin_not_met,
     report_key_trust,
     settle_key_trust,
     trust_key_from_dump_row,
@@ -74,6 +75,7 @@ from agledger.verify.types import (
     Failure,
     TenantAdminReadsReport,
     VaultChainsReport,
+    Verdict,
     VerifyReport,
     WitnessCosignedCheckpoint,
     chain_of_scope,
@@ -463,10 +465,6 @@ def _chain_label(chain_key: str) -> str:
     so it is named as the chain it actually is.
     """
     return f"Chain {chain_key}" if chain_key.startswith("schema:") else f"Record {chain_key}"
-
-
-_NO_ROW = object()
-"""No vault row read yet: ``None`` is a real record id (schema chains)."""
 
 
 def _normalize_entry(e: DumpRow) -> dict[str, Any]:
@@ -928,10 +926,10 @@ def verify_vault_chains(
             ),
         )
 
-    # The walk reads the file in producer order, as @agledger/verify streams
-    # it: a record chain is verified when the next row names another record,
-    # and schema chains (no record id) stay open to the end. What was closed
-    # before a refused row keeps its findings.
+    # The walk reads the file in producer order (chain_key, then position), as
+    # @agledger/verify streams it: a chain is verified when the next row
+    # belongs to another chain_key. What was closed before a refused row keeps
+    # its findings.
     open_chains: dict[str, list[DumpRow]] = {}
     closed: set[str] = set()
     chain_count = 0
@@ -970,7 +968,7 @@ def verify_vault_chains(
         if len(failures) == failures_before:
             cert_keys_from_chain += _harvest_cert_keys(rows, results, agent_registry)
 
-    previous_record_id: object = _NO_ROW
+    previous_chain_key: str | None = None
     for seen, e in enumerate(entries, start=1):
         # Format gate: format 2.0 requires cose_sign1 on every vault row. A row
         # lacking it is a pre-cutover shape, so fail closed rather than parse
@@ -990,10 +988,10 @@ def verify_vault_chains(
             )
             return report(0, seen)
         record_id = e.get("record_id")
-        if previous_record_id is not _NO_ROW and previous_record_id is not None and record_id != previous_record_id:
-            close_chain(str(previous_record_id))
-        previous_record_id = record_id
         chain_key = _chain_key(e)
+        if previous_chain_key is not None and chain_key != previous_chain_key:
+            close_chain(previous_chain_key)
+        previous_chain_key = chain_key
         if chain_key in closed:
             failures.append(
                 Failure(
@@ -1639,7 +1637,21 @@ def verify_dump(
     # nothing and a pass is not trusted.
     key_trust = settle_key_trust(key_trust, vault.signed_entries)
     failed = bool(vault.failures or org_admin_reads.failures or key_trust.findings)
-    verdict = "failed" if failed else "trusted" if key_trust.status == "walked" else "unanchored"
+
+    def passes_unpinned() -> bool:
+        return verify_dump(
+            dump, agent_keys=agent_keys, federation_keys=federation_keys, allow_after_retirement=allow_after_retirement
+        ).ok
+
+    # A pinned dump that fails only because the pin reaches none of its keys,
+    # and passes without it, is unanchored (see pin_not_met).
+    verdict: Verdict = (
+        ("unanchored" if pin_not_met(not failed, key_trust, passes_unpinned) else "failed")
+        if failed
+        else "trusted"
+        if key_trust.status == "walked"
+        else "unanchored"
+    )
     return VerifyReport(
         ok=not failed,
         vault=vault,

@@ -60,6 +60,11 @@ Targets AGLedger Server 3.0.0.
 
 ### Fixed
 
+- **`agledger-verify` exits 3 when a `--trust-anchor` was given and not met, as `@agledger/verify` does.** It exited 0 for a pinned run that anchored no signature, and 1 for an untampered export or dump checked against another Server's pin. When the pin reaches none of the keys and the target verifies without it, the verdict is now `unanchored` (`valid` false on an export, `ok` false on a dump), the headline `[NOT ANCHORED]`, and the exit code 3. A target in which the pin anchors any key still fails on an entry under a key it does not reach. `agledger-verify` without the `[verify]` extra exits 2 (could not verify) instead of 3.
+- **`agledger-verify --expected-entry-count <n>` and `--allow-after-retirement`.** The count holds an `/audit-export` to a number of entries taken out of band, so an export cut from the end with its own (unsigned) counts deleted fails `CHAIN_POSITION_GAP` instead of exiting 0. A dump refuses it.
+- **A dump row with a relabelled `record_id` fails `CHAIN_PAYLOAD_BINDING_MISMATCH`, as `@agledger/verify` reports it.** Chains are now grouped and closed by `chain_key`, the order the dump tool writes them in; the walk closed them by `record_id`, so the edit read as rows out of producer order (`UNSUPPORTED_FORMAT`).
+- **`tolerance_seconds` that is `nan`, infinite or negative raises `ValueError`** from `verify_signature`, `construct_event`, `verify_rfc9421` and `construct_event_rfc9421`. `nan` made every freshness comparison false and so switched the replay window off.
+
 - A path id is percent-encoded as one segment, so `webhooks.get("../admin/x?y=1#z")` requests that literal id instead of another route. An id that is exactly `.` or `..` raises `ValueError`.
 - `verify_signature` and `construct_event` return `False` for a `v1=` value that is not ASCII instead of raising `TypeError`, and raise `ConfigurationError` for an empty or blank secret (or an empty list) instead of accepting a signature made with an empty key.
 - Transport failures other than a refused connection or a timeout (a reset, a truncated response, a protocol error) are retried like those two and raised as `APIConnectionError`.

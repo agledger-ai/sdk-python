@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import re
 import time
 from collections.abc import Mapping, Sequence
@@ -75,6 +76,17 @@ def _parse_header(header: str) -> dict[str, Any] | None:
     return {"timestamp": ts, "signatures": signatures}
 
 
+def _resolve_tolerance(value: object) -> float:
+    """The replay window in seconds: the caller's value capped at 300. A value
+    that is not a finite number, 0 or more, raises instead of being capped:
+    ``nan`` would make every freshness comparison false and so switch the
+    window off. As ``@agledger/sdk`` refuses it."""
+    # Typed float on the public functions, but checked here as it arrives.
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError("tolerance_seconds must be a finite number, 0 or more.")
+    return min(value, MAX_TOLERANCE_SECONDS)
+
+
 def _checked_secrets(secrets: str | Sequence[str]) -> list[str]:
     """The signing secrets as a list, refusing any that would let a caller forge.
 
@@ -94,18 +106,19 @@ def verify_signature(
     raw_body: str,
     header: str,
     secrets: str | Sequence[str],
-    tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
+    tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> bool:
     """Verify a webhook signature. Supports key rotation via list of secrets.
 
-    Raises :class:`ConfigurationError` when the secret is empty or blank.
+    Raises :class:`ConfigurationError` when the secret is empty or blank, and
+    ``ValueError`` when ``tolerance_seconds`` is not a finite number, 0 or more.
     """
     secret_list = _checked_secrets(secrets)
+    tolerance = _resolve_tolerance(tolerance_seconds)
     parsed = _parse_header(header)
     if not parsed:
         return False
 
-    tolerance = min(tolerance_seconds, MAX_TOLERANCE_SECONDS)
     now = int(time.time())
     if abs(now - parsed["timestamp"]) > tolerance:
         return False
@@ -125,7 +138,7 @@ def construct_event(
     raw_body: str,
     header: str,
     secrets: str | Sequence[str],
-    tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
+    tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
     """Verify signature and parse the webhook payload in one step.
 
@@ -273,7 +286,7 @@ def verify_rfc9421(
     headers: Mapping[str, Any],
     raw_body: str,
     key: str | Sequence[Any],
-    tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
+    tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> bool:
     """Verify an RFC 9421 webhook delivery (ed25519 or ecdsa-p256-sha256), the
     non-repudiable tier.
@@ -297,6 +310,7 @@ def verify_rfc9421(
         ``.data`` list from ``client.verification_keys.list()`` (resolved by
         ``keyid``).
     :param tolerance_seconds: Replay window for the ``created`` time (default/max 300).
+        A value that is not a finite number, 0 or more, raises ``ValueError``.
     :returns: True only if the signature, digest, replay window and key window all hold.
     """
     try:
@@ -307,6 +321,7 @@ def verify_rfc9421(
             "Install via: pip install 'agledger[verify]'"
         ) from err
 
+    tolerance = _resolve_tolerance(tolerance_seconds)
     h = _normalize_headers(headers)
 
     content_digest = h.get("content-digest")
@@ -325,7 +340,6 @@ def verify_rfc9421(
     if inputs is None or signatures is None:
         return False
 
-    tolerance = min(tolerance_seconds, MAX_TOLERANCE_SECONDS)
     now = time.time()
     component_values = {"content-digest": content_digest, "x-agledger-idempotency-key": idempotency_key}
 
@@ -355,7 +369,7 @@ def _verify_one(
     signature: bytes,
     component_values: dict[str, str],
     key: str | Sequence[Any],
-    tolerance: int,
+    tolerance: float,
     now: float,
     invalid_signature: type[Exception],
 ) -> bool:
@@ -487,7 +501,7 @@ def construct_event_rfc9421(
     headers: Mapping[str, Any],
     raw_body: str,
     key: str | Sequence[Any],
-    tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
+    tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
     """Verify an RFC 9421 delivery and parse the payload in one step.
 

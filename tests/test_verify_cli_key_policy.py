@@ -28,6 +28,7 @@ _DUMP = _CORPUS / "dump" / "valid"
 _EXIT_OK = 0
 _EXIT_VERIFICATION_FAILED = 1
 _EXIT_USAGE = 2
+_EXIT_NOT_ANCHORED = 3
 
 
 def _embedded_keys() -> dict[str, str]:
@@ -74,11 +75,54 @@ def test_with_a_trust_anchor_a_pass_is_trusted_and_names_the_anchor(
     assert "(is one of your anchors)" in out
 
 
-def test_a_trust_anchor_nothing_links_to_fails_every_signed_entry(
+def test_a_trust_anchor_nothing_links_to_is_not_anchored_not_tampered(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert run_cli([str(_EXPORT), "--trust-anchor", f"sha256:{'ab' * 32}"]) == _EXIT_VERIFICATION_FAILED
-    assert "CHAIN_SIGNING_KEY_UNANCHORED" in capsys.readouterr().out
+    # An untampered export checked against another Server's pin: every signed
+    # entry is unanchored, but nothing fails without the pin, so it exits 3.
+    other = f"sha256:{'ab' * 32}"
+    assert run_cli([str(_EXPORT), "--trust-anchor", other]) == _EXIT_NOT_ANCHORED
+    out = capsys.readouterr().out
+    assert out.startswith("[NOT ANCHORED]")
+    assert "CHAIN_SIGNING_KEY_UNANCHORED" in out
+    assert run_cli([str(_EXPORT), "--trust-anchor", other, "-f", "json"]) == _EXIT_NOT_ANCHORED
+    body = json.loads(capsys.readouterr().out)
+    assert (body["verdict"], body["valid"]) == ("unanchored", False)
+    # Tampered as well: the unpinned run fails, so it stays the tamper code.
+    assert run_cli([str(_CORPUS / "export" / "hash-mismatch.json"), "--trust-anchor", other]) == _EXIT_VERIFICATION_FAILED
+
+
+def test_expected_entry_count_fails_a_tail_cut_export_whose_counts_were_deleted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    doc = json.loads(_EXPORT.read_text())
+    pin = doc["exportMetadata"]["anchoredFrom"]
+    full = len(doc["entries"])
+    doc["entries"] = doc["entries"][:-1]
+    doc["exportMetadata"].pop("expectedEntries", None)
+    doc["exportMetadata"].pop("totalEntries", None)
+    cut = tmp_path / "cut.json"
+    cut.write_text(json.dumps(doc))
+    assert run_cli([str(cut), "--trust-anchor", pin]) == _EXIT_OK
+    assert "Hold it to a count you took out of band with --expected-entry-count" in capsys.readouterr().out
+    assert run_cli([str(cut), "--trust-anchor", pin, "--expected-entry-count", str(full)]) == _EXIT_VERIFICATION_FAILED
+    out = capsys.readouterr().out
+    assert "CHAIN_POSITION_GAP" in out
+    assert f"{full - 1} where --expected-entry-count gives {full}" in out
+    assert run_cli([str(_EXPORT), "--trust-anchor", pin, f"--expected-entry-count={full}"]) == _EXIT_OK
+    assert f"held to the {full} given with --expected-entry-count" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("value", ["-1", "1.5", "x", ""])
+def test_a_malformed_expected_entry_count_is_a_usage_error(value: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_cli([str(_EXPORT), f"--expected-entry-count={value}"]) == _EXIT_USAGE
+    assert "--expected-entry-count must be a non-negative integer" in capsys.readouterr().err
+
+
+def test_expected_entry_count_on_a_dump_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
+    assert run_cli([str(_DUMP), "--expected-entry-count", "3"]) == _EXIT_USAGE
+    captured = capsys.readouterr()
+    assert "--expected-entry-count applies to /audit-export files only" in captured.err + captured.out
 
 
 def test_a_malformed_trust_anchor_or_a_distrusted_key_without_one_is_a_usage_error(
@@ -237,7 +281,7 @@ def test_quiet_is_refused_as_agledger_verify_refuses_it(flag: str, capsys: pytes
     [
         ([str(_DUMP), "--trust-anchor", "sha256:15d63684b387235c47fe3a81e3004b928f4ea535236a2c1b47465ce5fdd7ce0e"], 0, "[PASS] AGLedger offline verification (dump)"),
         ([str(_DUMP)], 0, "[VERIFIED, NOT ANCHORED] AGLedger offline verification (dump)"),
-        ([str(_DUMP), "--trust-anchor", f"sha256:{'ab' * 32}"], 1, "[FAIL] AGLedger offline verification (dump)"),
+        ([str(_DUMP), "--trust-anchor", f"sha256:{'ab' * 32}"], 3, "[NOT ANCHORED] AGLedger offline verification (dump)"),
     ],
 )
 def test_the_headline_and_exit_code_per_verdict(
@@ -249,6 +293,7 @@ def test_the_headline_and_exit_code_per_verdict(
     explanation = {
         0: "  Nothing failed",
         1: "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
+        3: "  The --trust-anchor you gave reaches none of the signing keys here",
     }[code]
     assert lines[1].startswith(explanation)
 

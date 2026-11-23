@@ -59,7 +59,7 @@ import binascii
 import hashlib
 import io
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import cmp_to_key
@@ -493,6 +493,24 @@ def settle_key_trust(report: KeyTrustReport, anchored_signatures: int) -> KeyTru
             "written before the install began signing carries no signature, and proves nothing "
             "about who wrote it."
         ),
+    )
+
+
+def pin_not_met(valid: bool, report: KeyTrustReport, passes_unpinned: Callable[[], bool]) -> bool:
+    """Whether a pinned run that failed did so only because its pin reaches
+    nothing: the walk anchored no key at all, and the same input verified
+    without ``trust_anchors`` and ``distrusted_keys`` passes. Such a run is
+    ``unanchored`` rather than ``failed`` (``valid`` stays false): an export
+    checked against another Server's pin, and equally one re-signed wholesale
+    under keys of its own. Once the pin anchors any key, an entry under a key
+    it does not reach is a substitution and the run stays ``failed``.
+    ``passes_unpinned`` runs only when the rest holds. Mirrors verify-core
+    ``verdictOf``."""
+    return (
+        not valid
+        and report.status == "no_anchored_signature"
+        and not report.anchored_key_ids
+        and passes_unpinned()
     )
 
 

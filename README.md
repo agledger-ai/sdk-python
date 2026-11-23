@@ -738,11 +738,20 @@ NOT ANCHORED]` and says plainly that the pass is not a trusted verdict: anyone
 who re-signs the chain with a key of their own, and writes that key into the
 registry, also passes. A pin that anchors no signature in the target (every
 entry is unsigned history from before the install began signing) reads
-`[VERIFIED, NOT ANCHORED]` too, saying so. A failure is `[FAIL]`.
+`[VERIFIED, NOT ANCHORED]` too, saying so. A pin that reaches none of the
+keys, on a target that verifies without it, reads `[NOT ANCHORED]`: check the
+pin. A failure is `[FAIL]`. `--expected-entry-count <n>` holds an
+`/audit-export` to an entry count taken out of band (the counts an export
+states are unsigned), and `--allow-after-retirement` accepts a peer message
+signed after its key's retirement.
 
-The exit code is `0` for a pass, anchored or not, `1` for a failed
-verification, `3` when the `[verify]` extra is not installed (the command prints
-one line naming `pip install 'agledger[verify]'`), and `2` when no verdict was reached: an unknown flag, a flag
+The exit code is `0` for a pass with no `--trust-anchor` (read the verdict),
+or one anchored to the pin; `1` for a failed verification; `3` when a
+`--trust-anchor` was given and not met (`[VERIFIED, NOT ANCHORED]` with a pin,
+or `[NOT ANCHORED]`: the pin reaches none of the keys, but nothing fails
+without it, as for an artifact from another Server than the one pinned); and
+`2` when no verdict was reached: the `[verify]` extra is not installed (the
+command prints one line naming `pip install 'agledger[verify]'`), an unknown flag, a flag
 missing its value, a malformed pin or distrusted key, a key named twice,
 `--distrusted-key` without `--trust-anchor`, a key given to both with no instant, a key-policy flag on a dump
 directory, a target that does not exist, or a file that cannot be read or does

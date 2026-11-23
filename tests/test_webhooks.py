@@ -53,6 +53,19 @@ def test_tolerance_cap():
     assert not verify_signature(BODY, result["header"], SECRET, tolerance_seconds=600)
 
 
+@pytest.mark.parametrize("tolerance", [float("nan"), float("inf"), -1, -0.5, True, "300"])
+def test_a_tolerance_that_is_not_a_finite_number_0_or_more_raises(tolerance: object):
+    # nan made every freshness comparison false, switching the window off.
+    stale = sign_payload(BODY, SECRET, int(time.time()) - 100_000)
+    with pytest.raises(ValueError, match="tolerance_seconds must be a finite number, 0 or more"):
+        verify_signature(BODY, stale["header"], SECRET, tolerance_seconds=tolerance)  # type: ignore[arg-type]
+
+
+def test_a_float_tolerance_is_accepted():
+    fresh = sign_payload(BODY, SECRET)
+    assert verify_signature(BODY, fresh["header"], SECRET, tolerance_seconds=120.5)
+
+
 def test_construct_event():
     result = sign_payload(BODY, SECRET)
     event = construct_event(BODY, result["header"], SECRET)
@@ -128,6 +141,13 @@ def test_rfc9421_valid_spki(keypair):
     priv, spki, _raw, _keys = keypair
     headers = _sign(priv)
     assert verify_rfc9421(headers, RFC_BODY, spki) is True
+
+
+@pytest.mark.parametrize("tolerance", [float("nan"), float("inf"), -1])
+def test_rfc9421_a_tolerance_that_is_not_a_finite_number_0_or_more_raises(keypair, tolerance: float):
+    priv, spki, _raw, _keys = keypair
+    with pytest.raises(ValueError, match="tolerance_seconds must be a finite number, 0 or more"):
+        verify_rfc9421(_sign(priv), RFC_BODY, spki, tolerance_seconds=tolerance)
 
 
 def test_rfc9421_valid_raw_key(keypair):

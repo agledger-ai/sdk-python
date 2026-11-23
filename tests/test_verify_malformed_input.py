@@ -386,7 +386,7 @@ def test_the_cli_headline_says_a_pin_that_anchored_no_signature_is_not_trusted(
 ) -> None:
     from agledger.verify.cli import run_cli
 
-    assert run_cli([str(CONFORMANCE / "export" / "unsigned.json"), "--trust-anchor", STRANGER]) == 0
+    assert run_cli([str(CONFORMANCE / "export" / "unsigned.json"), "--trust-anchor", STRANGER]) == 3  # pinned, and the pin was not met, as @agledger/verify exits
     out = capsys.readouterr().out
     assert out.startswith(
         "[VERIFIED, NOT ANCHORED] AGLedger offline verification (audit-export)\n"

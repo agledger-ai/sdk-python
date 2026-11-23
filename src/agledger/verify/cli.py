@@ -63,6 +63,10 @@ from agledger.verify.verify_export import (
 _EXIT_OK = 0
 _EXIT_VERIFICATION_FAILED = 1
 _EXIT_USAGE = 2
+#: Nothing failed (or nothing that fails without the pin), but a --trust-anchor
+#: was given and the run did not anchor to it. Not tampering evidence, and not
+#: a pass: the pin the caller asked for was not met.
+_EXIT_NOT_ANCHORED = 3
 
 
 @dataclass
@@ -87,6 +91,8 @@ class ParsedArgs:
     """``--federation-key-history`` paths, each a peer's key-history document."""
     allow_after_retirement: bool = False
     """``--allow-after-retirement``: accept and count a peer message signed after its key retired."""
+    expected_entry_count: int | None = None
+    """``--expected-entry-count``: the number of entries an /audit-export must hold, supplied out of band."""
 
 
 class UsageError(Exception):
@@ -105,6 +111,11 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
     ``-``, and every refusal carries ``@agledger/verify``'s message. Raises
     :class:`UsageError`."""
     out = ParsedArgs()
+
+    def entry_count(value: str) -> int:
+        if not re.fullmatch(r"[0-9]+", value) or int(value) > 2**53 - 1:
+            raise UsageError(f"--expected-entry-count must be a non-negative integer (got {value})")
+        return int(value)
 
     def take_value(flag: str, nxt: str | None) -> str:
         if nxt is None or nxt.startswith("-"):
@@ -188,6 +199,11 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
             out.federation_keys.append(value)
         elif arg == "--allow-after-retirement":
             out.allow_after_retirement = True
+        elif arg == "--expected-entry-count":
+            out.expected_entry_count = entry_count(take_value("--expected-entry-count", nxt))
+            i += 1
+        elif arg.startswith("--expected-entry-count="):
+            out.expected_entry_count = entry_count(arg[len("--expected-entry-count=") :])
         elif arg == "--require-supplied-keys":
             out.require_supplied_keys = True
         elif arg == "--require-out-of-band-keys":
@@ -214,6 +230,7 @@ Usage:
                   [--federation-key <hubId>=<key>]...
                   [--federation-key-history <file>]...
                   [--allow-after-retirement]
+                  [--expected-entry-count <n>]
                   [--report-format text|json]
                   [--keys <file>] [--require-key-id <id>]
                   [--require-supplied-keys]
@@ -263,7 +280,7 @@ Options:
                               sealed message is held to its body hash and to
                               its entry; one from a hub given here also has
                               its signature re-verified under that key, which
-                              proves what the peer asserted from this
+                              checks what the peer asserted from this
                               Server's export alone. A failure is
                               CHAIN_FEDERATION_WIRE_INVALID. Applies to a dump
                               directory and to an /audit-export file. Name a
@@ -283,7 +300,7 @@ Options:
                               at each edge of the window. One signed under a
                               key earlier than that before the key's
                               activation fails, and so does one signed later
-                              than that after its retirement, unless
+                              than that after its retirement unless
                               --allow-after-retirement is given.
   --allow-after-retirement    A sealed peer message signed under a key after
                               that key's retirement fails by default. This
@@ -316,6 +333,13 @@ Options:
   --require-key-id            Require every entry to reference this keyId.
                               Rejects otherwise-valid exports signed by a
                               retired or unexpected key.
+  --expected-entry-count <n>  The number of entries the /audit-export must
+                              hold, taken out of band (the record's entry
+                              count from the Server or an earlier export).
+                              The counts an export states about itself are
+                              unsigned, so a chain cut from the end with
+                              them deleted verifies; with this flag it fails
+                              CHAIN_POSITION_GAP. /audit-export files only.
   --require-supplied-keys     Refuse keys embedded in the export: an entry
                               whose only key is the export's own fails. This
                               says where a key came from, not that it is
@@ -324,9 +348,9 @@ Options:
   --help, -h                  Show this help.
 
 Without --trust-anchor no key is anchored. Every key is taken from the
-artifact itself (the dump's vault_signing_keys, the export's embedded keys, or
-keys fetched from the same Server), and a key written into the Server's
-database alone would verify. Such a run still finds tampering and still exits
+artifact itself (the dump's signing keys, the export's embedded keys, or
+keys fetched from the same Server), and a key added to the Server alone
+would verify. Such a run still finds tampering and still exits
 0 when nothing fails, but it reports VERIFIED, NOT ANCHORED (JSON verdict
 "unanchored"), never a trusted verdict. Ask the operator for the digest of a
 vault key: the installer prints it, and signing-key-digest.js derives it.
@@ -337,7 +361,7 @@ history and rejects them.
 
 A dump not scoped to one org carries the cert keys itself: each
 EPHEMERAL_CERT_ISSUED entry on the platform-ops chain signs its cert's
-publicKeyJwk (Servers from 1.8.0 on), and a key is used once that chain has
+publicKeyJwk, and a key is used once that chain has
 verified clean. An org-scoped dump leaves the platform-ops chain out, and a
 per-record /audit-export carries no cert keys, so for those pass --agent-keys.
 Where no key is at hand the agent-signature check reports "not checked" and
@@ -356,6 +380,9 @@ Exit codes:
      unanchored without one)
   1  verification FAILED (the chain, log, or key statements do not hold up)
   2  could NOT verify (input missing, unreadable, or malformed; no verdict)
+  3  NOT ANCHORED: a --trust-anchor was given and nothing anchored to it
+     (nothing fails without the pin, but the pin was not met: an artifact
+     from another Server, or a forged one carrying its own keys, ends here)
 
 Codes 1 and 2 mean opposite things. Treat only 1 as evidence of tampering.
 """
@@ -524,11 +551,15 @@ def attach_federation_key_histories(keys: list[dict[str, Any]], paths: Sequence[
 _COUNTED_ON_SOUND_ENTRIES = ", counted on the entries that passed every other check"
 
 
-def _entry_count_summary(count: EntryCount, held: int) -> str:
+def _entry_count_summary(count: EntryCount, held: int, supplied: int | None = None) -> str:
     """What the export's entry count was held to. A chain cut from the end
     still verifies entry by entry, so the reader is told which stated count, if
     any, stood behind the number above. Mirrors ``entryCountSummary`` in
     ``@agledger/verify``."""
+    if supplied is not None:
+        if held == supplied:
+            return f"held to the {supplied} given with --expected-entry-count"
+        return f"{held} where --expected-entry-count gives {supplied}"
     if count.expected_entries is not None:
         expected = count.expected_entries
         if held < expected:
@@ -539,7 +570,10 @@ def _entry_count_summary(count: EntryCount, held: int) -> str:
         if held < stated:
             return f"{held} where the export states {stated}; it names no checkpoint for this record yet"
         return f"held to the {stated} the export states; it names no checkpoint for this record yet"
-    return "the file's own; the export states no count and names no checkpoint"
+    return (
+        "the file's own; the export states no count and names no checkpoint, so a chain cut from the end "
+        "would pass. Hold it to a count you took out of band with --expected-entry-count"
+    )
 
 
 def _checkpointed_chains_summary(checkpointed: int, chains: int) -> str:
@@ -661,7 +695,7 @@ def _agent_signature_summary(
     return f"{base} (NOT checked: pass --agent-keys with the agent cert keys to re-verify them)"
 
 
-def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None) -> list[str]:
+def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None, valid: bool = True) -> list[str]:
     """The headline and the lines saying what it means, as ``@agledger/verify``
     prints them. ``unanchored`` gets its own words so that a run which found
     nothing wrong but anchored nothing can never be read, or grepped, as a
@@ -677,6 +711,14 @@ def headline(verdict: str, kind: str, key_trust: KeyTrustReport | None = None) -
             f"[FAIL] AGLedger offline verification ({kind})",
             "  Verification FAILED: the chain, the read log or the key statements do not hold up.",
             "  Each finding is listed below.",
+        ]
+    if not valid:
+        return [
+            f"[NOT ANCHORED] AGLedger offline verification ({kind})",
+            "  The --trust-anchor you gave reaches none of the signing keys here, so every signed entry",
+            "  reads as unanchored. Without the pin, nothing fails: this is the result for an artifact",
+            "  from another Server than the one pinned, and equally for one re-signed wholesale under",
+            "  keys of its own. NOT a trusted verdict. Check that the pin is this Server's vault key.",
         ]
     if key_trust is not None and key_trust.status == "no_anchored_signature":
         return [
@@ -751,7 +793,7 @@ def _chain_name(a: AccountedEntry) -> str:
 def _format_dump_text(
     report: VerifyReport, keys_given: bool = False, federation_keys_given: bool = False
 ) -> str:
-    lines: list[str] = [*headline(report.verdict, "dump", report.key_trust), ""]
+    lines: list[str] = [*headline(report.verdict, "dump", report.key_trust, report.ok), ""]
     lines.extend(_key_trust_lines(report.key_trust))
     lines.append("")
     lines.append("audit_vault chain")
@@ -886,14 +928,17 @@ def _export_to_json(result: VerifyExportResult) -> dict[str, Any]:
 
 
 def _format_export_text(
-    result: VerifyExportResult, keys_given: bool = False, federation_keys_given: bool = False
+    result: VerifyExportResult,
+    keys_given: bool = False,
+    federation_keys_given: bool = False,
+    expected_entry_count: int | None = None,
 ) -> str:
-    lines: list[str] = [*headline(result.verdict, "audit-export", result.key_trust), ""]
+    lines: list[str] = [*headline(result.verdict, "audit-export", result.key_trust, result.valid), ""]
     lines.append(f"  record            : {result.record_id}")
     lines.append(
         f"  entries           : {result.verified_entries}/{result.total_entries} verified"
     )
-    lines.append(f"  entry count       : {_entry_count_summary(result.entry_count, result.total_entries)}")
+    lines.append(f"  entry count       : {_entry_count_summary(result.entry_count, result.total_entries, expected_entry_count)}")
     cov = result.signature_coverage
     lines.append(
         f"  signature coverage: signed={cov.signed} unsigned={cov.unsigned} "
@@ -1009,6 +1054,8 @@ _OPTION_FLAGS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"\bagentKeys\b", "--agent-keys"),
         (r"\ballowAfterRetirement\b", "--allow-after-retirement"),
         (r"\ballow_after_retirement\b", "--allow-after-retirement"),
+        (r"\bexpectedEntryCount\b", "--expected-entry-count"),
+        (r"\bexpected_entry_count\b", "--expected-entry-count"),
     )
 )
 
@@ -1119,6 +1166,14 @@ def _usage(message: str) -> int:
 _EXIT_BY_VERDICT = {"trusted": _EXIT_OK, "unanchored": _EXIT_OK, "failed": _EXIT_VERIFICATION_FAILED}
 
 
+def _exit_code_for(verdict: str, trust_anchors_given: bool) -> int:
+    """A plain run with no pin keeps exiting 0 when unanchored; one that
+    supplied a pin and did not anchor to it exits 3. As ``@agledger/verify``."""
+    if verdict == "unanchored" and trust_anchors_given:
+        return _EXIT_NOT_ANCHORED
+    return _EXIT_BY_VERDICT[verdict]
+
+
 def run_cli(argv: Sequence[str]) -> int:
     """Parse args, verify the target, and return an exit code. Stdout/stderr are
     written directly so the function is also a clean unit-test seam. The
@@ -1186,6 +1241,12 @@ def run_cli(argv: Sequence[str]) -> int:
         # A dump carries its own key registry, so a supplied key set has
         # nothing to override and a silent no-op would read as an audit that
         # honoured the policy.
+        if args.expected_entry_count is not None:
+            return _cannot_verify(
+                "--expected-entry-count applies to /audit-export files only; a dump holds every chain of "
+                "the installation, each held to its own checkpoints.",
+                report_format,
+            )
         if has_key_policy_flags:
             return _cannot_verify(
                 "--keys / --require-key-id / --require-supplied-keys apply to /audit-export files "
@@ -1209,7 +1270,7 @@ def run_cli(argv: Sequence[str]) -> int:
             print(json.dumps(report.to_json(), indent=2))
         else:
             print(_format_dump_text(report, agent_keys is not None, federation_keys is not None))
-        return _EXIT_BY_VERDICT[report.verdict]
+        return _exit_code_for(report.verdict, bool(trust_anchors))
 
     # File -> parse JSON, branch on exportMetadata.
     try:
@@ -1248,6 +1309,7 @@ def run_cli(argv: Sequence[str]) -> int:
             allow_after_retirement=args.allow_after_retirement,
             trust_anchors=trust_anchors,
             distrusted_keys=distrusted_keys,
+            expected_entry_count=args.expected_entry_count,
         )
     except TypeError as err:
         message = _federation_flag_message(str(err))
@@ -1260,8 +1322,10 @@ def run_cli(argv: Sequence[str]) -> int:
     if report_format == "json":
         print(json.dumps(_export_to_json(result), indent=2))
     else:
-        print(_format_export_text(result, agent_keys is not None, federation_keys is not None))
-    return _EXIT_BY_VERDICT[verdict]
+        print(
+            _format_export_text(result, agent_keys is not None, federation_keys is not None, args.expected_entry_count)
+        )
+    return _exit_code_for(verdict, bool(trust_anchors))
 
 
 def main(argv: Sequence[str] | None = None) -> None:

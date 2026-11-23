@@ -333,6 +333,21 @@ def test_a_chain_that_reappears_after_it_closed_is_refused_as_out_of_producer_or
 
 
 @pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
+def test_a_relabelled_record_id_is_a_binding_mismatch_not_a_reorder() -> None:
+    # Chains are grouped and closed by chain_key, as the producer orders them
+    # and @agledger/verify walks them, so a row whose record_id was edited
+    # stays in its chain and fails against the record id it signs.
+    dump = load_dump(str(_VALID_DUMP))
+    row = next(e for e in dump.vault_entries if e.get("record_id") is not None and e["chain_key"] == e["record_id"])
+    siblings = [e for e in dump.vault_entries if e["chain_key"] == row["chain_key"]]
+    assert len(siblings) > 1
+    siblings[1]["record_id"] = "00000000-0000-7000-8000-0000000000ff"
+    codes = _codes(verify_dump(dump))
+    assert "CHAIN_PAYLOAD_BINDING_MISMATCH" in codes
+    assert "UNSUPPORTED_FORMAT" not in codes
+
+
+@pytest.mark.skipif(not _HAS_CORPUS, reason="conformance corpus not present")
 def test_a_row_without_cose_sign1_stops_the_walk_and_keeps_what_the_chains_closed_before_it_found() -> None:
     # Under a pin nothing links to, every chain closed before the refused row
     # has already failed on its keys; the refusal does not erase that.

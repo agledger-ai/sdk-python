@@ -6,7 +6,7 @@ import sys
 from agledger.types import VerificationKey
 
 
-def test_missing_extra_is_one_line_and_exit_3():
+def test_missing_extra_is_one_line_and_exit_2():
     """Without cbor2 the entry point prints one line naming the extra and exits
     3, where it used to die with a traceback."""
     code = (
@@ -16,7 +16,7 @@ def test_missing_extra_is_one_line_and_exit_3():
         "main()\n"
     )
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert proc.returncode == 3
+    assert proc.returncode == 2
     assert proc.stdout == ""
     assert "Traceback" not in proc.stderr
     assert proc.stderr.count("\n") == 1

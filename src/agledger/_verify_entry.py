@@ -5,17 +5,16 @@ extra installs, but a wheel cannot make a console script conditional on an
 extra: a plain ``pip install agledger`` puts ``agledger-verify`` on PATH
 anyway. This shim lives outside the ``agledger.verify`` package (whose import
 is what fails) so it can catch the missing dependency and say so in one line,
-with its own exit code, instead of a traceback.
+with the could-not-verify exit code, instead of a traceback.
 """
 
 from __future__ import annotations
 
 import sys
 
-# The verifier's own exit codes are 0 pass, 1 verification failure, 2 usage or
-# IO error. A missing dependency is none of those, and a pipeline must not read
-# it as a tamper finding.
-EXIT_MISSING_EXTRA = 3
+# A missing dependency means no verdict was reached, which is the verifier's
+# exit 2 (could not verify), never 1 (a tamper finding) or 3 (a pin not met).
+EXIT_MISSING_EXTRA = 2
 
 
 def main() -> None:

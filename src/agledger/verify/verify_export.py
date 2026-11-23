@@ -80,6 +80,7 @@ from agledger.verify.key_statements import (
     instant_ms,
     key_statements_from_export,
     no_anchor_report,
+    pin_not_met,
     report_key_trust,
     rfc3339_ms,
     settle_key_trust,
@@ -503,15 +504,21 @@ class VerifyExportResult:
     #: With both ``None`` the entry count is the file's own and is held to
     #: nothing. Mirrors ``entryCount`` in ``@agledger/verify-core``.
     entry_count: EntryCount = field(default_factory=lambda: EntryCount())
+    #: Set when a pinned run failed only because the pin reaches none of the
+    #: export's keys (see :func:`~agledger.verify.key_statements.pin_not_met`).
+    pin_not_met: bool = False
 
     @property
     def verdict(self) -> Literal["trusted", "unanchored", "failed"]:
         """``trusted``, ``unanchored`` or ``failed``, the word every AGLedger
         verifier prints. Read this rather than ``valid`` alone: a valid result
         with no ``trust_anchors``, or none that anchored a signature, is
-        ``unanchored``, which is not a trusted verdict."""
+        ``unanchored``, which is not a trusted verdict. So is a pinned result
+        that failed only because the pin reaches none of the export's keys
+        (``pin_not_met``; ``valid`` stays false), as with an export checked
+        against another Server's pin."""
         if not self.valid:
-            return "failed"
+            return "unanchored" if self.pin_not_met else "failed"
         return "trusted" if self.key_trust.status == "walked" else "unanchored"
 
 
@@ -824,11 +831,22 @@ def verify_export(
     if unbound_federation:
         checks["federation_wire"] = "not_checked"
 
+    valid = verified == len(sorted_entries) and not key_trust.findings and count_finding is None and id_finding is None
+
+    def passes_unpinned() -> bool:
+        return verify_export(
+            export_data,
+            public_keys=public_keys,
+            require_key_id=require_key_id,
+            require_supplied_keys=require_supplied_keys,
+            agent_keys=agent_keys,
+            federation_keys=federation_keys,
+            allow_after_retirement=allow_after_retirement,
+            expected_entry_count=expected_entry_count,
+        ).valid
+
     return VerifyExportResult(
-        valid=verified == len(sorted_entries)
-        and not key_trust.findings
-        and count_finding is None
-        and id_finding is None,
+        valid=valid,
         total_entries=len(sorted_entries),
         verified_entries=verified,
         record_id=signed_id,
@@ -844,6 +862,7 @@ def verify_export(
         key_trust=key_trust,
         unsigned_projection_fields=_unsigned_projection_fields(export_data),
         entry_count=entry_count,
+        pin_not_met=pin_not_met(valid, key_trust, passes_unpinned),
     )
 
 
