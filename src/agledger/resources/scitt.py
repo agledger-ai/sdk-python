@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 
 
 class ScittEntriesResource:
@@ -40,7 +41,7 @@ class ScittEntriesResource:
 
     def get(self, entry_id: str) -> bytes:
         """Read a Transparent Statement (Signed Statement + Receipt(s)) by entry id."""
-        return self._http.get_bytes(f"/v1/scitt/entries/{entry_id}", accept="application/cose")
+        return self._http.get_bytes(f"/v1/scitt/entries/{seg(entry_id)}", accept="application/cose")
 
 
 class ScittKeysResource:
@@ -59,7 +60,7 @@ class ScittKeysResource:
     def get(self, kid: str) -> bytes:
         """Fetch a single COSE_Key by kid (unauthenticated)."""
         return self._http.get_bytes(
-            f"/.well-known/scitt-keys/{kid}", accept="application/cose-key", auth_override="none"
+            f"/.well-known/scitt-keys/{seg(kid)}", accept="application/cose-key", auth_override="none"
         )
 
 
@@ -96,7 +97,7 @@ class AsyncScittEntriesResource:
         )
 
     async def get(self, entry_id: str) -> bytes:
-        return await self._http.get_bytes(f"/v1/scitt/entries/{entry_id}", accept="application/cose")
+        return await self._http.get_bytes(f"/v1/scitt/entries/{seg(entry_id)}", accept="application/cose")
 
 
 class AsyncScittKeysResource:
@@ -110,7 +111,7 @@ class AsyncScittKeysResource:
 
     async def get(self, kid: str) -> bytes:
         return await self._http.get_bytes(
-            f"/.well-known/scitt-keys/{kid}", accept="application/cose-key", auth_override="none"
+            f"/.well-known/scitt-keys/{seg(kid)}", accept="application/cose-key", auth_override="none"
         )
 
 

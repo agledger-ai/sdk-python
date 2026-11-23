@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import AgentDirectoryEntry, AgentProfile, Page
 
 # The fields PATCH /v1/agents/{id} accepts, snake_case to the camelCase wire
@@ -58,7 +59,7 @@ class AgentsResource:
 
     def get(self, agent_id: str) -> AgentProfile:
         """Get an agent profile."""
-        return AgentProfile.model_validate(self._http.get(f"/v1/agents/{agent_id}"))
+        return AgentProfile.model_validate(self._http.get(f"/v1/agents/{seg(agent_id)}"))
 
     def update(self, agent_id: str, **params: Any) -> dict[str, Any]:
         """Update agent identity fields.
@@ -70,15 +71,15 @@ class AgentsResource:
         Set ``oidc_iss`` and ``oidc_sub`` together: a subject is unique only
         within its issuer, and a half-set pair is refused."""
         body = {api_key: params[key] for key, api_key in _UPDATE_FIELDS.items() if key in params}
-        return self._http.patch(f"/v1/agents/{agent_id}", json=body)
+        return self._http.patch(f"/v1/agents/{seg(agent_id)}", json=body)
 
     def add_references(self, agent_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
         """Add references to an agent."""
-        return self._http.post(f"/v1/agents/{agent_id}/references", json={"references": references})
+        return self._http.post(f"/v1/agents/{seg(agent_id)}/references", json={"references": references})
 
     def get_references(self, agent_id: str) -> dict[str, Any]:
         """Get agent references."""
-        return self._http.get(f"/v1/agents/{agent_id}/references")
+        return self._http.get(f"/v1/agents/{seg(agent_id)}/references")
 
     def list_peers(
         self,
@@ -128,7 +129,7 @@ class AsyncAgentsResource:
 
     async def get(self, agent_id: str) -> AgentProfile:
         """Get an agent profile."""
-        return AgentProfile.model_validate(await self._http.get(f"/v1/agents/{agent_id}"))
+        return AgentProfile.model_validate(await self._http.get(f"/v1/agents/{seg(agent_id)}"))
 
     async def update(self, agent_id: str, **params: Any) -> dict[str, Any]:
         """Update agent identity fields.
@@ -140,15 +141,15 @@ class AsyncAgentsResource:
         Set ``oidc_iss`` and ``oidc_sub`` together: a subject is unique only
         within its issuer, and a half-set pair is refused."""
         body = {api_key: params[key] for key, api_key in _UPDATE_FIELDS.items() if key in params}
-        return await self._http.patch(f"/v1/agents/{agent_id}", json=body)
+        return await self._http.patch(f"/v1/agents/{seg(agent_id)}", json=body)
 
     async def add_references(self, agent_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
         """Add references to an agent."""
-        return await self._http.post(f"/v1/agents/{agent_id}/references", json={"references": references})
+        return await self._http.post(f"/v1/agents/{seg(agent_id)}/references", json={"references": references})
 
     async def get_references(self, agent_id: str) -> dict[str, Any]:
         """Get agent references."""
-        return await self._http.get(f"/v1/agents/{agent_id}/references")
+        return await self._http.get(f"/v1/agents/{seg(agent_id)}/references")
 
     async def list_peers(
         self,

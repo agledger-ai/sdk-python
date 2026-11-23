@@ -13,6 +13,7 @@ from typing import Any
 
 from agledger._errors import PaginationLimitError
 from agledger._http import DEFAULT_MAX_PAGES, AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import (
     AiImpactAssessment,
     AuditStreamResult,
@@ -45,7 +46,7 @@ class ComplianceResource:
 
     def get_export_status(self, export_id: str) -> ComplianceExport:
         """Check the status of a compliance export."""
-        return ComplianceExport.model_validate(self._http.get(f"/v1/compliance/export/{export_id}"))
+        return ComplianceExport.model_validate(self._http.get(f"/v1/compliance/export/{seg(export_id)}"))
 
     def download_export(self, export_id: str) -> dict[str, Any]:
         """Download a completed compliance export created with ``format="json"``.
@@ -53,7 +54,7 @@ class ComplianceResource:
         An export created as ``csv`` or ``html`` is served in that format:
         :meth:`download_export_text` returns it.
         """
-        return self._http.get(f"/v1/compliance/export/{export_id}/download")
+        return self._http.get(f"/v1/compliance/export/{seg(export_id)}/download")
 
     def download_export_text(self, export_id: str) -> str:
         """Download a completed compliance export as the text the Server sent:
@@ -61,7 +62,7 @@ class ComplianceResource:
         ``format="csv"`` or ``"html"`` (a ``json`` export comes back as its
         JSON text).
         """
-        raw = self._http.get_bytes(f"/v1/compliance/export/{export_id}/download", accept=_TEXT_ACCEPT)
+        raw = self._http.get_bytes(f"/v1/compliance/export/{seg(export_id)}/download", accept=_TEXT_ACCEPT)
         return raw.decode("utf-8")
 
     def wait_for_export(
@@ -96,13 +97,13 @@ class ComplianceResource:
         if testing_results is not None:
             body["testingResults"] = testing_results
         return AiImpactAssessment.model_validate(
-            self._http.post(f"/v1/records/{record_id}/ai-impact-assessment", json=body)
+            self._http.post(f"/v1/records/{seg(record_id)}/ai-impact-assessment", json=body)
         )
 
     def get_assessment(self, record_id: str) -> AiImpactAssessment:
         """Get the AI impact assessment for a Record."""
         return AiImpactAssessment.model_validate(
-            self._http.get(f"/v1/records/{record_id}/ai-impact-assessment")
+            self._http.get(f"/v1/records/{seg(record_id)}/ai-impact-assessment")
         )
 
     def create_record(
@@ -123,19 +124,19 @@ class ComplianceResource:
         if attested_at is not None:
             body["attestedAt"] = attested_at
         return ComplianceRecord.model_validate(
-            self._http.post(f"/v1/records/{record_id}/compliance-records", json=body)
+            self._http.post(f"/v1/records/{seg(record_id)}/compliance-records", json=body)
         )
 
     def list_records(self, record_id: str, **params: Any) -> Page[dict[str, Any]]:
         """List compliance records for a Record."""
         return Page[dict[str, Any]].model_validate(
-            self._http.get_page(f"/v1/records/{record_id}/compliance-records", params=params)
+            self._http.get_page(f"/v1/records/{seg(record_id)}/compliance-records", params=params)
         )
 
     def get_record(self, record_id: str, compliance_record_id: str) -> ComplianceRecord:
         """Get a specific compliance record."""
         return ComplianceRecord.model_validate(
-            self._http.get(f"/v1/records/{record_id}/compliance-records/{compliance_record_id}")
+            self._http.get(f"/v1/records/{seg(record_id)}/compliance-records/{seg(compliance_record_id)}")
         )
 
     def export_audit_vault(self, **params: Any) -> dict[str, Any]:
@@ -266,14 +267,14 @@ class AsyncComplianceResource:
         return ComplianceExport.model_validate(await self._http.post("/v1/compliance/export", json=params))
 
     async def get_export_status(self, export_id: str) -> ComplianceExport:
-        return ComplianceExport.model_validate(await self._http.get(f"/v1/compliance/export/{export_id}"))
+        return ComplianceExport.model_validate(await self._http.get(f"/v1/compliance/export/{seg(export_id)}"))
 
     async def download_export(self, export_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/compliance/export/{export_id}/download")
+        return await self._http.get(f"/v1/compliance/export/{seg(export_id)}/download")
 
     async def download_export_text(self, export_id: str) -> str:
         """The export as text: see the sync docstring."""
-        raw = await self._http.get_bytes(f"/v1/compliance/export/{export_id}/download", accept=_TEXT_ACCEPT)
+        raw = await self._http.get_bytes(f"/v1/compliance/export/{seg(export_id)}/download", accept=_TEXT_ACCEPT)
         return raw.decode("utf-8")
 
     async def wait_for_export(
@@ -306,12 +307,12 @@ class AsyncComplianceResource:
         if testing_results is not None:
             body["testingResults"] = testing_results
         return AiImpactAssessment.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/ai-impact-assessment", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/ai-impact-assessment", json=body)
         )
 
     async def get_assessment(self, record_id: str) -> AiImpactAssessment:
         return AiImpactAssessment.model_validate(
-            await self._http.get(f"/v1/records/{record_id}/ai-impact-assessment")
+            await self._http.get(f"/v1/records/{seg(record_id)}/ai-impact-assessment")
         )
 
     async def create_record(
@@ -331,17 +332,17 @@ class AsyncComplianceResource:
         if attested_at is not None:
             body["attestedAt"] = attested_at
         return ComplianceRecord.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/compliance-records", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/compliance-records", json=body)
         )
 
     async def list_records(self, record_id: str, **params: Any) -> Page[dict[str, Any]]:
         return Page[dict[str, Any]].model_validate(
-            await self._http.get_page(f"/v1/records/{record_id}/compliance-records", params=params)
+            await self._http.get_page(f"/v1/records/{seg(record_id)}/compliance-records", params=params)
         )
 
     async def get_record(self, record_id: str, compliance_record_id: str) -> ComplianceRecord:
         return ComplianceRecord.model_validate(
-            await self._http.get(f"/v1/records/{record_id}/compliance-records/{compliance_record_id}")
+            await self._http.get(f"/v1/records/{seg(record_id)}/compliance-records/{seg(compliance_record_id)}")
         )
 
     async def export_audit_vault(self, **params: Any) -> dict[str, Any]:

@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Any, Literal, overload
 
 from agledger._http import AsyncHttpClient, HttpClient, on_behalf_of_headers
+from agledger._paths import seg
 from agledger.record_lifecycle import get_valid_transitions
 from agledger.types import (
     BulkCreateResult,
@@ -308,7 +309,7 @@ class RecordsResource:
         ``action``, ``method`` and ``href``.
         """
         params = {k: v for k, v in (("integrity", integrity), ("view", view)) if v is not None}
-        return _parse_row(self._http.get(f"/v1/records/{record_id}", params=params or None), view)
+        return _parse_row(self._http.get(f"/v1/records/{seg(record_id)}", params=params or None), view)
 
     @overload
     def list(
@@ -757,7 +758,7 @@ class RecordsResource:
 
     def update(self, record_id: str, **params: Any) -> RecordRow:
         """Update a Record's mutable fields."""
-        return RecordRow.model_validate(self._http.patch(f"/v1/records/{record_id}", json=params))
+        return RecordRow.model_validate(self._http.patch(f"/v1/records/{seg(record_id)}", json=params))
 
     def transition(
         self, record_id: str, action: str, reason: str | None = None, *, on_behalf_of: str | None = None
@@ -770,32 +771,32 @@ class RecordsResource:
             body["reason"] = reason
         return RecordRow.model_validate(
             self._http.post(
-                f"/v1/records/{record_id}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
+                f"/v1/records/{seg(record_id)}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
             )
         )
 
     def cancel(self, record_id: str, reason: str | None = None) -> RecordRow:
         """Cancel a Record."""
         body = {"reason": reason} if reason else {}
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/cancel", json=body))
+        return RecordRow.model_validate(self._http.post(f"/v1/records/{seg(record_id)}/cancel", json=body))
 
     def accept(self, record_id: str, message: str | None = None) -> RecordRow:
         """Accept a PROPOSED Record (as performer). The optional ``message``
         explains the acceptance (max 2000 chars; the API also accepts
         ``reason``/``notes`` as wire-level aliases of the same field)."""
         body = {"message": message} if message else {}
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/accept", json=body))
+        return RecordRow.model_validate(self._http.post(f"/v1/records/{seg(record_id)}/accept", json=body))
 
     def reject(self, record_id: str, message: str | None = None) -> RecordRow:
         """Reject a PROPOSED Record (as performer). The optional ``message``
         explains the rejection (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/reject", json=body))
+        return RecordRow.model_validate(self._http.post(f"/v1/records/{seg(record_id)}/reject", json=body))
 
     def request_revision(self, record_id: str, reason: str | None = None) -> RecordRow:
         """Request revision after principal rejection (rework loop)."""
         body = {"reason": reason} if reason else {}
-        return RecordRow.model_validate(self._http.post(f"/v1/records/{record_id}/revision", json=body))
+        return RecordRow.model_validate(self._http.post(f"/v1/records/{seg(record_id)}/revision", json=body))
 
     def get_chain(self, record_id: str, *, max_pages: int | None = None) -> list[RecordRow]:
         """Get the full delegation chain for a Record.
@@ -807,12 +808,12 @@ class RecordsResource:
         ``max_pages`` to lift it, or to take a bounded prefix on purpose."""
         return [
             RecordRow.model_validate(m)
-            for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)
+            for m in self._http.paginate(f"/v1/records/{seg(record_id)}/chain", max_pages=max_pages)
         ]
 
     def get_graph(self, record_id: str) -> dict[str, Any]:
         """Get the delegation graph for a Record."""
-        return self._http.get(f"/v1/records/{record_id}/graph")
+        return self._http.get(f"/v1/records/{seg(record_id)}/graph")
 
     def get_sub_records(
         self,
@@ -825,7 +826,7 @@ class RecordsResource:
         """Get direct sub-Records of a Record. Page by replaying ``next_cursor``
         as ``cursor``; the listing takes writes, so ``offset`` can skip rows."""
         params = _page_params(limit, offset, cursor)
-        raw = self._http.get_page(f"/v1/records/{record_id}/sub-records", params=params or None)
+        raw = self._http.get_page(f"/v1/records/{seg(record_id)}/sub-records", params=params or None)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
         return Page[RecordRow].model_validate(raw)
 
@@ -897,7 +898,7 @@ class RecordsResource:
             body["message"] = message
         return VerdictResult.model_validate(
             self._http.post(
-                f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
+                f"/v1/records/{seg(record_id)}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
             )
         )
 
@@ -936,7 +937,7 @@ class RecordsResource:
         if evidence is not None:
             params["evidence"] = "true" if evidence else "false"
         return RecordAuditExport.model_validate(
-            self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
+            self._http.get(f"/v1/records/{seg(record_id)}/audit-export", params=params)
         )
 
     def get_audit_export_html(
@@ -963,7 +964,7 @@ class RecordsResource:
         if evidence is not None:
             params["evidence"] = "true" if evidence else "false"
         raw = self._http.get_bytes(
-            f"/v1/records/{record_id}/audit-export", accept="text/html", params=params
+            f"/v1/records/{seg(record_id)}/audit-export", accept="text/html", params=params
         )
         return raw.decode("utf-8")
 
@@ -975,7 +976,7 @@ class RecordsResource:
         verification.
         """
         return self._http.get_bytes(
-            f"/v1/records/{record_id}/attestation",
+            f"/v1/records/{seg(record_id)}/attestation",
             accept="application/cose-sequence",
         )
 
@@ -987,7 +988,7 @@ class RecordsResource:
         is byte-incompatible with the canonical COSE_Sign1 signature); use
         ``get_attestation()`` for cryptographic verification.
         """
-        return self._http.get(f"/v1/records/{record_id}/attestation.bundle")
+        return self._http.get(f"/v1/records/{seg(record_id)}/attestation.bundle")
 
     def create_and_activate(self, **params: Any) -> RecordRow:
         """Create, register, and activate a Record. Three API calls: if a step fails,
@@ -1103,7 +1104,7 @@ class AsyncRecordsResource:
         """Get a Record by ID. Pass ``integrity=True`` to re-verify the chain,
         ``view="compact"`` for a :class:`RecordRowCompact`."""
         params = {k: v for k, v in (("integrity", integrity), ("view", view)) if v is not None}
-        return _parse_row(await self._http.get(f"/v1/records/{record_id}", params=params or None), view)
+        return _parse_row(await self._http.get(f"/v1/records/{seg(record_id)}", params=params or None), view)
 
     @overload
     async def list(
@@ -1519,7 +1520,7 @@ class AsyncRecordsResource:
         return RecordCounts.model_validate(await self._http.get("/v1/records/counts", params=params))
 
     async def update(self, record_id: str, **params: Any) -> RecordRow:
-        return RecordRow.model_validate(await self._http.patch(f"/v1/records/{record_id}", json=params))
+        return RecordRow.model_validate(await self._http.patch(f"/v1/records/{seg(record_id)}", json=params))
 
     async def transition(
         self, record_id: str, action: str, reason: str | None = None, *, on_behalf_of: str | None = None
@@ -1528,14 +1529,14 @@ class AsyncRecordsResource:
         if reason: body["reason"] = reason
         return RecordRow.model_validate(
             await self._http.post(
-                f"/v1/records/{record_id}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
+                f"/v1/records/{seg(record_id)}/transition", json=body, headers=on_behalf_of_headers(on_behalf_of)
             )
         )
 
     async def cancel(self, record_id: str, reason: str | None = None) -> RecordRow:
         body = {"reason": reason} if reason else {}
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/cancel", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/cancel", json=body)
         )
 
     async def accept(self, record_id: str, message: str | None = None) -> RecordRow:
@@ -1543,7 +1544,7 @@ class AsyncRecordsResource:
         explains the acceptance (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/accept", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/accept", json=body)
         )
 
     async def reject(self, record_id: str, message: str | None = None) -> RecordRow:
@@ -1551,23 +1552,23 @@ class AsyncRecordsResource:
         explains the rejection (``reason``/``notes`` are wire-level aliases)."""
         body = {"message": message} if message else {}
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/reject", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/reject", json=body)
         )
 
     async def request_revision(self, record_id: str, reason: str | None = None) -> RecordRow:
         body = {"reason": reason} if reason else {}
         return RecordRow.model_validate(
-            await self._http.post(f"/v1/records/{record_id}/revision", json=body)
+            await self._http.post(f"/v1/records/{seg(record_id)}/revision", json=body)
         )
 
     async def get_chain(self, record_id: str, *, max_pages: int | None = None) -> list[RecordRow]:
         return [
             RecordRow.model_validate(m)
-            async for m in self._http.paginate(f"/v1/records/{record_id}/chain", max_pages=max_pages)
+            async for m in self._http.paginate(f"/v1/records/{seg(record_id)}/chain", max_pages=max_pages)
         ]
 
     async def get_graph(self, record_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/records/{record_id}/graph")
+        return await self._http.get(f"/v1/records/{seg(record_id)}/graph")
 
     async def get_sub_records(
         self,
@@ -1578,7 +1579,7 @@ class AsyncRecordsResource:
         cursor: str | None = None,
     ) -> Page[RecordRow]:
         params = _page_params(limit, offset, cursor)
-        raw = await self._http.get_page(f"/v1/records/{record_id}/sub-records", params=params or None)
+        raw = await self._http.get_page(f"/v1/records/{seg(record_id)}/sub-records", params=params or None)
         raw["data"] = [RecordRow.model_validate(m) for m in raw.get("data", [])]
         return Page[RecordRow].model_validate(raw)
 
@@ -1643,7 +1644,7 @@ class AsyncRecordsResource:
             body["message"] = message
         return VerdictResult.model_validate(
             await self._http.post(
-                f"/v1/records/{record_id}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
+                f"/v1/records/{seg(record_id)}/verdict", json=body, headers=on_behalf_of_headers(on_behalf_of)
             )
         )
 
@@ -1666,7 +1667,7 @@ class AsyncRecordsResource:
         if evidence is not None:
             params["evidence"] = "true" if evidence else "false"
         return RecordAuditExport.model_validate(
-            await self._http.get(f"/v1/records/{record_id}/audit-export", params=params)
+            await self._http.get(f"/v1/records/{seg(record_id)}/audit-export", params=params)
         )
 
     async def get_audit_export_html(
@@ -1683,18 +1684,18 @@ class AsyncRecordsResource:
         if evidence is not None:
             params["evidence"] = "true" if evidence else "false"
         raw = await self._http.get_bytes(
-            f"/v1/records/{record_id}/audit-export", accept="text/html", params=params
+            f"/v1/records/{seg(record_id)}/audit-export", accept="text/html", params=params
         )
         return raw.decode("utf-8")
 
     async def get_attestation(self, record_id: str) -> bytes:
         return await self._http.get_bytes(
-            f"/v1/records/{record_id}/attestation",
+            f"/v1/records/{seg(record_id)}/attestation",
             accept="application/cose-sequence",
         )
 
     async def get_attestation_bundle(self, record_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/records/{record_id}/attestation.bundle")
+        return await self._http.get(f"/v1/records/{seg(record_id)}/attestation.bundle")
 
     async def create_and_activate(self, **params: Any) -> RecordRow:
         record = await self.create(**params)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import Page, SchemaVersionUpdate
 
 
@@ -60,15 +61,15 @@ class SchemasResource:
         this org; without it that case is a 422 ``/problems/ambiguous-publisher``
         listing the candidates. See ``list()``.
         """
-        return self._http.get(f"/v1/schemas/{type}", params=_scope(publisher))
+        return self._http.get(f"/v1/schemas/{seg(type)}", params=_scope(publisher))
 
     def delete(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Delete a custom Type schema."""
-        return self._http.delete(f"/v1/schemas/{type}", params=_scope(publisher))
+        return self._http.delete(f"/v1/schemas/{seg(type)}", params=_scope(publisher))
 
     def get_rules(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Get the verification rules for a Type."""
-        return self._http.get(f"/v1/schemas/{type}/rules", params=_scope(publisher))
+        return self._http.get(f"/v1/schemas/{seg(type)}/rules", params=_scope(publisher))
 
     def get_manifest(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Get this Server's canonical manifest for a Type.
@@ -78,7 +79,7 @@ class SchemasResource:
         peer's Server checks the digest. The bytes are JCS-canonicalized before
         hashing, so the digest matches what a peer computes on import.
         """
-        return self._http.get(f"/v1/schemas/{type}/manifest", params=_scope(publisher))
+        return self._http.get(f"/v1/schemas/{seg(type)}/manifest", params=_scope(publisher))
 
     def validate_completion(
         self, type: str, evidence: dict[str, Any], *, publisher: str | None = None
@@ -87,7 +88,7 @@ class SchemasResource:
         schema reads this is not public: the key needs ``schemas:read``, which
         every scope profile except ``agent-readonly`` carries."""
         return self._http.post(
-            f"/v1/schemas/{type}/validate", json={"evidence": evidence}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/validate", json={"evidence": evidence}, params=_scope(publisher)
         )
 
     def meta_schema(self) -> dict[str, Any]:
@@ -96,7 +97,7 @@ class SchemasResource:
 
     def get_template(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Get a template for creating a new schema based on an existing Type."""
-        return self._http.get(f"/v1/schemas/{type}/template", params=_scope(publisher))
+        return self._http.get(f"/v1/schemas/{seg(type)}/template", params=_scope(publisher))
 
     def blank(self) -> dict[str, Any]:
         """Get a blank template for creating a custom Type from scratch."""
@@ -122,7 +123,7 @@ class SchemasResource:
         difference as a breaking change.
         """
         return self._http.get(
-            f"/v1/schemas/{type}/diff",
+            f"/v1/schemas/{seg(type)}/diff",
             params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
@@ -164,7 +165,7 @@ class SchemasResource:
 
     def get_versions(self, type: str, *, publisher: str | None = None) -> Page[dict[str, Any]]:
         """List all versions of a Type schema."""
-        raw = self._http.get_page(f"/v1/schemas/{type}/versions", params=_scope(publisher))
+        raw = self._http.get_page(f"/v1/schemas/{seg(type)}/versions", params=_scope(publisher))
         return Page[dict[str, Any]].model_validate(raw)
 
     def get_version(self, type: str, version: int, *, publisher: str | None = None) -> dict[str, Any]:
@@ -175,7 +176,7 @@ class SchemasResource:
         newer schema. Pin ``publisher`` before comparing across the two.
         """
         return self._http.get(
-            f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/versions/{seg(version)}", params=_scope(publisher)
         )
 
     def update_version(
@@ -189,19 +190,19 @@ class SchemasResource:
         here; disabling a Type is :meth:`disable`.
         """
         return self._http.patch(
-            f"/v1/schemas/{type}/versions/{version}", json=params, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/versions/{seg(version)}", json=params, params=_scope(publisher)
         )
 
     def disable(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Disable a Type. Records of this Type can no longer be created."""
         return self._http.patch(
-            f"/v1/schemas/{type}/disable", json={}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/disable", json={}, params=_scope(publisher)
         )
 
     def enable(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """Re-enable a previously disabled Type."""
         return self._http.patch(
-            f"/v1/schemas/{type}/enable", json={}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/enable", json={}, params=_scope(publisher)
         )
 
 
@@ -215,30 +216,30 @@ class AsyncSchemasResource:
         return Page[dict[str, Any]].model_validate(await self._http.get_page("/v1/schemas", params=params))
 
     async def get(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
-        return await self._http.get(f"/v1/schemas/{type}", params=_scope(publisher))
+        return await self._http.get(f"/v1/schemas/{seg(type)}", params=_scope(publisher))
 
     async def delete(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
-        return await self._http.delete(f"/v1/schemas/{type}", params=_scope(publisher))
+        return await self._http.delete(f"/v1/schemas/{seg(type)}", params=_scope(publisher))
 
     async def get_rules(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
-        return await self._http.get(f"/v1/schemas/{type}/rules", params=_scope(publisher))
+        return await self._http.get(f"/v1/schemas/{seg(type)}/rules", params=_scope(publisher))
 
     async def get_manifest(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         """See the sync ``get_manifest`` docstring."""
-        return await self._http.get(f"/v1/schemas/{type}/manifest", params=_scope(publisher))
+        return await self._http.get(f"/v1/schemas/{seg(type)}/manifest", params=_scope(publisher))
 
     async def validate_completion(
         self, type: str, evidence: dict[str, Any], *, publisher: str | None = None
     ) -> dict[str, Any]:
         return await self._http.post(
-            f"/v1/schemas/{type}/validate", json={"evidence": evidence}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/validate", json={"evidence": evidence}, params=_scope(publisher)
         )
 
     async def meta_schema(self) -> dict[str, Any]:
         return await self._http.get("/v1/schemas/meta-schema")
 
     async def get_template(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
-        return await self._http.get(f"/v1/schemas/{type}/template", params=_scope(publisher))
+        return await self._http.get(f"/v1/schemas/{seg(type)}/template", params=_scope(publisher))
 
     async def blank(self) -> dict[str, Any]:
         return await self._http.get("/v1/schemas/_blank")
@@ -250,7 +251,7 @@ class AsyncSchemasResource:
         self, type: str, *, from_version: int, to_version: int, publisher: str | None = None
     ) -> dict[str, Any]:
         return await self._http.get(
-            f"/v1/schemas/{type}/diff",
+            f"/v1/schemas/{seg(type)}/diff",
             params={"from": from_version, "to": to_version, **(_scope(publisher) or {})},
         )
 
@@ -273,29 +274,29 @@ class AsyncSchemasResource:
     async def get_versions(
         self, type: str, *, publisher: str | None = None
     ) -> Page[dict[str, Any]]:
-        raw = await self._http.get_page(f"/v1/schemas/{type}/versions", params=_scope(publisher))
+        raw = await self._http.get_page(f"/v1/schemas/{seg(type)}/versions", params=_scope(publisher))
         return Page[dict[str, Any]].model_validate(raw)
 
     async def get_version(
         self, type: str, version: int, *, publisher: str | None = None
     ) -> dict[str, Any]:
         return await self._http.get(
-            f"/v1/schemas/{type}/versions/{version}", params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/versions/{seg(version)}", params=_scope(publisher)
         )
 
     async def update_version(
         self, type: str, version: int, params: SchemaVersionUpdate, *, publisher: str | None = None
     ) -> dict[str, Any]:
         return await self._http.patch(
-            f"/v1/schemas/{type}/versions/{version}", json=params, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/versions/{seg(version)}", json=params, params=_scope(publisher)
         )
 
     async def disable(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         return await self._http.patch(
-            f"/v1/schemas/{type}/disable", json={}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/disable", json={}, params=_scope(publisher)
         )
 
     async def enable(self, type: str, *, publisher: str | None = None) -> dict[str, Any]:
         return await self._http.patch(
-            f"/v1/schemas/{type}/enable", json={}, params=_scope(publisher)
+            f"/v1/schemas/{seg(type)}/enable", json={}, params=_scope(publisher)
         )

@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 
 
 def _lookup_params(system: str, ref_type: str, ref_id: str, limit: int | None, cursor: str | None) -> dict[str, Any]:
@@ -49,19 +50,19 @@ class ReferencesResource:
 
     def add_record_references(self, record_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
         """Add external references to a Record."""
-        return self._http.post(f"/v1/records/{record_id}/references", json={"references": references})
+        return self._http.post(f"/v1/records/{seg(record_id)}/references", json={"references": references})
 
     def get_record_references(self, record_id: str) -> dict[str, Any]:
         """Get a Record's external references."""
-        return self._http.get(f"/v1/records/{record_id}/references")
+        return self._http.get(f"/v1/records/{seg(record_id)}/references")
 
     def add_agent_references(self, agent_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
         """Add external references to an agent."""
-        return self._http.post(f"/v1/agents/{agent_id}/references", json={"references": references})
+        return self._http.post(f"/v1/agents/{seg(agent_id)}/references", json={"references": references})
 
     def get_agent_references(self, agent_id: str) -> dict[str, Any]:
         """Get an agent's external references."""
-        return self._http.get(f"/v1/agents/{agent_id}/references")
+        return self._http.get(f"/v1/agents/{seg(agent_id)}/references")
 
 
 class AsyncReferencesResource:
@@ -95,13 +96,13 @@ class AsyncReferencesResource:
             yield item
 
     async def add_record_references(self, record_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._http.post(f"/v1/records/{record_id}/references", json={"references": references})
+        return await self._http.post(f"/v1/records/{seg(record_id)}/references", json={"references": references})
 
     async def get_record_references(self, record_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/records/{record_id}/references")
+        return await self._http.get(f"/v1/records/{seg(record_id)}/references")
 
     async def add_agent_references(self, agent_id: str, references: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._http.post(f"/v1/agents/{agent_id}/references", json={"references": references})
+        return await self._http.post(f"/v1/agents/{seg(agent_id)}/references", json={"references": references})
 
     async def get_agent_references(self, agent_id: str) -> dict[str, Any]:
-        return await self._http.get(f"/v1/agents/{agent_id}/references")
+        return await self._http.get(f"/v1/agents/{seg(agent_id)}/references")

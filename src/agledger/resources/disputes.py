@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import (
     Dispute,
     DisputeGrounds,
@@ -55,7 +56,7 @@ class DisputesResource:
         body: dict[str, Any] = {"grounds": grounds}
         if context is not None:
             body["context"] = context
-        response = self._http.post(f"/v1/records/{record_id}/dispute", json=body)
+        response = self._http.post(f"/v1/records/{seg(record_id)}/dispute", json=body)
         # The create 201 is a { dispute, autoReadjudication } envelope. Read the
         # envelope through ``client.request()`` when you need the
         # auto-readjudication result alongside the dispute: ``autoResolved``,
@@ -67,7 +68,7 @@ class DisputesResource:
 
     def get(self, record_id: str) -> DisputeResponse:
         """Get the dispute for a Record, including submitted evidence."""
-        return DisputeResponse.model_validate(self._http.get(f"/v1/records/{record_id}/dispute"))
+        return DisputeResponse.model_validate(self._http.get(f"/v1/records/{seg(record_id)}/dispute"))
 
     def resolve(
         self,
@@ -99,12 +100,12 @@ class DisputesResource:
         body: dict[str, Any] = {"outcome": outcome}
         if rationale is not None:
             body["rationale"] = rationale
-        return Dispute.model_validate(self._http.post(f"/v1/disputes/{dispute_id}/resolve", json=body))
+        return Dispute.model_validate(self._http.post(f"/v1/disputes/{seg(dispute_id)}/resolve", json=body))
 
     def withdraw(self, record_id: str, reason: str | None = None) -> Dispute:
         """Withdraw an open dispute. Optional ``reason`` is recorded in the audit trail."""
         body = {"reason": reason} if reason else {}
-        return Dispute.model_validate(self._http.post(f"/v1/records/{record_id}/dispute/withdraw", json=body))
+        return Dispute.model_validate(self._http.post(f"/v1/records/{seg(record_id)}/dispute/withdraw", json=body))
 
     def submit_evidence(
         self,
@@ -115,7 +116,7 @@ class DisputesResource:
     ) -> dict[str, Any]:
         """Submit additional evidence for a dispute."""
         return self._http.post(
-            f"/v1/records/{record_id}/dispute/evidence",
+            f"/v1/records/{seg(record_id)}/dispute/evidence",
             json={"evidenceType": evidence_type, "payload": payload},
         )
 
@@ -148,14 +149,14 @@ class AsyncDisputesResource:
         body: dict[str, Any] = {"grounds": grounds}
         if context is not None:
             body["context"] = context
-        response = await self._http.post(f"/v1/records/{record_id}/dispute", json=body)
+        response = await self._http.post(f"/v1/records/{seg(record_id)}/dispute", json=body)
         # The create 201 is a { dispute, autoReadjudication } envelope.
         if isinstance(response, dict) and "dispute" in response:
             return Dispute.model_validate(response["dispute"])
         return Dispute.model_validate(response)
 
     async def get(self, record_id: str) -> DisputeResponse:
-        return DisputeResponse.model_validate(await self._http.get(f"/v1/records/{record_id}/dispute"))
+        return DisputeResponse.model_validate(await self._http.get(f"/v1/records/{seg(record_id)}/dispute"))
 
     async def resolve(
         self,
@@ -170,13 +171,13 @@ class AsyncDisputesResource:
         if rationale is not None:
             body["rationale"] = rationale
         return Dispute.model_validate(
-            await self._http.post(f"/v1/disputes/{dispute_id}/resolve", json=body)
+            await self._http.post(f"/v1/disputes/{seg(dispute_id)}/resolve", json=body)
         )
 
     async def withdraw(self, record_id: str, reason: str | None = None) -> Dispute:
         """Withdraw an open dispute. Optional ``reason`` is recorded in the audit trail."""
         body = {"reason": reason} if reason else {}
-        return Dispute.model_validate(await self._http.post(f"/v1/records/{record_id}/dispute/withdraw", json=body))
+        return Dispute.model_validate(await self._http.post(f"/v1/records/{seg(record_id)}/dispute/withdraw", json=body))
 
     async def submit_evidence(
         self,
@@ -186,6 +187,6 @@ class AsyncDisputesResource:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         return await self._http.post(
-            f"/v1/records/{record_id}/dispute/evidence",
+            f"/v1/records/{seg(record_id)}/dispute/evidence",
             json={"evidenceType": evidence_type, "payload": payload},
         )

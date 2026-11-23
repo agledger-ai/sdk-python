@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import AgentCapabilities
 
 
@@ -12,7 +13,7 @@ class CapabilitiesResource:
 
     def get(self, agent_id: str) -> AgentCapabilities:
         """Get an agent's declared capabilities."""
-        return AgentCapabilities.model_validate(self._http.get(f"/v1/agents/{agent_id}/capabilities"))
+        return AgentCapabilities.model_validate(self._http.get(f"/v1/agents/{seg(agent_id)}/capabilities"))
 
     def set(self, agent_id: str, *, contract_types: list[str]) -> AgentCapabilities:
         """Set the authenticated agent's own capabilities (replaces all).
@@ -20,7 +21,7 @@ class CapabilitiesResource:
         Body field is ``contractTypes`` on the wire: pass Python ``contract_types``.
         """
         return AgentCapabilities.model_validate(
-            self._http.put(f"/v1/agents/{agent_id}/capabilities", json={"contractTypes": contract_types})
+            self._http.put(f"/v1/agents/{seg(agent_id)}/capabilities", json={"contractTypes": contract_types})
         )
 
 
@@ -29,9 +30,9 @@ class AsyncCapabilitiesResource:
         self._http = http
 
     async def get(self, agent_id: str) -> AgentCapabilities:
-        return AgentCapabilities.model_validate(await self._http.get(f"/v1/agents/{agent_id}/capabilities"))
+        return AgentCapabilities.model_validate(await self._http.get(f"/v1/agents/{seg(agent_id)}/capabilities"))
 
     async def set(self, agent_id: str, *, contract_types: list[str]) -> AgentCapabilities:
         return AgentCapabilities.model_validate(
-            await self._http.put(f"/v1/agents/{agent_id}/capabilities", json={"contractTypes": contract_types})
+            await self._http.put(f"/v1/agents/{seg(agent_id)}/capabilities", json={"contractTypes": contract_types})
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import (
     OrgAdminRead,
     OrgReadsCheckpoint,
@@ -70,7 +71,7 @@ class OrgReadsCheckpointsResource:
     def get(self, checkpoint_id: str) -> OrgReadsCheckpoint:
         """Get a single checkpoint by ID."""
         return OrgReadsCheckpoint.model_validate(
-            self._http.get(f"/v1/audit/org-reads/checkpoints/{checkpoint_id}")
+            self._http.get(f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}")
         )
 
     def cosign(
@@ -84,7 +85,7 @@ class OrgReadsCheckpointsResource:
         format/algorithm is the customer's choice; the API stores the bytes verbatim."""
         return OrgReadsCheckpoint.model_validate(
             self._http.post(
-                f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/cosign",
+                f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}/cosign",
                 json={"witnessKeyId": witness_key_id, "witnessSignature": witness_signature},
             )
         )
@@ -93,7 +94,7 @@ class OrgReadsCheckpointsResource:
         """Get the inclusion proof for a leaf within this checkpoint."""
         return OrgReadsInclusionProof.model_validate(
             self._http.get(
-                f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/proof",
+                f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}/proof",
                 params={"leaf": leaf},
             )
         )
@@ -134,7 +135,7 @@ class AsyncOrgReadsCheckpointsResource:
 
     async def get(self, checkpoint_id: str) -> OrgReadsCheckpoint:
         return OrgReadsCheckpoint.model_validate(
-            await self._http.get(f"/v1/audit/org-reads/checkpoints/{checkpoint_id}")
+            await self._http.get(f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}")
         )
 
     async def cosign(
@@ -146,7 +147,7 @@ class AsyncOrgReadsCheckpointsResource:
     ) -> OrgReadsCheckpoint:
         return OrgReadsCheckpoint.model_validate(
             await self._http.post(
-                f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/cosign",
+                f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}/cosign",
                 json={"witnessKeyId": witness_key_id, "witnessSignature": witness_signature},
             )
         )
@@ -154,7 +155,7 @@ class AsyncOrgReadsCheckpointsResource:
     async def proof(self, checkpoint_id: str, leaf: int) -> OrgReadsInclusionProof:
         return OrgReadsInclusionProof.model_validate(
             await self._http.get(
-                f"/v1/audit/org-reads/checkpoints/{checkpoint_id}/proof",
+                f"/v1/audit/org-reads/checkpoints/{seg(checkpoint_id)}/proof",
                 params={"leaf": leaf},
             )
         )

@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import (
     AgentDrift,
     AgentHistoryEntry,
@@ -85,7 +86,7 @@ class DriftResource:
         narrows ``by_type`` to one type; ``overall`` still covers every type.
         """
         return AgentDrift.model_validate(
-            self._http.get(f"/v1/agents/{agent_id}/drift", params=_drift_params(window, type))
+            self._http.get(f"/v1/agents/{seg(agent_id)}/drift", params=_drift_params(window, type))
         )
 
     def list_fleet(
@@ -151,7 +152,7 @@ class DriftResource:
         ISO-8601 instants bounding record creation.
         """
         raw = self._http.get_page(
-            f"/v1/agents/{agent_id}/history",
+            f"/v1/agents/{seg(agent_id)}/history",
             params=_history_params(limit, cursor, type, outcome, from_, to),
         )
         raw["data"] = [AgentHistoryEntry.model_validate(d) for d in raw.get("data", [])]
@@ -173,7 +174,7 @@ class AsyncDriftResource:
     ) -> AgentDrift:
         """Drift for one agent, overall and per type."""
         return AgentDrift.model_validate(
-            await self._http.get(f"/v1/agents/{agent_id}/drift", params=_drift_params(window, type))
+            await self._http.get(f"/v1/agents/{seg(agent_id)}/drift", params=_drift_params(window, type))
         )
 
     async def list_fleet(
@@ -219,7 +220,7 @@ class AsyncDriftResource:
     ) -> Page[AgentHistoryEntry]:
         """Per-record history for an agent. ``from_`` goes out as ``from``."""
         raw = await self._http.get_page(
-            f"/v1/agents/{agent_id}/history",
+            f"/v1/agents/{seg(agent_id)}/history",
             params=_history_params(limit, cursor, type, outcome, from_, to),
         )
         raw["data"] = [AgentHistoryEntry.model_validate(d) for d in raw.get("data", [])]

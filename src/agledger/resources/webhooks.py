@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import Page, Webhook, WebhookSigningAlg, WebhookTestResult
 
 
@@ -46,7 +47,7 @@ class WebhooksResource:
 
     def get(self, webhook_id: str) -> Webhook:
         """Get a single webhook by ID."""
-        data = self._http.get(f"/v1/webhooks/{webhook_id}")
+        data = self._http.get(f"/v1/webhooks/{seg(webhook_id)}")
         return Webhook.model_validate(data)
 
     def update(
@@ -70,7 +71,7 @@ class WebhooksResource:
             body["isPaused"] = is_paused
         if record_types is not None:
             body["recordTypes"] = record_types
-        data = self._http.patch(f"/v1/webhooks/{webhook_id}", json=body)
+        data = self._http.patch(f"/v1/webhooks/{seg(webhook_id)}", json=body)
         return Webhook.model_validate(data)
 
     def list(self, *, url: str | None = None, **params: Any) -> Page[dict[str, Any]]:
@@ -91,25 +92,25 @@ class WebhooksResource:
         the DLQ, where a retry is now refused, and each keeps system health
         degraded until discarded with :meth:`discard_dlq`. Repeating the delete
         answers the current count."""
-        return self._http.delete(f"/v1/webhooks/{webhook_id}")
+        return self._http.delete(f"/v1/webhooks/{seg(webhook_id)}")
 
     def rotate(self, webhook_id: str) -> Webhook:
         """Rotate webhook signing secret."""
-        data = self._http.post(f"/v1/webhooks/{webhook_id}/rotate")
+        data = self._http.post(f"/v1/webhooks/{seg(webhook_id)}/rotate")
         return Webhook.model_validate(data)
 
     def ping(self, webhook_id: str) -> WebhookTestResult:
         """Send a test ping to the webhook URL."""
-        return WebhookTestResult.model_validate(self._http.post(f"/v1/webhooks/{webhook_id}/ping"))
+        return WebhookTestResult.model_validate(self._http.post(f"/v1/webhooks/{seg(webhook_id)}/ping"))
 
     def pause(self, webhook_id: str) -> Webhook:
         """Pause a webhook (stop delivering events)."""
-        data = self._http.post(f"/v1/webhooks/{webhook_id}/pause")
+        data = self._http.post(f"/v1/webhooks/{seg(webhook_id)}/pause")
         return Webhook.model_validate(data)
 
     def resume(self, webhook_id: str) -> Webhook:
         """Resume a paused webhook."""
-        data = self._http.post(f"/v1/webhooks/{webhook_id}/resume")
+        data = self._http.post(f"/v1/webhooks/{seg(webhook_id)}/resume")
         return Webhook.model_validate(data)
 
     def list_deliveries(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:
@@ -118,26 +119,26 @@ class WebhooksResource:
         Each item carries ``signatureInput`` and ``idempotencyKey`` (both
         ``None`` when the delivery had none): the RFC 9421 ``Signature-Input``
         the delivery was signed with, and the key a receiver can dedupe on."""
-        return Page[dict[str, Any]].model_validate(self._http.get_page(f"/v1/webhooks/{webhook_id}/deliveries", params=params))
+        return Page[dict[str, Any]].model_validate(self._http.get_page(f"/v1/webhooks/{seg(webhook_id)}/deliveries", params=params))
 
     def list_dlq(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:
         """List dead-letter queue entries for a webhook."""
-        return Page[dict[str, Any]].model_validate(self._http.get_page(f"/v1/webhooks/{webhook_id}/dlq", params=params))
+        return Page[dict[str, Any]].model_validate(self._http.get_page(f"/v1/webhooks/{seg(webhook_id)}/dlq", params=params))
 
     def retry_all_dlq(self, webhook_id: str) -> dict[str, Any]:
         """Retry all DLQ entries for a webhook."""
-        return self._http.post(f"/v1/webhooks/{webhook_id}/dlq/retry-all")
+        return self._http.post(f"/v1/webhooks/{seg(webhook_id)}/dlq/retry-all")
 
     def retry_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Retry a single DLQ entry for a webhook."""
-        return self._http.post(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}/retry")
+        return self._http.post(f"/v1/webhooks/{seg(webhook_id)}/dlq/{seg(dlq_id)}/retry")
 
     def discard_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Discard a DLQ entry without delivering it. On an inactive
         subscription this is the only way to clear one. The event itself is
         kept: ``events.list()`` and the record still carry it. Returns
         ``{discarded, dlqId, webhookId, nextSteps}``."""
-        return self._http.delete(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}")
+        return self._http.delete(f"/v1/webhooks/{seg(webhook_id)}/dlq/{seg(dlq_id)}")
 
 
 class AsyncWebhooksResource:
@@ -178,7 +179,7 @@ class AsyncWebhooksResource:
 
     async def get(self, webhook_id: str) -> Webhook:
         """Get a single webhook by ID."""
-        data = await self._http.get(f"/v1/webhooks/{webhook_id}")
+        data = await self._http.get(f"/v1/webhooks/{seg(webhook_id)}")
         return Webhook.model_validate(data)
 
     async def update(
@@ -202,7 +203,7 @@ class AsyncWebhooksResource:
             body["isPaused"] = is_paused
         if record_types is not None:
             body["recordTypes"] = record_types
-        data = await self._http.patch(f"/v1/webhooks/{webhook_id}", json=body)
+        data = await self._http.patch(f"/v1/webhooks/{seg(webhook_id)}", json=body)
         return Webhook.model_validate(data)
 
     async def list(self, *, url: str | None = None, **params: Any) -> Page[dict[str, Any]]:
@@ -213,43 +214,43 @@ class AsyncWebhooksResource:
 
     async def delete(self, webhook_id: str) -> dict[str, Any]:
         """Deactivate a webhook subscription. See the sync counterpart."""
-        return await self._http.delete(f"/v1/webhooks/{webhook_id}")
+        return await self._http.delete(f"/v1/webhooks/{seg(webhook_id)}")
 
     async def rotate(self, webhook_id: str) -> Webhook:
         """Rotate webhook signing secret."""
-        data = await self._http.post(f"/v1/webhooks/{webhook_id}/rotate")
+        data = await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/rotate")
         return Webhook.model_validate(data)
 
     async def ping(self, webhook_id: str) -> WebhookTestResult:
         """Send a test ping to the webhook URL."""
-        return WebhookTestResult.model_validate(await self._http.post(f"/v1/webhooks/{webhook_id}/ping"))
+        return WebhookTestResult.model_validate(await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/ping"))
 
     async def pause(self, webhook_id: str) -> Webhook:
         """Pause a webhook (stop delivering events)."""
-        data = await self._http.post(f"/v1/webhooks/{webhook_id}/pause")
+        data = await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/pause")
         return Webhook.model_validate(data)
 
     async def resume(self, webhook_id: str) -> Webhook:
         """Resume a paused webhook."""
-        data = await self._http.post(f"/v1/webhooks/{webhook_id}/resume")
+        data = await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/resume")
         return Webhook.model_validate(data)
 
     async def list_deliveries(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:
         """List delivery attempts for a webhook."""
-        return Page[dict[str, Any]].model_validate(await self._http.get_page(f"/v1/webhooks/{webhook_id}/deliveries", params=params))
+        return Page[dict[str, Any]].model_validate(await self._http.get_page(f"/v1/webhooks/{seg(webhook_id)}/deliveries", params=params))
 
     async def list_dlq(self, webhook_id: str, **params: Any) -> Page[dict[str, Any]]:
         """List dead-letter queue entries for a webhook."""
-        return Page[dict[str, Any]].model_validate(await self._http.get_page(f"/v1/webhooks/{webhook_id}/dlq", params=params))
+        return Page[dict[str, Any]].model_validate(await self._http.get_page(f"/v1/webhooks/{seg(webhook_id)}/dlq", params=params))
 
     async def retry_all_dlq(self, webhook_id: str) -> dict[str, Any]:
         """Retry all DLQ entries for a webhook."""
-        return await self._http.post(f"/v1/webhooks/{webhook_id}/dlq/retry-all")
+        return await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/dlq/retry-all")
 
     async def retry_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Retry a single DLQ entry for a webhook."""
-        return await self._http.post(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}/retry")
+        return await self._http.post(f"/v1/webhooks/{seg(webhook_id)}/dlq/{seg(dlq_id)}/retry")
 
     async def discard_dlq(self, webhook_id: str, dlq_id: str) -> dict[str, Any]:
         """Discard a DLQ entry without delivering it. See the sync counterpart."""
-        return await self._http.delete(f"/v1/webhooks/{webhook_id}/dlq/{dlq_id}")
+        return await self._http.delete(f"/v1/webhooks/{seg(webhook_id)}/dlq/{seg(dlq_id)}")

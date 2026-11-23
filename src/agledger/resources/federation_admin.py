@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import FederationPeer, Page
 
 
@@ -60,17 +61,17 @@ class FederationAdminResource:
         Takes the ``peer_hub_id`` served on every listing row, not ``peer_id``,
         which is the receiver-local row id and resolves nowhere."""
         return FederationPeer.model_validate(
-            self._http.get(f"/federation/v1/admin/peers/{peer_hub_id}")
+            self._http.get(f"/federation/v1/admin/peers/{seg(peer_hub_id)}")
         )
 
     def revoke_peer(self, peer_hub_id: str, *, reason: str) -> dict[str, Any]:
         """Revoke a peer Server (irreversible). Returns ``{"revoked": true}`` and
         the usual ``nextSteps``."""
-        return self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/revoke", json={"reason": reason})
+        return self._http.post(f"/federation/v1/admin/peers/{seg(peer_hub_id)}/revoke", json={"reason": reason})
 
     def delete_peer(self, peer_hub_id: str) -> dict[str, Any]:
         """Permanently remove a revoked peer's record."""
-        return self._http.delete(f"/federation/v1/admin/peers/{peer_hub_id}")
+        return self._http.delete(f"/federation/v1/admin/peers/{seg(peer_hub_id)}")
 
     def list_dlq(self, **params: Any) -> dict[str, Any]:
         """List failed outbound federation messages in the dead-letter queue.
@@ -125,14 +126,14 @@ class AsyncFederationAdminResource:
 
     async def get_peer(self, peer_hub_id: str) -> FederationPeer:
         return FederationPeer.model_validate(
-            await self._http.get(f"/federation/v1/admin/peers/{peer_hub_id}")
+            await self._http.get(f"/federation/v1/admin/peers/{seg(peer_hub_id)}")
         )
 
     async def revoke_peer(self, peer_hub_id: str, *, reason: str) -> dict[str, Any]:
-        return await self._http.post(f"/federation/v1/admin/peers/{peer_hub_id}/revoke", json={"reason": reason})
+        return await self._http.post(f"/federation/v1/admin/peers/{seg(peer_hub_id)}/revoke", json={"reason": reason})
 
     async def delete_peer(self, peer_hub_id: str) -> dict[str, Any]:
-        return await self._http.delete(f"/federation/v1/admin/peers/{peer_hub_id}")
+        return await self._http.delete(f"/federation/v1/admin/peers/{seg(peer_hub_id)}")
 
     async def list_dlq(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/federation/v1/admin/dlq", params=params)

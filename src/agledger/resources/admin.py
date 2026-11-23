@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any, Literal, overload
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 from agledger.types import (
     ApiKeyRole,
     AutoProvisionScopeProfile,
@@ -129,7 +130,7 @@ class AdminVaultScanResource:
         no signed key statement anchors breaks as ``signing_key_unanchored``,
         ``checkpoint_key_unanchored`` or ``leaf_key_unanchored``; the key-trust
         walk itself is ``result.keyRegistry``."""
-        return self._http.get(f"/v1/admin/vault/scan/{job_id}")
+        return self._http.get(f"/v1/admin/vault/scan/{seg(job_id)}")
 
     def list(self) -> dict[str, Any]:
         """List current and recent vault scan jobs (active, last completed, recent)."""
@@ -170,7 +171,7 @@ class AdminVaultSigningKeysResource:
         if force is not None:
             body["force"] = force
         return self._http.post(
-            f"/v1/admin/vault/signing-keys/{key_id}/retire", json=body
+            f"/v1/admin/vault/signing-keys/{seg(key_id)}/retire", json=body
         )
 
 
@@ -309,7 +310,7 @@ def _trusted_issuer_body(params: dict[str, Any]) -> dict[str, Any]:
 
         client.request(
             "PATCH",
-            f"/v1/admin/trusted-issuers/{issuer_id}",
+            f"/v1/admin/trusted-issuers/{seg(issuer_id)}",
             json={"autoProvisionScopeProfile": None},
         )
     """
@@ -406,24 +407,24 @@ class AdminTrustedIssuersResource:
 
     def get(self, issuer_id: str) -> TrustedIssuer:
         """Get a trusted issuer by ID."""
-        return self._http.get(f"/v1/admin/trusted-issuers/{issuer_id}")
+        return self._http.get(f"/v1/admin/trusted-issuers/{seg(issuer_id)}")
 
     def update(self, issuer_id: str, **params: Any) -> TrustedIssuer:
         """Merge-update a trusted issuer (PATCH semantics)."""
         return self._http.patch(
-            f"/v1/admin/trusted-issuers/{issuer_id}",
+            f"/v1/admin/trusted-issuers/{seg(issuer_id)}",
             json=_trusted_issuer_body(params),
         )
 
     def delete(self, issuer_id: str) -> dict[str, Any]:
         """Delete a trusted issuer. Returns 409 if live certs still reference it;
         disable it (``update(id, enabled=False)``) and revoke its certs first."""
-        return self._http.delete(f"/v1/admin/trusted-issuers/{issuer_id}")
+        return self._http.delete(f"/v1/admin/trusted-issuers/{seg(issuer_id)}")
 
     def revoke_certs(self, issuer_id: str) -> dict[str, Any]:
         """Revoke every live ephemeral cert issued under this issuer."""
         return self._http.post(
-            f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={}
+            f"/v1/admin/trusted-issuers/{seg(issuer_id)}/revoke-certs", json={}
         )
 
 
@@ -462,7 +463,7 @@ class AdminResource:
 
     def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:
         """Revoke a single ephemeral signing cert by ID."""
-        return self._http.post(f"/v1/admin/ephemeral-certs/{cert_id}/revoke", json={})
+        return self._http.post(f"/v1/admin/ephemeral-certs/{seg(cert_id)}/revoke", json={})
 
     # --- Orgs ---
 
@@ -521,7 +522,7 @@ class AdminResource:
         verdict leaves the dispute at the evidence window, with that rule in
         ``failingRuleIds``.
         """
-        return self._http.get(f"/v1/admin/orgs/{org_id}/config")
+        return self._http.get(f"/v1/admin/orgs/{seg(org_id)}/config")
 
     def update_org_config(self, org_id: str, config: dict[str, Any]) -> dict[str, Any]:
         """Partially update an org's configuration (PATCH semantics).
@@ -534,7 +535,7 @@ class AdminResource:
         ``autoReadjudicate`` block, or null to turn auto-readjudication off) are
         settable here.
         """
-        return self._http.patch(f"/v1/admin/orgs/{org_id}/config", json=config)
+        return self._http.patch(f"/v1/admin/orgs/{seg(org_id)}/config", json=config)
 
     # --- Agents ---
 
@@ -580,7 +581,7 @@ class AdminResource:
         Body field is ``contractTypes`` on the wire.
         """
         return self._http.put(
-            f"/v1/admin/agents/{agent_id}/capabilities",
+            f"/v1/admin/agents/{seg(agent_id)}/capabilities",
             json={"contractTypes": contract_types},
         )
 
@@ -600,7 +601,7 @@ class AdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return self._http.post(f"/v1/admin/orgs/{org_id}/deactivate", json=body)
+        return self._http.post(f"/v1/admin/orgs/{seg(org_id)}/deactivate", json=body)
 
     def deactivate_agent(
         self,
@@ -612,7 +613,7 @@ class AdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return self._http.post(f"/v1/admin/agents/{agent_id}/deactivate", json=body)
+        return self._http.post(f"/v1/admin/agents/{seg(agent_id)}/deactivate", json=body)
 
     def reactivate_org(
         self,
@@ -631,7 +632,7 @@ class AdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return self._http.post(f"/v1/admin/orgs/{org_id}/reactivate", json=body)
+        return self._http.post(f"/v1/admin/orgs/{seg(org_id)}/reactivate", json=body)
 
     def reactivate_agent(
         self,
@@ -648,7 +649,7 @@ class AdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return self._http.post(f"/v1/admin/agents/{agent_id}/reactivate", json=body)
+        return self._http.post(f"/v1/admin/agents/{seg(agent_id)}/reactivate", json=body)
 
     # --- API keys ---
 
@@ -845,7 +846,7 @@ class AdminResource:
         ``PLATFORM_REQUIRED``. Issue a replacement, or restore it with a
         platform credential."""
         body = _api_key_update_body(params)
-        return self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
+        return self._http.patch(f"/v1/admin/api-keys/{seg(key_id)}", json=body)
 
     def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
         """Disable an API key, or re-enable a revoked one. Convenience wrapper
@@ -855,7 +856,7 @@ class AdminResource:
         ``is_active=True`` on a revoked key raises a 403 ``PLATFORM_REQUIRED``
         error, so an admin key issues a replacement instead."""
         return self._http.patch(
-            f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
+            f"/v1/admin/api-keys/{seg(key_id)}", json={"isActive": is_active}
         )
 
     def bulk_revoke_api_keys(
@@ -899,7 +900,7 @@ class AdminResource:
 
     def retry_dlq(self, dlq_id: str) -> dict[str, Any]:
         """Retry a single DLQ entry."""
-        return self._http.post(f"/v1/admin/webhook-dlq/{dlq_id}/retry")
+        return self._http.post(f"/v1/admin/webhook-dlq/{seg(dlq_id)}/retry")
 
     def retry_all_dlq(self) -> dict[str, Any]:
         """Retry all DLQ entries. ``skippedInactive`` counts the entries left
@@ -912,7 +913,7 @@ class AdminResource:
         (platform key). This is how an entry whose subscription is inactive is
         cleared. The event itself is kept. Returns ``{discarded, dlqId,
         webhookId, nextSteps}``."""
-        return self._http.delete(f"/v1/admin/webhook-dlq/{dlq_id}")
+        return self._http.delete(f"/v1/admin/webhook-dlq/{seg(dlq_id)}")
 
     def get_webhook_health(self, **params: Any) -> dict[str, Any]:
         """Get health status of all webhooks."""
@@ -921,7 +922,7 @@ class AdminResource:
     def update_circuit_breaker(self, webhook_id: str, *, state: str) -> dict[str, Any]:
         """Update a webhook's circuit breaker state (closed / open / half_open)."""
         return self._http.patch(
-            f"/v1/admin/webhooks/{webhook_id}/circuit-breaker",
+            f"/v1/admin/webhooks/{seg(webhook_id)}/circuit-breaker",
             json={"state": state},
         )
 
@@ -980,11 +981,11 @@ class AdminResource:
     def set_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
         """Exempt an owner (agent or org id) from rate limiting. Idempotent.
         Returns ``{"ownerId", "exempt", "nextSteps"}``."""
-        return self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}")
+        return self._http.put(f"/v1/admin/rate-limit-exemptions/{seg(owner_id)}")
 
     def delete_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
         """Remove an owner's rate-limit exemption. Idempotent."""
-        return self._http.delete(f"/v1/admin/rate-limit-exemptions/{owner_id}")
+        return self._http.delete(f"/v1/admin/rate-limit-exemptions/{seg(owner_id)}")
 
 
 # --- Async resources ---
@@ -1056,7 +1057,7 @@ class AsyncAdminVaultScanResource:
         return await self._http.post("/v1/admin/vault/scan", json=body)
 
     async def status(self, job_id: str) -> VaultScanJob:
-        return await self._http.get(f"/v1/admin/vault/scan/{job_id}")
+        return await self._http.get(f"/v1/admin/vault/scan/{seg(job_id)}")
 
     async def list(self) -> dict[str, Any]:
         """List current and recent vault scan jobs (active, last completed, recent)."""
@@ -1079,7 +1080,7 @@ class AsyncAdminVaultSigningKeysResource:
         if force is not None:
             body["force"] = force
         return await self._http.post(
-            f"/v1/admin/vault/signing-keys/{key_id}/retire", json=body
+            f"/v1/admin/vault/signing-keys/{seg(key_id)}/retire", json=body
         )
 
 
@@ -1185,24 +1186,24 @@ class AsyncAdminTrustedIssuersResource:
 
     async def get(self, issuer_id: str) -> TrustedIssuer:
         """Get a trusted issuer by ID."""
-        return await self._http.get(f"/v1/admin/trusted-issuers/{issuer_id}")
+        return await self._http.get(f"/v1/admin/trusted-issuers/{seg(issuer_id)}")
 
     async def update(self, issuer_id: str, **params: Any) -> TrustedIssuer:
         """Merge-update a trusted issuer (PATCH semantics)."""
         return await self._http.patch(
-            f"/v1/admin/trusted-issuers/{issuer_id}",
+            f"/v1/admin/trusted-issuers/{seg(issuer_id)}",
             json=_trusted_issuer_body(params),
         )
 
     async def delete(self, issuer_id: str) -> dict[str, Any]:
         """Delete a trusted issuer. Returns 409 if live certs still reference it;
         disable it (``update(id, enabled=False)``) and revoke its certs first."""
-        return await self._http.delete(f"/v1/admin/trusted-issuers/{issuer_id}")
+        return await self._http.delete(f"/v1/admin/trusted-issuers/{seg(issuer_id)}")
 
     async def revoke_certs(self, issuer_id: str) -> dict[str, Any]:
         """Revoke every live ephemeral cert issued under this issuer."""
         return await self._http.post(
-            f"/v1/admin/trusted-issuers/{issuer_id}/revoke-certs", json={}
+            f"/v1/admin/trusted-issuers/{seg(issuer_id)}/revoke-certs", json={}
         )
 
 
@@ -1232,7 +1233,7 @@ class AsyncAdminResource:
     async def revoke_ephemeral_cert(self, cert_id: str) -> dict[str, Any]:
         """Revoke a single ephemeral signing cert by ID."""
         return await self._http.post(
-            f"/v1/admin/ephemeral-certs/{cert_id}/revoke", json={}
+            f"/v1/admin/ephemeral-certs/{seg(cert_id)}/revoke", json={}
         )
 
     async def list_orgs(self, **params: Any) -> dict[str, Any]:
@@ -1257,14 +1258,14 @@ class AsyncAdminResource:
     async def get_org_config(self, org_id: str) -> dict[str, Any]:
         """Get an org's configuration, alongside the resolved ``enforcement``
         block, ``enforcementDefaults`` and ``enforcementSource``."""
-        return await self._http.get(f"/v1/admin/orgs/{org_id}/config")
+        return await self._http.get(f"/v1/admin/orgs/{seg(org_id)}/config")
 
     async def update_org_config(
         self, org_id: str, config: dict[str, Any]
     ) -> dict[str, Any]:
         """Partially update an org's configuration (PATCH semantics). A null on an
         ``enforcement`` field clears the override rather than setting zero."""
-        return await self._http.patch(f"/v1/admin/orgs/{org_id}/config", json=config)
+        return await self._http.patch(f"/v1/admin/orgs/{seg(org_id)}/config", json=config)
 
     async def list_agents(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/agents", params=params)
@@ -1291,7 +1292,7 @@ class AsyncAdminResource:
         self, agent_id: str, *, contract_types: list[str]
     ) -> dict[str, Any]:
         return await self._http.put(
-            f"/v1/admin/agents/{agent_id}/capabilities",
+            f"/v1/admin/agents/{seg(agent_id)}/capabilities",
             json={"contractTypes": contract_types},
         )
 
@@ -1307,7 +1308,7 @@ class AsyncAdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return await self._http.post(f"/v1/admin/orgs/{org_id}/deactivate", json=body)
+        return await self._http.post(f"/v1/admin/orgs/{seg(org_id)}/deactivate", json=body)
 
     async def deactivate_agent(
         self,
@@ -1319,7 +1320,7 @@ class AsyncAdminResource:
         if reason is not None:
             body["reason"] = reason
         return await self._http.post(
-            f"/v1/admin/agents/{agent_id}/deactivate", json=body
+            f"/v1/admin/agents/{seg(agent_id)}/deactivate", json=body
         )
 
     async def reactivate_org(
@@ -1339,7 +1340,7 @@ class AsyncAdminResource:
         body: dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
-        return await self._http.post(f"/v1/admin/orgs/{org_id}/reactivate", json=body)
+        return await self._http.post(f"/v1/admin/orgs/{seg(org_id)}/reactivate", json=body)
 
     async def reactivate_agent(
         self,
@@ -1357,7 +1358,7 @@ class AsyncAdminResource:
         if reason is not None:
             body["reason"] = reason
         return await self._http.post(
-            f"/v1/admin/agents/{agent_id}/reactivate", json=body
+            f"/v1/admin/agents/{seg(agent_id)}/reactivate", json=body
         )
 
     async def list_api_keys(
@@ -1509,13 +1510,13 @@ class AsyncAdminResource:
         """Update an API key's status, scopes or IP allow-list. See the sync
         counterpart for the fields the route accepts."""
         body = _api_key_update_body(params)
-        return await self._http.patch(f"/v1/admin/api-keys/{key_id}", json=body)
+        return await self._http.patch(f"/v1/admin/api-keys/{seg(key_id)}", json=body)
 
     async def toggle_api_key(self, key_id: str, *, is_active: bool) -> dict[str, Any]:
         """Disable or re-enable an API key. See the sync counterpart: only a
         platform credential can re-enable a revoked key."""
         return await self._http.patch(
-            f"/v1/admin/api-keys/{key_id}", json={"isActive": is_active}
+            f"/v1/admin/api-keys/{seg(key_id)}", json={"isActive": is_active}
         )
 
     async def bulk_revoke_api_keys(
@@ -1545,14 +1546,14 @@ class AsyncAdminResource:
         return await self._http.get_page("/v1/admin/webhook-dlq", params=params)
 
     async def retry_dlq(self, dlq_id: str) -> dict[str, Any]:
-        return await self._http.post(f"/v1/admin/webhook-dlq/{dlq_id}/retry")
+        return await self._http.post(f"/v1/admin/webhook-dlq/{seg(dlq_id)}/retry")
 
     async def retry_all_dlq(self) -> dict[str, Any]:
         return await self._http.post("/v1/admin/webhook-dlq/retry-all")
 
     async def discard_dlq(self, dlq_id: str) -> dict[str, Any]:
         """Discard a DLQ entry without delivering it. See the sync counterpart."""
-        return await self._http.delete(f"/v1/admin/webhook-dlq/{dlq_id}")
+        return await self._http.delete(f"/v1/admin/webhook-dlq/{seg(dlq_id)}")
 
     async def get_webhook_health(self, **params: Any) -> dict[str, Any]:
         return await self._http.get_page("/v1/admin/webhooks/health", params=params)
@@ -1561,7 +1562,7 @@ class AsyncAdminResource:
         self, webhook_id: str, *, state: str
     ) -> dict[str, Any]:
         return await self._http.patch(
-            f"/v1/admin/webhooks/{webhook_id}/circuit-breaker",
+            f"/v1/admin/webhooks/{seg(webhook_id)}/circuit-breaker",
             json={"state": state},
         )
 
@@ -1596,7 +1597,7 @@ class AsyncAdminResource:
         return await self._http.get("/v1/admin/rate-limit-exemptions")
 
     async def set_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
-        return await self._http.put(f"/v1/admin/rate-limit-exemptions/{owner_id}")
+        return await self._http.put(f"/v1/admin/rate-limit-exemptions/{seg(owner_id)}")
 
     async def delete_rate_limit_exemption(self, owner_id: str) -> dict[str, Any]:
-        return await self._http.delete(f"/v1/admin/rate-limit-exemptions/{owner_id}")
+        return await self._http.delete(f"/v1/admin/rate-limit-exemptions/{seg(owner_id)}")

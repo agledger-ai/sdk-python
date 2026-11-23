@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from agledger._http import AsyncHttpClient, HttpClient
+from agledger._paths import seg
 
 
 class PredicatesResource:
@@ -31,7 +32,7 @@ class PredicatesResource:
         the schema document itself. ``v1`` is the only version the Server
         publishes; the path segment is literal, so any other value 404s."""
         del version
-        return self._http.get(f"/predicates/{kind}/v1")
+        return self._http.get(f"/predicates/{seg(kind)}/v1")
 
 
 class AsyncPredicatesResource:
@@ -43,4 +44,4 @@ class AsyncPredicatesResource:
 
     async def get(self, kind: str, version: Literal["v1"] = "v1") -> dict[str, Any]:
         del version
-        return await self._http.get(f"/predicates/{kind}/v1")
+        return await self._http.get(f"/predicates/{seg(kind)}/v1")
