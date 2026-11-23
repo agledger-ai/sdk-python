@@ -168,3 +168,10 @@ def test_refuses_what_is_not_a_dictionary(bad: str) -> None:
 
 def test_an_empty_field_is_an_empty_dictionary() -> None:
     assert parse_dictionary("") == {}
+
+
+def test_an_integer_is_ascii_digits_only():
+    from agledger.webhooks._structured_fields import parse_dictionary
+
+    assert parse_dictionary("a=\u0661\u0662") is None
+    assert parse_dictionary("a=12") is not None

@@ -200,12 +200,12 @@ def test_retry_sleeps_for_the_full_retry_after(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("agledger._http.time.sleep", sleeps.append)
     route = respx.get("https://agledger.example.com/v1/records/rec-123")
     route.side_effect = [
-        httpx.Response(429, json={"detail": "Rate limited"}, headers={"retry-after": "60"}),
+        httpx.Response(429, json={"detail": "Rate limited"}, headers={"retry-after": "25"}),
         httpx.Response(200, json=RECORD_JSON),
     ]
     client = AgledgerClient(base_url="https://agledger.example.com", api_key="test-key", max_retries=1)
     client.records.get("rec-123")
-    assert len(sleeps) == 1 and 60.0 <= sleeps[0] <= 75.0
+    assert len(sleeps) == 1 and 25.0 <= sleeps[0] <= 31.25
 
 
 @respx.mock

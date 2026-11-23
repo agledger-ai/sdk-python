@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import os
 import random
 import time
@@ -51,6 +52,9 @@ from agledger._errors import (
 DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_RETRIES = 3
 MAX_BACKOFF = 30.0
+# Longest server-stated ``Retry-After`` the client waits out. A server asking
+# for more is answered with its own error (``retry_after`` set) instead.
+MAX_RETRY_AFTER = MAX_BACKOFF
 # Runaway guard on an unbounded auto-paginating walk. Hitting it is an error,
 # not a stopping point: see HttpClient.paginate.
 DEFAULT_MAX_PAGES = 100
@@ -236,7 +240,7 @@ def _dict_list_or_none(value: object) -> list[dict[str, Any]] | None:
 
 def _retry_after_seconds(header: str | None, body_seconds: object) -> float | None:
     """``Retry-After`` as seconds: the header's delay-seconds form when it
-    parses as a non-negative number, else a 429 body's ``retryAfterSeconds``,
+    parses as a finite non-negative number, else a 429 body's ``retryAfterSeconds``,
     else None. An HTTP-date, which nothing in front of the Server sends, reads
     as None rather than raising."""
     if header:
@@ -244,9 +248,14 @@ def _retry_after_seconds(header: str | None, body_seconds: object) -> float | No
             seconds = float(header.strip())
         except ValueError:
             seconds = None
-        if seconds is not None and seconds >= 0:
+        if seconds is not None and math.isfinite(seconds) and seconds >= 0:
             return seconds
-    if isinstance(body_seconds, (int, float)) and not isinstance(body_seconds, bool) and body_seconds >= 0:
+    if (
+        isinstance(body_seconds, (int, float))
+        and not isinstance(body_seconds, bool)
+        and math.isfinite(body_seconds)
+        and body_seconds >= 0
+    ):
         return float(body_seconds)
     return None
 
@@ -338,9 +347,9 @@ def _backoff(attempt: int, retry_after: float | None = None) -> float:
     """Seconds to wait before the next attempt.
 
     The exponential step is capped at ``MAX_BACKOFF``. A server's ``retry-after``
-    is not: it is the server's own statement of when the limit lifts, so waiting
-    less only buys another 429 (the TypeScript SDK takes the larger of the two
-    the same way). The 0-25% jitter applies to the result.
+    up to ``MAX_RETRY_AFTER`` is waited out in full, since waiting less only buys
+    another 429; a longer one is not waited on (see :func:`_retry_delay`). The
+    0-25% jitter applies to the result.
     """
     delay = min(0.5 * (2**attempt), MAX_BACKOFF)
     if retry_after and retry_after > 0:
@@ -435,6 +444,61 @@ def _checked_token(token: object) -> str:
             f"bearer_token produced {type(token).__name__}; expected a non-empty string."
         )
     return token
+
+
+def _retry_delay(attempt: int, error: APIError) -> float | None:
+    """Seconds to wait before resending after ``error``, or None when the Server
+    asks for longer than :data:`MAX_RETRY_AFTER`. None means raise ``error``
+    as it stands: a caller is better served by the 429 than by a client that
+    sleeps for minutes without saying why."""
+    retry_after = getattr(error, "retry_after", None)
+    if retry_after is not None and retry_after > MAX_RETRY_AFTER:
+        return None
+    return _backoff(attempt, retry_after)
+
+
+def _transport_error(error: httpx.TransportError, headers: Mapping[str, str]) -> APIConnectionError:
+    """The SDK error for a request that failed below HTTP: a timeout, or any
+    other transport failure (refused connection, reset, truncated response)."""
+    key = headers.get("Idempotency-Key")
+    if isinstance(error, httpx.TimeoutException):
+        return APITimeoutError(str(error), idempotency_key=key)
+    return APIConnectionError(str(error), idempotency_key=key)
+
+
+def _ndjson_headers(extra: Mapping[str, str] | None) -> dict[str, str]:
+    headers = _base_headers("GET")
+    headers["Accept"] = "application/x-ndjson"
+    headers.update(extra or {})
+    return headers
+
+
+def _next_cursor(page: Mapping[str, Any], path: str, pages_read: int, yielded: int) -> str | None:
+    """The cursor that continues a walk, or None when the listing is complete.
+
+    A page that says more is coming but carries no cursor leaves the walk
+    nowhere to go; returning quietly would read as the end of the data."""
+    if not page.get("hasMore"):
+        return None
+    cursor = page.get("nextCursor") or page.get("next_cursor")
+    if not cursor:
+        raise PaginationLimitError(
+            path,
+            pages_read,
+            yielded,
+            pages_read,
+            message=(
+                f"Pagination of {path} stopped after {yielded} item(s): the page said more rows "
+                "exist but carried no cursor to continue from."
+            ),
+        )
+    return str(cursor)
+
+
+def _check_max_pages(max_pages: int | None) -> int:
+    if max_pages is not None and max_pages < 1:
+        raise ConfigurationError("max_pages must be at least 1")
+    return DEFAULT_MAX_PAGES if max_pages is None else max_pages
 
 
 def encode_json(body: Any) -> bytes:
@@ -604,20 +668,14 @@ class HttpClient:
                     headers=request_headers,
                     content=content,
                     params=_query_params(params),
-                    timeout=timeout or self._timeout,
+                    timeout=self._timeout if timeout is None else timeout,
                 )
-            except httpx.ConnectError as e:
+            except httpx.TransportError as e:
                 if attempt < self._max_retries:
                     time.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
-            except httpx.TimeoutException as e:
-                if attempt < self._max_retries:
-                    time.sleep(_backoff(attempt))
-                    attempt += 1
-                    continue
-                raise APITimeoutError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
+                raise _transport_error(e, headers) from e
 
             self._capture_response_meta(response)
 
@@ -637,9 +695,11 @@ class HttpClient:
                 if keep_error_body:
                     error.raw_body = response.content
                 if attempt < self._max_retries and _should_retry(response.status_code, error, method, headers):
-                    time.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
-                    attempt += 1
-                    continue
+                    delay = _retry_delay(attempt, error)
+                    if delay is not None:
+                        time.sleep(delay)
+                        attempt += 1
+                        continue
                 raise error
             return response
 
@@ -746,9 +806,13 @@ class HttpClient:
 
         Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
         """
-        headers = _base_headers("GET")
-        headers["Accept"] = "application/x-ndjson"
-        response = self._send("GET", path, headers=headers, params=params, timeout=kwargs.get("timeout"))
+        auth_override = kwargs.get("auth_override")
+        headers = _ndjson_headers(kwargs.get("headers"))
+        headers.update(self._signature_headers(None, auth_override))
+        response = self._send(
+            "GET", path, headers=headers, params=params,
+            timeout=kwargs.get("timeout"), auth_override=auth_override,
+        )
         return _parse_ndjson(response)
 
     def get_page(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
@@ -765,7 +829,7 @@ class HttpClient:
         looks like the whole listing. Pass ``max_pages`` to stop early on
         purpose: that bound is yours, so the walk ends at it quietly.
         """
-        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
+        ceiling = _check_max_pages(max_pages)
         p = dict(params or {})
         pages_read = 0
         yielded = 0
@@ -775,10 +839,8 @@ class HttpClient:
             rows = page.get("data", [])
             yield from rows
             yielded += len(rows)
-            if not page.get("hasMore"):
-                return
-            cursor = page.get("nextCursor") or page.get("next_cursor")
-            if not cursor:
+            cursor = _next_cursor(page, path, pages_read, yielded)
+            if cursor is None:
                 return
             p["cursor"] = cursor
         if max_pages is None:
@@ -905,20 +967,14 @@ class AsyncHttpClient:
                     headers=request_headers,
                     content=content,
                     params=_query_params(params),
-                    timeout=timeout or self._timeout,
+                    timeout=self._timeout if timeout is None else timeout,
                 )
-            except httpx.ConnectError as e:
+            except httpx.TransportError as e:
                 if attempt < self._max_retries:
                     await asyncio.sleep(_backoff(attempt))
                     attempt += 1
                     continue
-                raise APIConnectionError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
-            except httpx.TimeoutException as e:
-                if attempt < self._max_retries:
-                    await asyncio.sleep(_backoff(attempt))
-                    attempt += 1
-                    continue
-                raise APITimeoutError(str(e), idempotency_key=headers.get("Idempotency-Key")) from e
+                raise _transport_error(e, headers) from e
 
             self._capture_response_meta(response)
 
@@ -938,9 +994,11 @@ class AsyncHttpClient:
                 if keep_error_body:
                     error.raw_body = response.content
                 if attempt < self._max_retries and _should_retry(response.status_code, error, method, headers):
-                    await asyncio.sleep(_backoff(attempt, getattr(error, "retry_after", None)))
-                    attempt += 1
-                    continue
+                    delay = _retry_delay(attempt, error)
+                    if delay is not None:
+                        await asyncio.sleep(delay)
+                        attempt += 1
+                        continue
                 raise error
             return response
 
@@ -1040,9 +1098,13 @@ class AsyncHttpClient:
 
         Returns ``{"data": [...], "cursor": ..., "holdbackSeconds": ...}``.
         """
-        headers = _base_headers("GET")
-        headers["Accept"] = "application/x-ndjson"
-        response = await self._send("GET", path, headers=headers, params=params, timeout=kwargs.get("timeout"))
+        auth_override = kwargs.get("auth_override")
+        headers = _ndjson_headers(kwargs.get("headers"))
+        headers.update(self._signature_headers(None, auth_override))
+        response = await self._send(
+            "GET", path, headers=headers, params=params,
+            timeout=kwargs.get("timeout"), auth_override=auth_override,
+        )
         return _parse_ndjson(response)
 
     async def get_page(self, path: str, *, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
@@ -1059,7 +1121,7 @@ class AsyncHttpClient:
         looks like the whole listing. Pass ``max_pages`` to stop early on
         purpose: that bound is yours, so the walk ends at it quietly.
         """
-        ceiling = DEFAULT_MAX_PAGES if max_pages is None else max_pages
+        ceiling = _check_max_pages(max_pages)
         p = dict(params or {})
         pages_read = 0
         yielded = 0
@@ -1070,10 +1132,8 @@ class AsyncHttpClient:
             for item in rows:
                 yield item
             yielded += len(rows)
-            if not page.get("hasMore"):
-                return
-            cursor = page.get("nextCursor") or page.get("next_cursor")
-            if not cursor:
+            cursor = _next_cursor(page, path, pages_read, yielded)
+            if cursor is None:
                 return
             p["cursor"] = cursor
         if max_pages is None:

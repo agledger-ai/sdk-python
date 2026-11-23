@@ -363,3 +363,22 @@ def test_rfc9421_unsupported_key_type_fails_closed(es256_keypair):
     ).decode()
     headers = _sign_es256(priv)
     assert verify_rfc9421(headers, RFC_BODY, rsa_spki) is False
+
+
+def test_a_non_ascii_signature_is_a_failed_check_not_a_crash():
+    import time
+
+    from agledger.webhooks.verify import verify_signature
+
+    header = f"t={int(time.time())},v1=ééé"
+    assert verify_signature("{}", header, "whsec_real") is False
+
+
+@pytest.mark.parametrize("secret", ["", "   ", [], [""], ["good", "  "]])
+def test_an_empty_secret_is_a_configuration_error(secret: object):
+    from agledger._errors import ConfigurationError
+    from agledger.webhooks.verify import sign_payload, verify_signature
+
+    forged = sign_payload("{}", "")["header"]
+    with pytest.raises(ConfigurationError):
+        verify_signature("{}", forged, secret)  # type: ignore[arg-type]

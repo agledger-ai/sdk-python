@@ -55,6 +55,13 @@ Targets AGLedger Server 3.0.0.
 
 ### Fixed
 
+- A path id is percent-encoded as one segment, so `webhooks.get("../admin/x?y=1#z")` requests that literal id instead of another route. An id that is exactly `.` or `..` raises `ValueError`.
+- `verify_signature` and `construct_event` return `False` for a `v1=` value that is not ASCII instead of raising `TypeError`, and raise `ConfigurationError` for an empty or blank secret (or an empty list) instead of accepting a signature made with an empty key.
+- Transport failures other than a refused connection or a timeout (a reset, a truncated response, a protocol error) are retried like those two and raised as `APIConnectionError`.
+- A `Retry-After` that is not finite is ignored, and one above 30 seconds is no longer slept on: the error is raised with `retry_after` set.
+- A listing page that reports more rows but carries no cursor raises `PaginationLimitError` instead of ending the walk quietly, and `max_pages` below 1 raises `ConfigurationError`.
+- RFC 8941 integers in webhook signature headers accept ASCII digits only.
+- `get_ndjson` forwards `auth_override` and `headers`, and a `timeout` of 0 is no longer replaced by the client default.
 - **The `agledger-verify` text report on an `?evidence=true` export called the inlined evidence a display projection.** AGLedger Server 3.0.0 lists `evidence` among the export's unsigned fields. Evidence bodies are held to the hash their entry signs; the note now leaves `evidence` out of the projections and points at the line that reports the check.
 - `RateLimitInfo.reset` is documented as the seconds until the window resets. It said a Unix timestamp.
 - `ComplianceExport.truncated` says how to fetch the rest with `resume_to`, and `get_org_config()` says what the dispute re-check does with `deadlineGraceSeconds`: it is added to the record's `tolerance.graceSeconds`, which `toleranceExpansion` does not multiply.

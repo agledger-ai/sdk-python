@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from agledger._errors import (
+    ConfigurationError,
     SignatureAlgorithmUnavailableError,
     SignatureVerificationError,
 )
@@ -74,13 +75,32 @@ def _parse_header(header: str) -> dict[str, Any] | None:
     return {"timestamp": ts, "signatures": signatures}
 
 
+def _checked_secrets(secrets: str | Sequence[str]) -> list[str]:
+    """The signing secrets as a list, refusing any that would let a caller forge.
+
+    An empty secret is a valid HMAC key, so accepting one would let anyone
+    compute a passing signature. An empty list or a blank entry is a
+    configuration mistake, raised rather than reported as a failed delivery.
+    """
+    secret_list = [secrets] if isinstance(secrets, str) else list(secrets)
+    if not secret_list or any(not x.strip() for x in secret_list):
+        raise ConfigurationError(
+            "Webhook signing secret is empty. Pass the endpoint's secret, or a non-empty list of secrets during rotation."
+        )
+    return secret_list
+
+
 def verify_signature(
     raw_body: str,
     header: str,
-    secrets: str | list[str],
+    secrets: str | Sequence[str],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> bool:
-    """Verify a webhook signature. Supports key rotation via list of secrets."""
+    """Verify a webhook signature. Supports key rotation via list of secrets.
+
+    Raises :class:`ConfigurationError` when the secret is empty or blank.
+    """
+    secret_list = _checked_secrets(secrets)
     parsed = _parse_header(header)
     if not parsed:
         return False
@@ -90,13 +110,12 @@ def verify_signature(
     if abs(now - parsed["timestamp"]) > tolerance:
         return False
 
-    secret_list = [secrets] if isinstance(secrets, str) else secrets
     signed_payload = f"{parsed['timestamp']}.{raw_body}"
 
     for secret in secret_list:
         expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
         for sig in parsed["signatures"]:
-            if hmac.compare_digest(sig, expected):
+            if hmac.compare_digest(sig.encode("utf-8"), expected.encode("ascii")):
                 return True
 
     return False
@@ -105,7 +124,7 @@ def verify_signature(
 def construct_event(
     raw_body: str,
     header: str,
-    secrets: str | list[str],
+    secrets: str | Sequence[str],
     tolerance_seconds: int = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
     """Verify signature and parse the webhook payload in one step.

@@ -49,7 +49,7 @@ Member = Item | InnerList
 
 _KEY_START = re.compile(r"[a-z*]")
 _KEY_CHAR = re.compile(r"[a-z0-9_\-.*]")
-_INTEGER = re.compile(r"-?\d{1,15}")
+_INTEGER = re.compile(r"-?[0-9]{1,15}")
 _TOKEN = re.compile(r"[A-Za-z*][!#$%&'*+\-.^_`|~0-9A-Za-z:/]*")
 _BASE64 = re.compile(r"[A-Za-z0-9+/]*={0,2}")
 
