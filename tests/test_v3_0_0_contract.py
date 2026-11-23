@@ -311,3 +311,25 @@ def test_compliance_export_reads_next_from():
 
     export = ComplianceExport.model_validate({"status": "ready", "nextFrom": "2026-11-20T00:00:00.000000Z"})
     assert export.next_from == "2026-11-20T00:00:00.000000Z"
+
+
+CSV = "recordId,status\nrec-1,FULFILLED\n"
+
+
+@respx.mock
+def test_compliance_download_export_text_returns_the_csv_as_sent():
+    route = respx.get(f"{BASE}/v1/compliance/export/exp-1/download").mock(
+        return_value=httpx.Response(200, content=CSV.encode(), headers={"content-type": "text/csv"})
+    )
+    assert _client().compliance.download_export_text("exp-1") == CSV
+    assert "text/csv" in route.calls.last.request.headers["accept"]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_async_compliance_download_export_text_returns_the_html_report():
+    respx.get(f"{BASE}/v1/compliance/export/exp-1/download").mock(
+        return_value=httpx.Response(200, content=HTML.encode(), headers={"content-type": "text/html; charset=utf-8"})
+    )
+    async with AsyncAgledgerClient(base_url=BASE, api_key="test-key") as client:
+        assert await client.compliance.download_export_text("exp-1") == HTML
