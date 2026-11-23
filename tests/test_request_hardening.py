@@ -165,3 +165,67 @@ async def test_get_ndjson_forwards_auth_override_async():
     async with AsyncAgledgerClient(base_url=BASE, api_key="default-key") as client:
         await client._http.get_ndjson("/v1/events/stream", auth_override="other-key")
     assert route.calls[0].request.headers["authorization"] == "Bearer other-key"
+
+
+# The same refusals as @agledger/sdk, input by input.
+
+
+@pytest.mark.parametrize("value", [1.5, float("nan"), float("inf"), -1, True, None, "3"])
+def test_max_retries_that_is_not_a_non_negative_int_is_refused(value: object):
+    with pytest.raises(ConfigurationError, match="max_retries"):
+        AgledgerClient(api_key="k", base_url=BASE, max_retries=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), 3_000_000, "5", True])
+def test_timeout_that_is_not_a_positive_finite_number_is_refused(value: object):
+    with pytest.raises(ConfigurationError, match="timeout"):
+        AgledgerClient(api_key="k", base_url=BASE, timeout=value)  # type: ignore[arg-type]
+    with pytest.raises(ConfigurationError, match="timeout"):
+        AgledgerClient(api_key="k", base_url=BASE)._http.get("/v1/records", timeout=value)  # type: ignore[arg-type]  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("value", ["", "  ", 5])
+def test_an_empty_or_non_string_api_key_is_refused_rather_than_read_from_the_env(
+    value: object, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("AGLEDGER_API_KEY", "from-env")
+    with pytest.raises(ConfigurationError, match="api_key"):
+        AgledgerClient(api_key=value, base_url=BASE)  # type: ignore[arg-type]
+
+
+def test_a_bearer_token_of_the_wrong_type_is_refused_at_construction():
+    with pytest.raises(ConfigurationError, match="bearer_token"):
+        AgledgerClient(bearer_token=5, base_url=BASE)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [0, 1.5, float("nan"), True])
+def test_max_pages_that_is_not_a_positive_int_is_refused(value: object):
+    client = AgledgerClient(api_key="k", base_url=BASE)
+    with pytest.raises(ConfigurationError, match="max_pages"):
+        next(iter(client._http.paginate("/v1/records", max_pages=value)))  # type: ignore[arg-type]  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("value", ["0x10", "", "1e3", "1_0", chr(0x661)])
+def test_retry_after_that_is_not_ascii_decimal_seconds_is_not_a_wait(value: str):
+    assert _retry_after_seconds(value, None) is None
+    assert _retry_after_seconds("2.5", None) == 2.5
+
+
+@respx.mock
+def test_a_caller_idempotency_key_is_sent_verbatim_and_a_generated_one_is_prefixed():
+    route = respx.post(f"{BASE}/v1/records").mock(return_value=httpx.Response(201, json={"id": "r"}))
+    client = AgledgerClient(api_key="k", base_url=BASE, idempotency_key_prefix="app-")
+    client._http.request("POST", "/v1/records", json={"a": 1}, idempotency_key="mine")  # pyright: ignore[reportPrivateUsage]
+    client._http.request("POST", "/v1/records", json={"a": 1}, idempotency_key="")  # pyright: ignore[reportPrivateUsage]
+    client._http.request("POST", "/v1/records", json={"a": 1})  # pyright: ignore[reportPrivateUsage]
+    keys = [call.request.headers["Idempotency-Key"] for call in route.calls]
+    assert keys[0] == "mine"
+    assert re.fullmatch(r"app-[0-9a-f-]{36}", keys[1])
+    assert re.fullmatch(r"app-[0-9a-f-]{36}", keys[2])
+
+
+def test_a_function_or_bytes_query_value_is_refused():
+    client = AgledgerClient(api_key="k", base_url=BASE)
+    for value in (len, b"x"):
+        with pytest.raises(ConfigurationError, match="Query parameter"):
+            client._http.get("/v1/records", params={"q": value})  # pyright: ignore[reportPrivateUsage]

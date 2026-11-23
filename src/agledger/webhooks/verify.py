@@ -46,7 +46,7 @@ RFC9421_COVERED_COMPONENTS = ("content-digest", "x-agledger-idempotency-key")
 
 def sign_payload(raw_body: str, secret: str, timestamp: int | None = None) -> dict[str, Any]:
     """Sign a payload (for testing). Returns header, timestamp, signature."""
-    ts = timestamp or int(time.time())
+    ts = int(time.time()) if timestamp is None else timestamp
     signed_payload = f"{ts}.{raw_body}"
     signature = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
     return {
@@ -65,10 +65,11 @@ def _parse_header(header: str) -> dict[str, Any] | None:
             return None
         key, value = kv[0].strip(), kv[1].strip()
         if key == "t":
-            try:
-                ts = int(value)
-            except ValueError:
+            # ASCII digits only, as @agledger/sdk reads it: int() would also
+            # take "+123", "1_7" and other scripts' digits.
+            if not re.fullmatch(r"[0-9]+", value):
                 return None
+            ts = int(value)
         elif key == "v1":
             signatures.append(value)
     if ts is None or not signatures:
@@ -94,16 +95,29 @@ def _checked_secrets(secrets: str | Sequence[str]) -> list[str]:
     compute a passing signature. An empty list or a blank entry is a
     configuration mistake, raised rather than reported as a failed delivery.
     """
-    secret_list = [secrets] if isinstance(secrets, str) else list(secrets)
-    if not secret_list or any(not x.strip() for x in secret_list):
+    secret_list: list[object] = [secrets] if isinstance(secrets, str) else list(secrets)
+    if not secret_list or any(not isinstance(x, str) or not x.strip() for x in secret_list):
         raise ConfigurationError(
             "Webhook signing secret is empty. Pass the endpoint's secret, or a non-empty list of secrets during rotation."
         )
-    return secret_list
+    return cast(list[str], secret_list)
+
+
+def _body_text(raw_body: str | bytes) -> str | None:
+    """The body as text. Frameworks hand the raw body over as bytes as often as
+    str; bytes are read as UTF-8, and bytes that are not UTF-8 verify nothing
+    (None). A bytes body used to be signed as its ``b'...'`` repr and so never
+    verified."""
+    if isinstance(raw_body, bytes):
+        try:
+            return raw_body.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    return raw_body
 
 
 def verify_signature(
-    raw_body: str,
+    raw_body: str | bytes,
     header: str,
     secrets: str | Sequence[str],
     tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
@@ -115,15 +129,16 @@ def verify_signature(
     """
     secret_list = _checked_secrets(secrets)
     tolerance = _resolve_tolerance(tolerance_seconds)
+    body = _body_text(raw_body)
     parsed = _parse_header(header)
-    if not parsed:
+    if not parsed or body is None:
         return False
 
     now = int(time.time())
     if abs(now - parsed["timestamp"]) > tolerance:
         return False
 
-    signed_payload = f"{parsed['timestamp']}.{raw_body}"
+    signed_payload = f"{parsed['timestamp']}.{body}"
 
     for secret in secret_list:
         expected = hmac.new(secret.encode(), signed_payload.encode(), hashlib.sha256).hexdigest()
@@ -135,7 +150,7 @@ def verify_signature(
 
 
 def construct_event(
-    raw_body: str,
+    raw_body: str | bytes,
     header: str,
     secrets: str | Sequence[str],
     tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
@@ -147,14 +162,19 @@ def construct_event(
     if not verify_signature(raw_body, header, secrets, tolerance_seconds):
         raise SignatureVerificationError(
             "Webhook signature verification failed",
-            payload=raw_body.encode() if raw_body else None,
+            payload=(raw_body if isinstance(raw_body, bytes) else raw_body.encode()) if raw_body else None,
         )
     return _parse_webhook_event(raw_body)
 
 
-def _parse_webhook_event(raw_body: str) -> dict[str, Any]:
-    """Parse a verified webhook body into a typed event (shared by both verify paths)."""
-    parsed = json.loads(raw_body)
+def _parse_webhook_event(raw_body: str | bytes) -> dict[str, Any]:
+    """Parse a verified webhook body into a typed event (shared by both verify
+    paths). A body that is JSON but not an object (a list, null) is carried as
+    the event's data, as @agledger/sdk carries it, rather than raising."""
+    loaded: object = json.loads(raw_body)
+    if not isinstance(loaded, dict):
+        return {"type": "unknown", "data": loaded, "timestamp": "", "id": None}
+    parsed = cast(dict[str, Any], loaded)
     return {
         "type": parsed.get("type") or parsed.get("event", "unknown"),
         "data": parsed.get("data") or parsed.get("payload", parsed),
@@ -194,8 +214,9 @@ def _normalize_headers(headers: Mapping[str, Any]) -> dict[str, str]:
     return out
 
 
-def _content_digest(raw_body: str) -> str:
-    digest = base64.b64encode(hashlib.sha256(raw_body.encode("utf-8")).digest()).decode("ascii")
+def _content_digest(raw_body: str | bytes) -> str:
+    data = raw_body if isinstance(raw_body, bytes) else raw_body.encode("utf-8")
+    digest = base64.b64encode(hashlib.sha256(data).digest()).decode("ascii")
     return f"sha-256=:{digest}:"
 
 
@@ -212,7 +233,10 @@ def _load_public_key(base64_key: str) -> Ed25519PublicKey | EllipticCurvePublicK
             "The 'cryptography' package is required for RFC 9421 webhook verification. "
             "Install via: pip install 'agledger[verify]'"
         ) from err
-    raw = base64.b64decode(base64_key)
+    # validate=True: the default decoder drops characters outside the
+    # alphabet, so a base64url key decoded to other bytes. A key that is not
+    # standard padded base64 is not one the Server published.
+    raw = base64.b64decode(base64_key, validate=True)
     # Gate BEFORE loading, not after. A host that refuses EdDSA may refuse at
     # key load, in which case the check further down never runs and the caught
     # exception becomes a `False` that reads as a forged delivery. Both key
@@ -284,7 +308,7 @@ def _inside_key_window(created_seconds: int, window: tuple[object, object]) -> b
 
 def verify_rfc9421(
     headers: Mapping[str, Any],
-    raw_body: str,
+    raw_body: str | bytes,
     key: str | Sequence[Any],
     tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> bool:
@@ -305,7 +329,7 @@ def verify_rfc9421(
     :param headers: delivery HTTP headers, which must include ``content-digest``,
         ``signature-input``, ``signature``, and ``x-agledger-idempotency-key``.
         Casing and multi-value (list) headers are handled.
-    :param raw_body: The raw request body string (do NOT parse JSON first).
+    :param raw_body: The raw request body, str or bytes (do NOT parse JSON first).
     :param key: A single base64 public key (raw 32-byte or SPKI DER), or the
         ``.data`` list from ``client.verification_keys.list()`` (resolved by
         ``keyid``).
@@ -499,7 +523,7 @@ def _verify_rfc9421_signature(
 
 def construct_event_rfc9421(
     headers: Mapping[str, Any],
-    raw_body: str,
+    raw_body: str | bytes,
     key: str | Sequence[Any],
     tolerance_seconds: float = MAX_TOLERANCE_SECONDS,
 ) -> dict[str, Any]:
@@ -510,6 +534,6 @@ def construct_event_rfc9421(
     if not verify_rfc9421(headers, raw_body, key, tolerance_seconds):
         raise SignatureVerificationError(
             "RFC 9421 webhook signature verification failed",
-            payload=raw_body.encode() if raw_body else None,
+            payload=(raw_body if isinstance(raw_body, bytes) else raw_body.encode()) if raw_body else None,
         )
     return _parse_webhook_event(raw_body)

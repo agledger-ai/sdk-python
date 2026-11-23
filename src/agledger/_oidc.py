@@ -153,14 +153,20 @@ class _CertState:
     """What the sync and async credentials share: the key, the exchange body,
     and the refresh arithmetic. Everything that waits lives on the subclasses."""
 
-    def __init__(self, agent_id: str | None, refresh_fraction: float) -> None:
-        if not 0 < refresh_fraction <= 1:
+    def __init__(self, agent_id: str | None, refresh_fraction: float | None, get_oidc_token: object) -> None:
+        # As @agledger/sdk: None takes the default, a callable is required up
+        # front, and an empty agent id is no assertion.
+        if not callable(get_oidc_token):
+            raise ConfigurationError("get_oidc_token must be a function returning an OIDC JWT.")
+        if refresh_fraction is None:
+            refresh_fraction = 0.5
+        if isinstance(refresh_fraction, bool) or not isinstance(refresh_fraction, (int, float)) or not 0 < refresh_fraction <= 1:  # pyright: ignore[reportUnnecessaryIsInstance]
             raise ConfigurationError(
                 f"refresh_fraction must be greater than 0 and at most 1, got {refresh_fraction!r}."
             )
         self._key = _load_ed25519().generate()
-        self._agent_id = agent_id
-        self._refresh_fraction = refresh_fraction
+        self._agent_id = agent_id or None
+        self._refresh_fraction = float(refresh_fraction)
         self._current: _Cert | None = None
         raw = self._key.public_key().public_bytes_raw()
         self._public_key_jwk = {
@@ -328,9 +334,9 @@ class OidcCertCredential(_CertState):
         self,
         get_oidc_token: Callable[[], str],
         agent_id: str | None = None,
-        refresh_fraction: float = 0.5,
+        refresh_fraction: float | None = 0.5,
     ) -> None:
-        super().__init__(agent_id, refresh_fraction)
+        super().__init__(agent_id, refresh_fraction, get_oidc_token)
         self._get_oidc_token = get_oidc_token
         self._lock = threading.Lock()
         self._inflight: Future[str] | None = None
@@ -390,9 +396,9 @@ class AsyncOidcCertCredential(_CertState):
         self,
         get_oidc_token: Callable[[], str | Awaitable[str]],
         agent_id: str | None = None,
-        refresh_fraction: float = 0.5,
+        refresh_fraction: float | None = 0.5,
     ) -> None:
-        super().__init__(agent_id, refresh_fraction)
+        super().__init__(agent_id, refresh_fraction, get_oidc_token)
         self._get_oidc_token = get_oidc_token
         self._inflight: asyncio.Task[str] | None = None
 

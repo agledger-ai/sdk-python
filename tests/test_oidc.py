@@ -751,3 +751,27 @@ def test_the_private_key_is_not_in_the_repr():
     assert repr(credential) == "OidcCertCredential(agent_id='agt-1', refresh_fraction=0.5)"
     assert credential.cert is None
     assert set(credential.public_key_jwk) == {"kty", "crv", "x"}
+
+
+# Construction-time inputs, refused or defaulted as @agledger/sdk does.
+
+
+def test_get_oidc_token_must_be_callable_at_construction():
+    from agledger import ConfigurationError, oidc_cert_credential
+
+    with pytest.raises(ConfigurationError, match="get_oidc_token"):
+        oidc_cert_credential("not-a-function")  # type: ignore[arg-type]
+
+
+def test_refresh_fraction_none_takes_the_default_and_a_string_is_refused():
+    from agledger import ConfigurationError, oidc_cert_credential
+
+    assert "refresh_fraction=0.5" in repr(oidc_cert_credential(lambda: "a.b.c", refresh_fraction=None))
+    with pytest.raises(ConfigurationError, match="refresh_fraction"):
+        oidc_cert_credential(lambda: "a.b.c", refresh_fraction="0.5")  # type: ignore[arg-type]
+
+
+def test_an_empty_agent_id_is_no_assertion():
+    from agledger import oidc_cert_credential
+
+    assert "agent_id=None" in repr(oidc_cert_credential(lambda: "a.b.c", agent_id=""))

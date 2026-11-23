@@ -10,6 +10,7 @@ import json
 import math
 import os
 import random
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
@@ -243,13 +244,11 @@ def _retry_after_seconds(header: str | None, body_seconds: object) -> float | No
     parses as a finite non-negative number, else a 429 body's ``retryAfterSeconds``,
     else None. An HTTP-date, which nothing in front of the Server sends, reads
     as None rather than raising."""
-    if header:
-        try:
-            seconds = float(header.strip())
-        except ValueError:
-            seconds = None
-        if seconds is not None and math.isfinite(seconds) and seconds >= 0:
-            return seconds
+    # delay-seconds is 1*DIGIT (RFC 9110 section 10.2.3); a decimal fraction
+    # from a proxy is taken too. ASCII only: float() would also take "1_0",
+    # "1e3" and other scripts' digits. The same rule as @agledger/sdk.
+    if header and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", header.strip()):
+        return float(header.strip())
     if (
         isinstance(body_seconds, (int, float))
         and not isinstance(body_seconds, bool)
@@ -401,12 +400,19 @@ def _query_scalar(name: str, value: object) -> object:
             f"Query parameter {name} must be a string, number or boolean; "
             "nested mappings and lists have no query-string form."
         )
+    if callable(value) or isinstance(value, (bytes, bytearray)):
+        # str() would send the repr: a function as "<function ...>", bytes as "b'...'".
+        raise ConfigurationError(f"Query parameter {name} must be a string, number or boolean.")
     return value
 
 
 
 def resolve_api_key(api_key: str | None) -> str:
-    """Resolve API key from argument or AGLEDGER_API_KEY env var."""
+    """Resolve API key from argument or AGLEDGER_API_KEY env var. Only an
+    omitted ``api_key`` reads the env var: an empty or non-string one is a
+    mistake, refused as ``@agledger/sdk`` refuses it."""
+    if api_key is not None and (not isinstance(api_key, str) or not api_key.strip()):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ConfigurationError("api_key must be a non-empty string.")
     key = api_key or os.environ.get("AGLEDGER_API_KEY")
     if not key:
         raise AuthenticationError(
@@ -428,6 +434,11 @@ def _resolve_credential(api_key: str | None, bearer_token: object | None) -> obj
         return resolve_api_key(api_key)
     if isinstance(bearer_token, str) and not bearer_token:
         raise ConfigurationError("bearer_token is an empty string.")
+    if not isinstance(bearer_token, str) and not callable(bearer_token) and not callable(getattr(bearer_token, "get_token", None)):
+        raise ConfigurationError(
+            f"bearer_token is a {type(bearer_token).__name__}; pass a string, a function returning one, "
+            "or a credential such as oidc_cert_credential()."
+        )
     return bearer_token
 
 
@@ -495,10 +506,44 @@ def _next_cursor(page: Mapping[str, Any], path: str, pages_read: int, yielded: i
     return str(cursor)
 
 
-def _check_max_pages(max_pages: int | None) -> int:
-    if max_pages is not None and max_pages < 1:
-        raise ConfigurationError("max_pages must be at least 1")
-    return DEFAULT_MAX_PAGES if max_pages is None else max_pages
+#: The longest timeout, in seconds, @agledger/sdk can arm (2^31 - 1 ms); held
+#: here too so one configuration means the same in both SDKs.
+MAX_TIMEOUT_SECONDS = 2_147_483.647
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def check_max_retries(max_retries: object) -> int:
+    """``max_retries`` as an int, 0 or more. ``nan`` used to switch retries off
+    and ``inf`` retry forever; both are refused, as ``@agledger/sdk`` refuses them."""
+    if not _is_int(max_retries) or cast(int, max_retries) < 0:
+        raise ConfigurationError("max_retries must be an integer, 0 or more.")
+    return cast(int, max_retries)
+
+
+def check_timeout(timeout: object) -> float:
+    """A request timeout in seconds: a finite number above 0, at most
+    :data:`MAX_TIMEOUT_SECONDS`. Refused at construction rather than as a raw
+    ``ValueError`` or ``OverflowError`` from the first request."""
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+        or timeout > MAX_TIMEOUT_SECONDS
+    ):
+        raise ConfigurationError(
+            f"timeout must be a number of seconds above 0 and at most {MAX_TIMEOUT_SECONDS} (got {timeout!r})."
+        )
+    return float(timeout)
+
+
+def _check_max_pages(max_pages: object) -> int:
+    if max_pages is not None and (not _is_int(max_pages) or cast(int, max_pages) < 1):
+        raise ConfigurationError("max_pages must be an integer, 1 or more.")
+    return DEFAULT_MAX_PAGES if max_pages is None else cast(int, max_pages)
 
 
 def encode_json(body: Any) -> bytes:
@@ -567,10 +612,8 @@ class HttpClient:
                 'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
             )
         self._base_url = base_url.rstrip("/")
-        if isinstance(max_retries, bool) or max_retries < 0:
-            raise ConfigurationError("max_retries must be an integer, 0 or more.")
-        self._max_retries = max_retries
-        self._timeout = timeout
+        self._max_retries = check_max_retries(max_retries)
+        self._timeout = check_timeout(timeout)
         self._idempotency_key_prefix = idempotency_key_prefix
         self._client = http_client or httpx.Client(timeout=timeout)
         self._owns_client = http_client is None
@@ -668,7 +711,7 @@ class HttpClient:
                     headers=request_headers,
                     content=content,
                     params=_query_params(params),
-                    timeout=self._timeout if timeout is None else timeout,
+                    timeout=self._timeout if timeout is None else check_timeout(timeout),
                 )
             except httpx.TransportError as e:
                 if attempt < self._max_retries:
@@ -715,7 +758,10 @@ class HttpClient:
         auth_override: str | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
-        key = f"{self._idempotency_key_prefix}{idempotency_key}" if idempotency_key else None
+        # A caller's key is sent as given, so a key read from an earlier error
+        # replays exactly; the prefix goes on the keys the SDK generates. An
+        # empty key is no key. As @agledger/sdk does.
+        key = idempotency_key or f"{self._idempotency_key_prefix}{uuid.uuid4()}"
         request_headers = _base_headers(method, key)
         request_headers.update(headers or {})
         content = encode_json(json) if json is not None else None
@@ -877,10 +923,8 @@ class AsyncHttpClient:
                 'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
             )
         self._base_url = base_url.rstrip("/")
-        if isinstance(max_retries, bool) or max_retries < 0:
-            raise ConfigurationError("max_retries must be an integer, 0 or more.")
-        self._max_retries = max_retries
-        self._timeout = timeout
+        self._max_retries = check_max_retries(max_retries)
+        self._timeout = check_timeout(timeout)
         self._idempotency_key_prefix = idempotency_key_prefix
         self._client = http_client or httpx.AsyncClient(timeout=timeout)
         self._owns_client = http_client is None
@@ -967,7 +1011,7 @@ class AsyncHttpClient:
                     headers=request_headers,
                     content=content,
                     params=_query_params(params),
-                    timeout=self._timeout if timeout is None else timeout,
+                    timeout=self._timeout if timeout is None else check_timeout(timeout),
                 )
             except httpx.TransportError as e:
                 if attempt < self._max_retries:
@@ -1014,7 +1058,10 @@ class AsyncHttpClient:
         auth_override: str | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
-        key = f"{self._idempotency_key_prefix}{idempotency_key}" if idempotency_key else None
+        # A caller's key is sent as given, so a key read from an earlier error
+        # replays exactly; the prefix goes on the keys the SDK generates. An
+        # empty key is no key. As @agledger/sdk does.
+        key = idempotency_key or f"{self._idempotency_key_prefix}{uuid.uuid4()}"
         request_headers = _base_headers(method, key)
         request_headers.update(headers or {})
         content = encode_json(json) if json is not None else None

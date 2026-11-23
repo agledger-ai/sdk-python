@@ -402,3 +402,51 @@ def test_an_empty_secret_is_a_configuration_error(secret: object):
     forged = sign_payload("{}", "")["header"]
     with pytest.raises(ConfigurationError):
         verify_signature("{}", forged, secret)  # type: ignore[arg-type]
+
+
+# Header, secret, body and key forms read as @agledger/sdk reads them.
+
+
+def test_a_signed_t_that_is_not_ascii_digits_does_not_verify():
+    result = sign_payload(BODY, SECRET)
+    assert not verify_signature(BODY, f"t=+{result['timestamp']},v1={result['signature']}", SECRET)
+
+
+def test_an_empty_v1_slot_is_passed_over_and_a_second_equals_fails():
+    result = sign_payload(BODY, SECRET)
+    assert verify_signature(BODY, f"t={result['timestamp']},v1=,v1={result['signature']}", SECRET)
+    assert not verify_signature(BODY, f"t={result['timestamp']}=zz,v1={result['signature']}", SECRET)
+
+
+@pytest.mark.parametrize("secrets", [b"sec", [1], ["sec", None]])
+def test_a_secret_that_is_not_a_string_is_a_configuration_error(secrets: object):
+    from agledger import ConfigurationError
+
+    with pytest.raises(ConfigurationError):
+        verify_signature(BODY, sign_payload(BODY, SECRET)["header"], secrets)  # type: ignore[arg-type]
+
+
+def test_a_bytes_body_verifies_as_its_utf8_text():
+    result = sign_payload(BODY, SECRET)
+    assert verify_signature(BODY.encode(), result["header"], SECRET)
+    assert construct_event(BODY.encode(), result["header"], SECRET)["type"] == "record.created"
+    assert not verify_signature(b"\xff\xfe", result["header"], SECRET)
+
+
+@pytest.mark.parametrize("body", ["[1]", "null"])
+def test_a_signed_body_that_is_not_an_object_is_carried_as_data(body: str):
+    event = construct_event(body, sign_payload(body, SECRET)["header"], SECRET)
+    assert event["data"] == json.loads(body)
+
+
+def test_sign_payload_keeps_a_timestamp_of_zero():
+    assert sign_payload(BODY, SECRET, 0)["timestamp"] == 0
+
+
+def test_rfc9421_a_key_that_is_not_standard_padded_base64_verifies_nothing(keypair):
+    priv, spki, _raw, _keys = keypair
+    headers = _sign(priv)
+    assert verify_rfc9421(headers, RFC_BODY, spki) is True
+    for key in (spki.rstrip("="), base64.urlsafe_b64encode(base64.b64decode(spki)).decode()):
+        if key != spki:
+            assert verify_rfc9421(headers, RFC_BODY, key) is False

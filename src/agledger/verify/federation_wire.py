@@ -495,7 +495,8 @@ class FederationWireCounts:
     (the body hash, the entry, or the signature under the hub's key).
     ``present - verified - failed`` is the messages from a hub with no key
     supplied. ``after_retirement`` counts verified ones sealed under a key the
-    sender's history retired before the sender signed the message."""
+    sender's history retired before the sender signed the message, which
+    verify only under ``allow_after_retirement``."""
 
     present: int = 0
     verified: int = 0

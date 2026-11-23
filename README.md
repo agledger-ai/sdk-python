@@ -384,7 +384,10 @@ than `exportMetadata.expectedEntries` (the position of the record's latest
 checkpoint) fails `CHECKPOINT_ROW_MISSING`, and fewer than
 `exportMetadata.totalEntries` (what the Server wrote) fails
 `CHAIN_POSITION_GAP`. `result.entry_count` reports both, each `None` when the
-export does not state it.
+export does not state it. Both counts are unsigned, so an export cut from the
+end with them deleted passes on its own: pass `expected_entry_count=` with a
+count taken out of band, and a different number of entries fails
+`CHAIN_POSITION_GAP`.
 
 Records written with the OIDC cert credential also carry the agent's own
 signature over each request body. Pass the certificate's public key to check
