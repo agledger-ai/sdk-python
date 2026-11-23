@@ -56,7 +56,7 @@ oidc = [
 ]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.24",
+    "pytest-asyncio>=1.5.0",
     "respx>=0.22",
     "cryptography>=49.0",
     "cbor2>=5.9",
