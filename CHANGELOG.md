@@ -37,6 +37,7 @@ Targets AGLedger Server 3.0.0.
 
 ### Changed
 
+- **Raised minimum versions:** `pydantic>=2.4.0`, and in the `verify` and `oidc` extras `cryptography>=49.0` and `cbor2>=5.9`. The old floors (pydantic 2.0, cryptography 42, cbor2 5.6) let a resolver install releases with published advisories, among them unbounded recursion in `cbor2.loads`, which decodes the CBOR inside an audit export, and the OpenSSL bundled in older `cryptography` wheels. The test suite runs at the new floors on Python 3.11 in CI.
 - **`verify_rfc9421` parses `Signature-Input` and `Signature` as RFC 8941 structured fields** and rebuilds `@signature-params` from the parsed value, with the same rules as the TypeScript SDK: a signature must cover exactly `content-digest` and `x-agledger-idempotency-key`, in that order and without component parameters, and name `created` as an Integer and `keyid` as a String; `expires` is enforced when present. A delivery carrying several signatures (an intermediary may add its own) verifies when one of them does; it used to be refused. A delivery the Server signs verifies exactly as before.
 - **A query parameter nested below the bracket form raises `ConfigurationError`.** `metadata={"k": "v"}` becomes `metadata[k]=v`; a mapping or list one level deeper was sent as its Python repr (`metadata[k]={'a': 1}`), which the Server read as a filter on that string.
 - **`max_retries` must be 0 or more.** A negative value raises `ConfigurationError` at construction, as in the TypeScript SDK.
