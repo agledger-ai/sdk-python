@@ -31,7 +31,7 @@ KEY_ENTRY: dict[str, Any] = json.loads((LIVE / "agent-cert-key.json").read_text(
 JWK: dict[str, str] = KEY_ENTRY["publicKeyJwk"]
 # The pin of the instance's vault key. Without it key anchoring does not run,
 # and says so.
-LIVE_PIN = "sha256:7319bc5f0f636d72778028cf069db7e7a4a62a7a44e5433ab94d66a53d9b23a4"
+LIVE_PIN = "sha256:71f2bd9dca75d7b090b3a748d1f91de8bd5f88810162dbdcab6f83752c4f8d51"
 ALL_APPLIED = {
     **dict.fromkeys(
         ("payload_binding", "oidc_actor", "actor_attribution", "key_temporal", "agent_signature"),
