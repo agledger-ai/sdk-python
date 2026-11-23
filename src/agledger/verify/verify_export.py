@@ -55,6 +55,7 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel
 
 from agledger._runtime_crypto import looks_like_ed25519_key, runtime_can_compute
+from agledger.verify.cbor_strict import check_strict
 from agledger.verify.failures import FailureCode
 from agledger.verify.federation_wire import (
     FederationKeyRegistry,
@@ -405,15 +406,22 @@ OPTIONAL_CHECKS = (
 _NO_OPTIONAL_CHECKS: dict[str, CheckApplicability] = dict.fromkeys(OPTIONAL_CHECKS, "skipped_no_input")
 
 
-def optional_checks_report(applied: set[str], walked: bool = False) -> dict[str, CheckApplicability]:
+def optional_checks_report(
+    applied: set[str],
+    walked: bool = False,
+    entry_count: CheckApplicability | None = None,
+) -> dict[str, CheckApplicability]:
     """The ``optionalChecks`` map for a set of checks that ran. With ``walked``
     (trust anchors were given), ``key_anchoring`` is ``not_checked`` rather
-    than ``skipped_no_input`` when no entry reached it."""
+    than ``skipped_no_input`` when no entry reached it. ``entry_count`` adds the
+    export's own ``entry_count`` check (a dump has none)."""
     out: dict[str, CheckApplicability] = {
         name: ("applied" if name in applied else "skipped_no_input") for name in OPTIONAL_CHECKS
     }
     if walked and out["key_anchoring"] == "skipped_no_input":
         out["key_anchoring"] = "not_checked"
+    if entry_count is not None:
+        out["entry_count"] = entry_count
     return out
 
 
@@ -465,10 +473,14 @@ class VerifyExportResult:
     agent_signature_check: CheckApplicability = "skipped_no_input"
     #: Which input-gated checks ran on this export: ``payload_binding``,
     #: ``oidc_actor``, ``actor_attribution``, ``key_temporal``,
-    #: ``agent_signature`` and ``key_anchoring``. Mirrors ``optionalChecks`` in
+    #: ``agent_signature``, ``key_anchoring``, ``federation_wire``,
+    #: ``evidence_binding`` and ``entry_count`` (``applied`` when the chain's
+    #: length was held to a stated or supplied count). Mirrors ``optionalChecks`` in
     #: ``@agledger/verify-core``, so a caller never mistakes "not checked here"
     #: for "checked and passed".
-    optional_checks: dict[str, CheckApplicability] = field(default_factory=lambda: dict(_NO_OPTIONAL_CHECKS))
+    optional_checks: dict[str, CheckApplicability] = field(
+        default_factory=lambda: {**_NO_OPTIONAL_CHECKS, "entry_count": "skipped_no_input"}
+    )
     #: Whether the keys were anchored, and to what. ``status == "no_anchor"``
     #: means no ``trust_anchors`` were given, and ``"no_anchored_signature"``
     #: that they were but no entry verified under a key they anchor: either way
@@ -513,6 +525,8 @@ def verify_export(
     federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+    allow_after_retirement: bool = False,
+    expected_entry_count: int | None = None,
 ) -> VerifyExportResult:
     """Verify a record audit export offline.
 
@@ -582,6 +596,19 @@ def verify_export(
         without them it raises ``TypeError``, since nothing would apply it, as
         does a key both pinned and distrusted (the Server refuses to start
         with that pair: pin the successor of a key that leaked).
+    :param allow_after_retirement: Accept a sealed federation message signed by a
+        key its sender's history had already retired (beyond the 300 second
+        clock-skew allowance), counted in ``federation_wire.after_retirement``.
+        For the short gap while a sender's publisher restarts onto its new key.
+        Without it such a message fails :data:`CHAIN_FEDERATION_WIRE_INVALID`,
+        since a retired key signing later is also what a leaked key does.
+    :param expected_entry_count: The number of entries the record's chain holds,
+        obtained out of band (the operator's statement, or your own count when
+        you took the export). The counts the export states about itself sit in
+        unsigned metadata, which whoever removed entries can also remove; this
+        one cannot be edited from the document. An export carrying a different
+        number of entries fails :data:`CHAIN_POSITION_GAP`. A value that is not a
+        non-negative integer raises ``TypeError``.
     :returns: A :class:`VerifyExportResult` with per-entry outcomes, a
         signature-coverage discriminator, a key-provenance tally, the agent
         signatures present and verified, and the key-trust report.
@@ -606,33 +633,48 @@ def verify_export(
             "trust_anchors; pass trust_anchors as well."
         )
     assert_not_pinned_and_distrusted(trust_anchors, distrusted_keys)
+    if expected_entry_count is not None and (
+        isinstance(expected_entry_count, bool)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or not isinstance(expected_entry_count, int)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or expected_entry_count < 0
+    ):
+        raise TypeError(
+            f"verify_export: expected_entry_count must be a non-negative integer "
+            f"(got {json.dumps(expected_entry_count, default=str)})."
+        )
+    # Caller-supplied keys are refused before the export is read, so a bad
+    # option is reported as such whatever the input holds.
+    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
+    federation_registry = (
+        build_federation_key_registry(federation_keys) if federation_keys is not None else None
+    )
     meta = as_mapping(export_data.get("exportMetadata"))
     entries: list[Mapping[str, Any]] = [as_mapping(e) for e in cast("list[Any]", raw_entries or [])]
     record_id = str(meta.get("recordId", ""))
     coverage = SignatureCoverage(total=len(entries))
 
     fmt_version = meta.get("exportFormatVersion")
-    if fmt_version and fmt_version != _SUPPORTED_FORMAT_VERSION:
+    if fmt_version != _SUPPORTED_FORMAT_VERSION:
         detail = (
-            f"Unsupported exportFormatVersion {fmt_version} "
+            f"The export states no exportFormatVersion (this verifier reads {_SUPPORTED_FORMAT_VERSION})."
+            if fmt_version is None or fmt_version == ""
+            else f"Unsupported exportFormatVersion {json.dumps(fmt_version, ensure_ascii=False, default=str)} "
             f"(this verifier reads {_SUPPORTED_FORMAT_VERSION})."
         )
         return _early_failure(record_id, len(entries), detail, coverage)
 
     canonicalization = meta.get("canonicalization")
-    if canonicalization and canonicalization != _SUPPORTED_CANONICALIZATION:
+    if canonicalization != _SUPPORTED_CANONICALIZATION:
         detail = (
-            f"Unsupported canonicalization {canonicalization} "
+            f"The export states no canonicalization (only {_SUPPORTED_CANONICALIZATION} supported)."
+            if canonicalization is None or canonicalization == ""
+            else f"Unsupported canonicalization {json.dumps(canonicalization, ensure_ascii=False, default=str)} "
             f"(only {_SUPPORTED_CANONICALIZATION} supported)."
         )
         return _early_failure(record_id, len(entries), detail, coverage)
 
     supplied = _normalize_supplied_keys(public_keys)
     registry = _build_key_registry(meta, supplied)
-    agent_registry = build_agent_key_registry(agent_keys) if agent_keys is not None else None
-    federation_registry = (
-        build_federation_key_registry(federation_keys) if federation_keys is not None else None
-    )
     trust: KeyTrust | None = None
     if trust_anchors is not None and len(trust_anchors) > 0:
         trust = compute_key_trust(
@@ -660,19 +702,34 @@ def verify_export(
     )
 
     if len(entries) == 0:
+        empty_count, _empty_finding, empty_applied = _stated_entry_count(meta, 0, expected_entry_count)
         return VerifyExportResult(
             valid=False,
             total_entries=0,
             verified_entries=0,
-            record_id=record_id,
+            record_id=record_id if isinstance(meta.get("recordId"), str) else "",
             entries=[],
             broken_at=BrokenAt(position=0, code="CHAIN_EMPTY", detail="No entries to verify."),
             signature_coverage=coverage,
-            optional_checks=optional_checks_report(set(), walked=trust is not None),
+            optional_checks=optional_checks_report(
+                set(),
+                walked=trust is not None,
+                entry_count="applied" if empty_applied else "skipped_no_input",
+            ),
             key_trust=settle_key_trust(walk_report, 0),
             unsigned_projection_fields=_unsigned_projection_fields(export_data),
-            entry_count=_stated_entry_count(meta, 0)[0],
+            entry_count=empty_count,
         )
+
+    # An entry's ``payload`` and ``entryType`` are what the binding check and
+    # the federation-wire check read. Once any entry carries them, or the caller
+    # supplied federation keys, an entry without them is a check that cannot run
+    # on it, which is a failure and not a skip.
+    binding_expected = federation_keys is not None or any(
+        "payload" in e or "entryType" in e for e in entries
+    )
+    unbound_payload = False
+    unbound_federation = False
 
     # Sort by chain position before the walk so a reordered export array still
     # validates the true chain (tampering surfaces through the hash links); a
@@ -710,8 +767,21 @@ def verify_export(
             signed_before = True
         if result.valid:
             result = check_agent_signature(entry, result, agent_registry, agent_counts, agent_check)
+        if result.valid and row.binding is None and binding_expected:
+            unbound_payload = True
+            unbound_federation = unbound_federation or federation_keys is not None
+            result = EntryVerificationResult(
+                position=result.position,
+                valid=False,
+                code="CHAIN_PAYLOAD_BINDING_MISMATCH",
+                detail=_binding_required_detail(entry, entries, federation_keys is not None),
+                signature=result.signature,
+                key_source=result.key_source,
+            )
         if result.valid:
-            result = check_sealed_federation_wire(entry, result, federation_registry, wire_counts, applied)
+            result = check_sealed_federation_wire(
+                entry, result, federation_registry, wire_counts, applied, allow_after_retirement
+            )
         if result.valid:
             result = check_inlined_evidence(entry, result, evidence_counts, applied)
         entry_results.append(result)
@@ -739,15 +809,29 @@ def verify_export(
     if broken_at is None and key_trust.findings:
         first = key_trust.findings[0]
         broken_at = BrokenAt(position=0, code=first.code, detail=first.detail)
-    entry_count, count_finding = _stated_entry_count(meta, len(sorted_entries))
+    entry_count, count_finding, count_applied = _stated_entry_count(meta, len(sorted_entries), expected_entry_count)
+    signed_id, id_finding = _signed_record_id(meta, entries)
     if broken_at is None:
-        broken_at = count_finding
+        broken_at = id_finding or count_finding
+    checks = optional_checks_report(
+        applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
+        walked=trust is not None,
+        entry_count="applied" if count_applied else "skipped_no_input",
+    )
+    # A check some entry could not take part in is not a check that ran.
+    if unbound_payload:
+        checks["payload_binding"] = "not_checked"
+    if unbound_federation:
+        checks["federation_wire"] = "not_checked"
 
     return VerifyExportResult(
-        valid=verified == len(sorted_entries) and not key_trust.findings and count_finding is None,
+        valid=verified == len(sorted_entries)
+        and not key_trust.findings
+        and count_finding is None
+        and id_finding is None,
         total_entries=len(sorted_entries),
         verified_entries=verified,
-        record_id=record_id,
+        record_id=signed_id,
         entries=entry_results,
         broken_at=broken_at,
         signature_coverage=coverage,
@@ -756,24 +840,39 @@ def verify_export(
         federation_wire=wire_counts,
         evidence_binding=evidence_counts,
         agent_signature_check=agent_check[0],
-        optional_checks=optional_checks_report(
-            applied | ({"agent_signature"} if agent_check[0] == "applied" else set()),
-            walked=trust is not None,
-        ),
+        optional_checks=checks,
         key_trust=key_trust,
         unsigned_projection_fields=_unsigned_projection_fields(export_data),
         entry_count=entry_count,
     )
 
 
-def _stated_entry_count(meta: Mapping[str, Any], held: int) -> tuple[EntryCount, BrokenAt | None]:
-    """Hold the chain's length to the counts the export states. A chain that
-    was cut from the end still links and verifies entry by entry, so its length
-    is the only thing that shows the cut: against the latest checkpoint
-    position (Server ``audit_vault_row_missing_for_checkpoint``) and against
-    the number of entries the Server wrote. A count that is present and is not
-    a non-negative integer is refused rather than skipped. Mirrors verify-core
-    ``statedEntryCount``."""
+def _binding_required_detail(
+    entry: Mapping[str, Any], entries: Sequence[Mapping[str, Any]], federation_keys_given: bool
+) -> str:
+    missing = " and ".join(name for name in ("payload", "entryType") if name not in entry)
+    why = (
+        "federationKeys were supplied"
+        if federation_keys_given and not any("payload" in e or "entryType" in e for e in entries)
+        else "other entries of this export carry it"
+    )
+    return (
+        f"The entry carries no {missing}, which the binding and federation-wire checks read: {why}, "
+        "so an entry without it cannot be checked."
+    )
+
+
+def _stated_entry_count(
+    meta: Mapping[str, Any], held: int, supplied: int | None = None
+) -> tuple[EntryCount, BrokenAt | None, bool]:
+    """Hold the chain's length to the counts the export states and to the one
+    the caller supplied. A chain that was cut from the end still links and
+    verifies entry by entry, so its length is the only thing that shows the
+    cut: against the latest checkpoint position (a chain shorter than its
+    checkpoint lost rows below it) and against the number of entries the Server
+    wrote. A count that is present and is not a non-negative integer is refused
+    rather than skipped. The last item is whether any count was held. Mirrors
+    verify-core ``statedEntryCount``."""
 
     def read(name: str) -> int | Literal["malformed"] | None:
         value = meta.get(name)
@@ -803,7 +902,18 @@ def _stated_entry_count(meta: Mapping[str, Any], held: int) -> tuple[EntryCount,
                     f"exportMetadata.{name} is {shown}, not a non-negative integer or null, "
                     "so the chain's length cannot be held to it."
                 ),
-            )
+            ), True
+    if supplied is not None and held != supplied:
+        noun = "entry" if held == 1 else "entries"
+        return count, BrokenAt(
+            position=min(held, supplied) + 1,
+            code="CHAIN_POSITION_GAP",
+            detail=(
+                f"The export carries {held} {noun} and expectedEntryCount, supplied by the caller, is "
+                f"{supplied}: {'entries were removed from the end' if held < supplied else 'entries were added past the end'}"
+                " of the chain."
+            ),
+        ), True
     if count.expected_entries is not None and held < count.expected_entries:
         noun = "entry" if held == 1 else "entries"
         return count, BrokenAt(
@@ -813,7 +923,7 @@ def _stated_entry_count(meta: Mapping[str, Any], held: int) -> tuple[EntryCount,
                 f"The export states a signed checkpoint at position {count.expected_entries} "
                 f"and carries {held} {noun}: the chain was cut below its checkpoint."
             ),
-        )
+        ), True
     if count.stated_entries is not None and held < count.stated_entries:
         return count, BrokenAt(
             position=held + 1,
@@ -822,8 +932,58 @@ def _stated_entry_count(meta: Mapping[str, Any], held: int) -> tuple[EntryCount,
                 f"The export states {count.stated_entries} entries and carries {held}: "
                 "entries were removed from the end after the Server wrote it."
             ),
+        ), True
+    return count, None, supplied is not None or count.expected_entries is not None or count.stated_entries is not None
+
+
+def _signed_record_id(meta: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]) -> tuple[str, BrokenAt | None]:
+    """The record id the export is about, taken from what it signs. The id in
+    ``exportMetadata`` is unsigned, so it is held to the id each entry's signed
+    predicate names and to the entry's own ``recordId`` column: any
+    disagreement, among the entries or with the metadata, fails
+    CHAIN_PAYLOAD_BINDING_MISMATCH, and the id reported is the signed one,
+    never the metadata's. Mirrors verify-core ``signedRecordId``."""
+    seen: list[tuple[str, int, str]] = []
+    for i, raw in enumerate(entries):
+        chain_position = raw.get("chainPosition")
+        position_field = raw.get("position")
+        if isinstance(chain_position, (int, float)) and not isinstance(chain_position, bool):
+            position = int(chain_position)
+        elif isinstance(position_field, (int, float)) and not isinstance(position_field, bool):
+            position = int(position_field)
+        else:
+            position = i + 1
+        column = raw.get("recordId")
+        if isinstance(column, str):
+            seen.append((column, position, "its recordId column"))
+        cose = as_mapping(raw.get("integrity")).get("coseSign1")
+        if not isinstance(cose, str):
+            continue
+        parts = _decode_cose_sign1(_b64decode(cose))
+        predicate = _decode_predicate(parts[1]) if parts is not None else None
+        signed = predicate.get("record_id") if predicate is not None else None
+        if isinstance(signed, str):
+            seen.append((signed, position, "its signed predicate"))
+    stated = meta.get("recordId")
+    stated_id = stated if isinstance(stated, str) else ""
+    if not seen:
+        return stated_id, None
+    first = next((s for s in seen if s[2] == "its signed predicate"), seen[0])
+    other = next((s for s in seen if s[0].lower() != first[0].lower()), None)
+    if other is None and stated_id.lower() == first[0].lower():
+        return first[0], None
+    if other is not None:
+        detail = (
+            f"The entries of this export name different records: {first[0]} ({first[2]}) and "
+            f"{other[0]} ({other[2]})."
         )
-    return count, None
+    else:
+        shown = "undefined" if "recordId" not in meta else json.dumps(stated, ensure_ascii=False, separators=(",", ":"))
+        detail = (
+            f"The entries of this export are about record {first[0]} ({first[2]}) and "
+            f"exportMetadata.recordId says {shown}: the unsigned metadata was edited."
+        )
+    return first[0], BrokenAt(position=(other or first)[1], code="CHAIN_PAYLOAD_BINDING_MISMATCH", detail=detail)
 
 
 def _unsigned_projection_fields(export: Mapping[str, Any]) -> list[str]:
@@ -1934,7 +2094,7 @@ _SCHEMA_EVENT_OUTCOMES = {
 def _decode_predicate(payload_bstr: bytes) -> dict[str, Any] | None:
     """Decode the in-toto v1 Statement CBOR and return its ``predicate`` body."""
     try:
-        stmt = _cbor2.loads(payload_bstr)
+        stmt = cbor_whole(payload_bstr)
     except Exception:
         return None
     if not isinstance(stmt, dict):
@@ -2130,6 +2290,7 @@ def check_sealed_federation_wire(
     federation_keys: FederationKeyRegistry | None,
     counts: FederationWireCounts,
     applied: set[str] | None,
+    allow_after_retirement: bool = False,
 ) -> EntryVerificationResult:
     """The sealed federation message on an entry that already passed every
     other check (so its row payload is what the receiver signed): its body
@@ -2167,6 +2328,7 @@ def check_sealed_federation_wire(
         cast("Mapping[str, Any]", payload),
         wire,
         federation_keys,
+        allow_after_retirement=allow_after_retirement,
     )
     if outcome.outcome == "ok":
         if outcome.signature_checked:
@@ -2504,7 +2666,7 @@ def _decode_cose_sign1(envelope: bytes) -> tuple[bytes, bytes, bytes] | None:
     if len(envelope) == 0 or envelope[0] != _COSE_SIGN1_TAG_PREFIX:
         return None
     try:
-        decoded = _cbor2.loads(envelope)
+        decoded = cbor_whole(envelope)
     except Exception:
         return None
     # Tagged COSE_Sign1: unwrap CBORTag with tag=18
@@ -2534,7 +2696,7 @@ def _extract_chain_claim(protected_bstr: bytes) -> tuple[int, str | None] | None
     ``None`` on any structural failure.
     """
     try:
-        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+        header_obj: Any = cbor_whole(protected_bstr) if protected_bstr else {}
     except Exception:
         return None
     if not isinstance(header_obj, dict):
@@ -2572,7 +2734,7 @@ def _extract_actor_claim(protected_bstr: bytes) -> tuple[str, str, str] | None:
     claim is skipped rather than failed.
     """
     try:
-        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+        header_obj: Any = cbor_whole(protected_bstr) if protected_bstr else {}
     except Exception:
         return None
     if not isinstance(header_obj, dict):
@@ -2604,7 +2766,7 @@ def _extract_header_alg(protected_bstr: bytes) -> int | None:
     """Decode the protected header's ``alg`` (label 1); ``None`` when absent
     or not an integer. A bool is rejected (it is an int subclass in Python)."""
     try:
-        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+        header_obj: Any = cbor_whole(protected_bstr) if protected_bstr else {}
     except Exception:
         return None
     if not isinstance(header_obj, dict):
@@ -2616,12 +2778,11 @@ def _extract_header_alg(protected_bstr: bytes) -> int | None:
 
 
 def cbor_whole(data: bytes) -> Any:
-    """Decode exactly one CBOR item spanning all of ``data``, as cborg does
-    (``cbor2.loads`` ignores trailing bytes). Raises on anything else."""
-    fp = io.BytesIO(data)
-    obj: Any = _cbor2.CBORDecoder(fp).decode()
-    if fp.read(1):
-        raise ValueError("trailing bytes after the CBOR item")
+    """Decode exactly one CBOR item spanning all of ``data``, in the strict form
+    signed bytes take (see :mod:`agledger.verify.cbor_strict`). Raises on anything
+    else."""
+    check_strict(data)
+    obj: Any = _cbor2.CBORDecoder(io.BytesIO(data)).decode()
     return obj
 
 
@@ -2668,7 +2829,7 @@ def _extract_kid(protected_bstr: bytes) -> str | None:
     row's ``signingKeyId`` column: the column is a convenience copy,
     the kid is signed (Server mirror: signing_key_drift)."""
     try:
-        header_obj: Any = _cbor2.loads(protected_bstr) if protected_bstr else {}
+        header_obj: Any = cbor_whole(protected_bstr) if protected_bstr else {}
     except Exception:
         return None
     if not isinstance(header_obj, dict):

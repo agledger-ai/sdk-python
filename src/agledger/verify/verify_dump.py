@@ -517,6 +517,7 @@ def _collect_chain_failures(
     accounted: list[AccountedEntry] | None = None,
     federation_keys: FederationKeyRegistry | None = None,
     wire_counts: FederationWireCounts | None = None,
+    allow_after_retirement: bool = False,
 ) -> list[EntryVerificationResult]:
     """Walk one chain group via the shared per-entry body, flatten any invalid
     entry into a Failure, and return each entry's result in chain order.
@@ -538,7 +539,9 @@ def _collect_chain_failures(
         if result.valid and result.accounted is None and agent_counts is not None and agent_check is not None:
             result = check_agent_signature(entry, result, agent_keys, agent_counts, agent_check)
         if result.valid and result.accounted is None and wire_counts is not None:
-            result = check_sealed_federation_wire(entry, result, federation_keys, wire_counts, applied)
+            result = check_sealed_federation_wire(
+                entry, result, federation_keys, wire_counts, applied, allow_after_retirement
+            )
         if result.accounted is not None and accounted is not None:
             chain, record_id, org_id = chain_of_scope(scope_id)
             accounted.append(
@@ -850,6 +853,7 @@ def verify_vault_chains(
     *,
     agent_keys: Sequence[Mapping[str, Any]] | None = None,
     federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
+    allow_after_retirement: bool = False,
 ) -> VaultChainsReport:
     """Verify the audit_vault chains + checkpoint cross-check. Pass a prebuilt
     ``keys`` registry to share it (and its lazy key-DER cache) with the
@@ -956,6 +960,7 @@ def verify_vault_chains(
             accounted,
             federation_registry,
             wire_counts,
+            allow_after_retirement,
         )
         signed_entries += sum(1 for r in results if r.signature == "ok")
         if _verify_vault_checkpoints(
@@ -1554,6 +1559,7 @@ def verify_dump_dir(
     federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+    allow_after_retirement: bool = False,
 ) -> VerifyReport:
     """Load the dump in ``dump_dir`` and verify it, as :func:`verify_dump`
     does. The key options are checked before the directory is read, so a
@@ -1568,6 +1574,7 @@ def verify_dump_dir(
         federation_keys=federation_keys,
         trust_anchors=trust_anchors,
         distrusted_keys=distrusted_keys,
+        allow_after_retirement=allow_after_retirement,
     )
 
 
@@ -1578,6 +1585,7 @@ def verify_dump(
     federation_keys: Mapping[str, str] | Sequence[Mapping[str, Any]] | None = None,
     trust_anchors: str | Sequence[str] | None = None,
     distrusted_keys: str | Sequence[str | DistrustedKey] | None = None,
+    allow_after_retirement: bool = False,
 ) -> VerifyReport:
     """Verify a full-vault dump. Runs the key-statement walk (given
     ``trust_anchors``), the vault-chain pass and the org_admin_reads pass, and
@@ -1586,7 +1594,9 @@ def verify_dump(
     ``federation_keys``: peer Servers' federation keys by hub id, as on
     :func:`~agledger.verify.verify_export`. Every sealed peer message on the
     vault is held to its body hash and to its entry; one from a listed hub
-    also has its signature re-verified under that key.
+    also has its signature re-verified under that key. A message signed by a key
+    its sender's history had already retired fails unless
+    ``allow_after_retirement`` (see :func:`~agledger.verify.verify_export`).
 
     ``agent_keys``: Ed25519 JWKs of agent certs. Where an entry's signed
     payload carries a Server-validated agent signature whose cert thumbprint
@@ -1619,6 +1629,7 @@ def verify_dump(
         keys,
         agent_keys=agent_keys,
         federation_keys=federation_keys,
+        allow_after_retirement=allow_after_retirement,
     )
     org_admin_reads = verify_org_admin_reads_chains(
         dump.org_admin_reads, dump.org_admin_reads_checkpoints, dump.signing_keys, keys

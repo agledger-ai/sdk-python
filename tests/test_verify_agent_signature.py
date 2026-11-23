@@ -190,7 +190,7 @@ def _export_with(on_behalf_of: dict[str, Any]) -> dict[str, Any]:
     spki = VAULT.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
     return {
         "exportMetadata": {
-            "recordId": "agent-sig-test", "exportFormatVersion": "2.0", "canonicalization": "RFC8949-CDE",
+            "recordId": "r", "exportFormatVersion": "2.0", "canonicalization": "RFC8949-CDE",
         },
         "entries": [{
             "chainPosition": 1,

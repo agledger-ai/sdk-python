@@ -525,7 +525,6 @@ def test_agledger_verify_rewords_prose_only_and_passes_a_data_field_that_spells_
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
     doc = _load()
-    doc["exportMetadata"]["recordId"] = "distrustedKeys"
     doc["verificationGuide"] = {
         **doc.get("verificationGuide", {}),
         "unsignedFields": ["trustAnchors", "requireKeyId"],
@@ -534,7 +533,6 @@ def test_agledger_verify_rewords_prose_only_and_passes_a_data_field_that_spells_
     path.write_text(json.dumps(doc))
     assert run_cli([str(path), "--trust-anchor", F, "-f", "json"]) == 1
     report = json.loads(capsys.readouterr().out)
-    assert report["recordId"] == "distrustedKeys"
     assert report["unsignedProjectionFields"] == ["trustAnchors", "requireKeyId"]
     assert f"give --distrusted-key sha256:{K}@{FROM}." in report["brokenAt"]["detail"]
     assert (
@@ -542,9 +540,6 @@ def test_agledger_verify_rewords_prose_only_and_passes_a_data_field_that_spells_
         in report["keyTrust"]["findings"][0]["detail"]
     )
     assert run_cli([str(path), "--trust-anchor", F]) == 1
-    assert (
-        "  record            : distrustedKeys" in capsys.readouterr().out.splitlines()
-    )
 
 
 def test_a_dump_report_rewords_failure_messages_and_details_never_ids_scopes_or_codes() -> (

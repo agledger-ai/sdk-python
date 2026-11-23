@@ -66,6 +66,7 @@ from functools import cmp_to_key
 from typing import Any, Literal, cast
 
 from agledger._runtime_crypto import runtime_can_compute
+from agledger.verify.cbor_strict import check_strict
 
 try:
     import cbor2 as _cbor2
@@ -757,10 +758,8 @@ _ABSENT: Any = object()
 def _loads_whole(data: bytes) -> Any:
     """Decode exactly one CBOR item spanning all of ``data`` (cborg refuses
     trailing bytes; ``cbor2.loads`` ignores them)."""
-    fp = io.BytesIO(data)
-    obj: Any = _cbor2.CBORDecoder(fp).decode()
-    if fp.read(1):
-        raise ValueError("trailing bytes after the CBOR item")
+    check_strict(data)
+    obj: Any = _cbor2.CBORDecoder(io.BytesIO(data)).decode()
     return obj
 
 

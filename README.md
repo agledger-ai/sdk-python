@@ -703,8 +703,10 @@ history (`discovery.get_federation_keys()` on the peer, or
 placed in its key's window by its signed `wire.timestamp`, with 300 seconds
 (`FEDERATION_KEY_WINDOW_SKEW_MS`) allowed at each edge: one signed earlier
 than that before its key's activation fails, and one signed later than that
-after its retirement is counted under `federation_wire.after_retirement`.
-Needs a Server 2.2 or later.
+after its retirement fails too, since a retired key signing is what a leaked
+key does. Pass `allow_after_retirement=True` for the short gap while a peer's
+publisher restarts onto its new key: the message then verifies and is counted
+under `federation_wire.after_retirement`. Needs a Server 2.2 or later.
 
 On an `/audit-export` taken with `evidence=True`, `verify_export` hashes each
 inlined evidence body (SHA-256 over its RFC 8785 form) against the

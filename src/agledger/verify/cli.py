@@ -277,11 +277,9 @@ Options:
                               unsigned createdAt, with 300 seconds allowed
                               at each edge of the window. One signed under a
                               key earlier than that before the key's
-                              activation fails; one signed later than that
-                              after its retirement is counted as after
-                              retirement, in order when the receiver's
-                              federation.peer_revoked row for the peer comes
-                              after it.
+                              activation fails, and so does one signed later
+                              than that after its retirement: a retired key
+                              signing is what a leaked key does.
   --agent-keys                Path to a JSON file holding the Ed25519 public
                               keys of agent certs: a JWK, a list of JWKs, or a
                               {keys:[...]} JWK Set. An entry may wrap its key

@@ -192,6 +192,81 @@ def test_an_entry_that_asserts_a_state_the_body_does_not_carry_fails():
     assert 'Entry state is "CANCELLED"' in (result.broken_at.detail or "")
 
 
+@pytest.mark.parametrize("record_id", ["absent", None, 7])
+def test_a_state_sync_whose_sealed_body_names_no_string_record_fails(record_id: Any):
+    body = {k: v for k, v in BODY.items() if k != "recordId"}
+    if record_id != "absent":
+        body["recordId"] = record_id
+    result = verify_export(_export(_projection(_sealed(SENDER, body))))
+    assert not result.valid
+    assert result.broken_at is not None
+    assert (result.broken_at.position, result.broken_at.code) == (1, "CHAIN_FEDERATION_WIRE_INVALID")
+    assert "must name its record" in (result.broken_at.detail or "")
+
+
+def test_a_field_present_on_one_side_only_fails_and_one_optional_on_both_sides_does_not():
+    no_state = {k: v for k, v in BODY.items() if k != "state"}
+    in_body = verify_export(_export(_projection(_sealed(SENDER, no_state))))
+    assert not in_body.valid
+    assert "the entry asserts what the sender did not sign" in (in_body.broken_at.detail if in_body.broken_at else "")
+    in_entry = verify_export(_export(_projection(_sealed(SENDER, BODY), recordType=None)))
+    assert not in_entry.valid
+    assert "leaves out what the sender signed" in (in_entry.broken_at.detail if in_entry.broken_at else "")
+    assert verify_export(_export(_projection(_sealed(SENDER, BODY)))).valid
+
+
+def test_a_required_field_neither_side_carries_fails():
+    no_state = {k: v for k, v in BODY.items() if k != "state"}
+    result = verify_export(_export(_projection(_sealed(SENDER, no_state), state=None)))
+    assert not result.valid
+    assert "must carry state" in (result.broken_at.detail if result.broken_at else "")
+
+
+def test_a_dispute_projection_carries_no_state_but_its_dispute_id_and_action():
+    dispute_body: dict[str, Any] = {
+        "recordId": RECORD_ID,
+        "action": "opened",
+        "disputeId": "0199a8f0-0000-7000-8000-00000000d15b",
+        "disputeStatus": "OPEN",
+        "idempotencyKey": "0199a8f0-0000-7000-8000-00000000c0df",
+        "schemaRef": BODY["schemaRef"],
+    }
+
+    def dispute_entry(wire: Any, **over: Any) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "peerHubId": SENDER_HUB,
+            "kind": "dispute",
+            "action": dispute_body["action"],
+            "disputeId": dispute_body["disputeId"],
+            "disputeStatus": dispute_body["disputeStatus"],
+            "wire": wire,
+        }
+        entry.update(over)
+        return entry
+
+    assert verify_export(_export(dispute_entry(_sealed(SENDER, dispute_body)))).valid
+    no_dispute_id = {k: v for k, v in dispute_body.items() if k != "disputeId"}
+    bad = verify_export(_export(dispute_entry(_sealed(SENDER, no_dispute_id), disputeId=None)))
+    assert not bad.valid
+    assert "must carry disputeId" in (bad.broken_at.detail if bad.broken_at else "")
+
+
+def test_an_entry_with_no_payload_or_entry_type_fails_under_federation_keys_and_marks_the_check_not_checked():
+    bare = _export(_projection(_sealed(SENDER, BODY)))
+    del bare["entries"][0]["payload"]
+    del bare["entries"][0]["entryType"]
+    plain = verify_export(bare)
+    assert plain.valid
+    assert plain.optional_checks["payload_binding"] == "skipped_no_input"
+    keyed = verify_export(bare, federation_keys={SENDER_HUB: _spki(SENDER)})
+    assert not keyed.valid
+    assert keyed.broken_at is not None
+    assert (keyed.broken_at.position, keyed.broken_at.code) == (1, "CHAIN_PAYLOAD_BINDING_MISMATCH")
+    assert "federationKeys were supplied" in (keyed.broken_at.detail or "")
+    assert keyed.optional_checks["federation_wire"] == "not_checked"
+    assert keyed.optional_checks["payload_binding"] == "not_checked"
+
+
 def test_an_entry_naming_another_peer_fails():
     result = verify_export(_export(_projection(_sealed(SENDER, BODY), peerHubId="hub-other")))
     assert not result.valid
@@ -369,8 +444,21 @@ def test_a_message_signed_within_the_allowance_before_its_key_was_activated_veri
         assert (r.federation_wire.verified, r.federation_wire.failed, r.federation_wire.after_retirement) == (1, 0, 0)
 
 
-def test_a_message_signed_more_than_the_allowance_after_its_key_was_retired_verifies_and_is_counted():
+def test_a_message_signed_more_than_the_allowance_after_its_key_was_retired_fails():
     r = verify_export(_under("K1", "2026-11-05T04:27:03.324Z"), federation_keys=[_pin("K3", _SUCCESSION)])
+    assert not r.valid
+    assert r.broken_at is not None
+    assert r.broken_at.code == "CHAIN_FEDERATION_WIRE_INVALID"
+    assert "retired at 2026-11-05T04:22:03.323630Z" in str(r.broken_at.detail)
+    assert r.federation_wire.after_retirement == 0
+
+
+def test_that_message_verifies_and_is_counted_when_allow_after_retirement_is_given():
+    r = verify_export(
+        _under("K1", "2026-11-05T04:27:03.324Z"),
+        federation_keys=[_pin("K3", _SUCCESSION)],
+        allow_after_retirement=True,
+    )
     assert r.valid
     assert (r.federation_wire.verified, r.federation_wire.after_retirement) == (1, 1)
 
@@ -448,13 +536,17 @@ def test_the_cli_takes_a_history_file_beside_the_key_for_its_hub(capsys: pytest.
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "export.json")
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(_under("K1", "2026-11-05T04:27:03.324Z"), fh)
+            json.dump(_under("K1", "2026-11-05T04:22:05.000Z"), fh)
         pin = f"{_HUB}={_FED_KEYS['K3']['publicKey']}"
         assert run([path, "--federation-key", pin, "--federation-key-history", history, "-f", "json"]) == 0
         out = json.loads(capsys.readouterr().out)
-        assert out["federationWire"] == {"present": 1, "verified": 1, "failed": 0, "afterRetirement": 1}
+        assert out["federationWire"] == {"present": 1, "verified": 1, "failed": 0, "afterRetirement": 0}
         assert run([path, "--federation-key", pin, "--federation-key-history", history]) == 0
-        assert "after-retirement=1" in capsys.readouterr().out
+        capsys.readouterr()
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(_under("K1", "2026-11-05T04:27:03.324Z"), fh)
+        assert run([path, "--federation-key", pin, "--federation-key-history", history]) == 1
+        assert "retired at 2026-11-05T04:22:03.323630Z" in capsys.readouterr().out
         assert run([path, "--federation-key-history", history]) == 2
         assert "no --federation-key names that hub" in capsys.readouterr().err
 

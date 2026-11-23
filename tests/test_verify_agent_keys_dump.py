@@ -91,7 +91,7 @@ def test_the_export_reports_every_input_gated_check_it_ran():
     # binding payload, the actor OIDC columns and the key windows.
     result = verify_export(json.loads(Path(EXPORT).read_text()), agent_keys=[JWK])
     assert result.valid
-    assert result.optional_checks == ALL_APPLIED
+    assert result.optional_checks == {**ALL_APPLIED, "entry_count": "applied"}
     assert (result.agent_signatures.present, result.agent_signatures.verified) == (6, 6)
 
 

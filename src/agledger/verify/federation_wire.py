@@ -30,7 +30,7 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -64,19 +64,39 @@ _WIRE_STRING_FIELDS = (
 #: Which entry payload fields must equal which body fields, per entry type.
 #: The receiver projects these from the message, so a disagreement means the
 #: entry says something the sender did not sign.
-_FIELD_PAIRS: Mapping[str, Sequence[tuple[str, str]]] = {
+def _is_dispute_sync(payload: Mapping[str, Any]) -> bool:
+    """A state sync with ``kind: "dispute"`` projects a dispute event, which
+    carries no state."""
+    return payload.get("kind") == "dispute"
+
+
+def _always(_payload: Mapping[str, Any]) -> bool:
+    return True
+
+
+def _never(_payload: Mapping[str, Any]) -> bool:
+    return False
+
+
+def _not_dispute_sync(payload: Mapping[str, Any]) -> bool:
+    return not _is_dispute_sync(payload)
+
+
+#: ``(entry field, body field, required)``: when neither side carries a required
+#: field the entry fails, and a field present on one side only always fails.
+_FIELD_PAIRS: Mapping[str, Sequence[tuple[str, str, Callable[[Mapping[str, Any]], bool]]]] = {
     "FEDERATION_STATE_SYNC": (
-        ("state", "state"),
-        ("recordType", "type"),
-        ("disputeId", "disputeId"),
-        ("action", "action"),
+        ("state", "state", _not_dispute_sync),
+        ("recordType", "type", _never),
+        ("disputeId", "disputeId", _is_dispute_sync),
+        ("action", "action", _is_dispute_sync),
     ),
-    "FEDERATION_SIGNAL_RECEIVED": (("recommendation", "recommendation"),),
+    "FEDERATION_SIGNAL_RECEIVED": (("recommendation", "recommendation", _always),),
     "FEDERATION_CO_SIGN_RESPONDED": (
-        ("recommendation", "recommendation"),
-        ("state", "state"),
-        ("outcomeHash", "outcomeHash"),
-        ("idempotencyKey", "idempotencyKey"),
+        ("recommendation", "recommendation", _always),
+        ("state", "state", _always),
+        ("outcomeHash", "outcomeHash", _never),
+        ("idempotencyKey", "idempotencyKey", _never),
     ),
 }
 
@@ -458,9 +478,10 @@ class FederationWireOutcome:
     detail: str | None = None
     #: With ``ok``, whether the signature was checked under a supplied key.
     signature_checked: bool = False
-    #: With ``ok``, the key the message is sealed under was retired, by a
-    #: succession it signed, before the receiver wrote the entry: in order when
-    #: the receiver's ``federation.peer_revoked`` audit row comes after it.
+    #: With ``ok`` (only under ``allow_after_retirement``), the key the message
+    #: is sealed under was retired, by a succession it signed, before the sender
+    #: signed the message: a publisher not yet restarted onto its new key sends
+    #: exactly this for a short gap.
     after_retirement: bool = False
 
 
@@ -507,6 +528,8 @@ def check_federation_wire(
     payload: Mapping[str, Any],
     wire: Mapping[str, Any],
     keys: FederationKeyRegistry | None,
+    *,
+    allow_after_retirement: bool = False,
 ) -> FederationWireOutcome:
     """Check one sealed message against the entry that carries it, and under
     the sender's key when ``keys`` has one for ``wire["senderHubId"]``. Runs on
@@ -517,7 +540,12 @@ def check_federation_wire(
     clock-skew allowance, and it is read from the sender's clock, the clock the
     history's windows are written by, with :data:`FEDERATION_KEY_WINDOW_SKEW_MS`
     allowed at each edge. The entry's ``createdAt`` is a column no signature
-    covers, so it places nothing."""
+    covers, so it places nothing.
+
+    A message signed by a key its history had already retired (beyond the
+    allowance) is invalid unless ``allow_after_retirement``: a retired key
+    signing later is also what a leaked key does. With it the message verifies
+    and is counted in ``after_retirement``."""
     if wire["scheme"] != FEDERATION_WIRE_SCHEME:
         return FederationWireOutcome(
             "invalid", f"Sealed message scheme is {json.dumps(wire['scheme'])}, not {FEDERATION_WIRE_SCHEME}."
@@ -564,6 +592,21 @@ def check_federation_wire(
             )
         expected_record_id = origin_record
     body_record_id = body.get("recordId")
+    pairs = _FIELD_PAIRS.get(str(entry_type))
+    if pairs is not None:
+        # A message of these types is about one record, so a body that names
+        # none, or an entry that names none to compare it with, proves nothing.
+        if not isinstance(body_record_id, str):
+            return FederationWireOutcome(
+                "invalid",
+                f"A {entry_type} message must name its record, and the sealed body carries no string recordId.",
+            )
+        if not isinstance(expected_record_id, str):
+            return FederationWireOutcome(
+                "invalid",
+                f"A {entry_type} entry carries no record id, so the record the sealed message names "
+                f"({body_record_id}) cannot be compared with it.",
+            )
     if (
         isinstance(expected_record_id, str)
         and isinstance(body_record_id, str)
@@ -575,11 +618,28 @@ def check_federation_wire(
             else f"Entry origin names record {expected_record_id}, the sealed message names record {body_record_id}."
         )
         return FederationWireOutcome("invalid", detail)
-    for entry_field, body_field in _FIELD_PAIRS.get(str(entry_type), ()):
+    for entry_field, body_field, required in pairs or ():
         mine = payload.get(entry_field)
         theirs = body.get(body_field)
+        if mine is None and theirs is None:
+            if not required(payload):
+                continue
+            return FederationWireOutcome(
+                "invalid",
+                f"A {entry_type} entry must carry {entry_field}, and neither the entry nor the sealed "
+                f"message's {body_field} does.",
+            )
         if mine is None or theirs is None:
-            continue
+            return FederationWireOutcome(
+                "invalid",
+                (
+                    f"The sealed message's {body_field} is {canonicalize_json(theirs)} and the entry carries no "
+                    f"{entry_field}: the entry leaves out what the sender signed."
+                    if mine is None
+                    else f"Entry {entry_field} is {canonicalize_json(mine)} and the sealed message carries no "
+                    f"{body_field}: the entry asserts what the sender did not sign."
+                ),
+            )
         if canonicalize_json(mine) != canonicalize_json(theirs):
             return FederationWireOutcome(
                 "invalid",
@@ -625,6 +685,15 @@ def check_federation_wire(
             )
         retired = rfc3339_ms(key.retired_at)
         after_retirement = retired is not None and at > retired + FEDERATION_KEY_WINDOW_SKEW_MS
+        if after_retirement and not allow_after_retirement:
+            return FederationWireOutcome(
+                "invalid",
+                f"Sealed message from {wire['senderHubId']} is signed at {wire['timestamp']} under a federation "
+                f"key its history retired at {key.retired_at}, more than "
+                f"{FEDERATION_KEY_WINDOW_SKEW_MS // 1000}s before the sender signed it. A retired key signing is "
+                "what a leaked key does; if the sender's publisher was only slow to restart onto its new key, "
+                "pass allowAfterRetirement.",
+            )
     signature_hex = str(wire["signature"])
     try:
         signature = bytes.fromhex(signature_hex)
