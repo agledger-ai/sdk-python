@@ -11,7 +11,7 @@ import os
 import random
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
@@ -364,19 +364,35 @@ def _query_params(params: dict[str, Any] | None) -> dict[str, Any]:
     for key, value in (params or {}).items():
         if value is None:
             continue
-        if isinstance(value, datetime):
-            out[key] = value.isoformat()
-        elif isinstance(value, Mapping):
+        if isinstance(value, Mapping):
             nested = cast("Mapping[str, Any]", value)
             for sub, sub_value in nested.items():
                 if sub_value is None:
                     continue
-                out[f"{key}[{sub}]"] = (
-                    sub_value.isoformat() if isinstance(sub_value, datetime) else sub_value
-                )
+                out[f"{key}[{sub}]"] = _query_scalar(f"{key}[{sub}]", sub_value)
+        elif isinstance(value, (list, tuple)):
+            items = cast("Sequence[Any]", value)
+            out[key] = [_query_scalar(key, item) for item in items if item is not None]
         else:
-            out[key] = value
+            out[key] = _query_scalar(key, value)
     return out
+
+
+def _query_scalar(name: str, value: object) -> object:
+    """A query value the wire can carry. The bracket form goes one level deep
+    (``criteriaGte[amount]=500``), so a mapping or list below that has no
+    query-string form and is refused, as the TypeScript SDK refuses it; httpx
+    would send a mapping as its Python repr. A ``datetime`` becomes ISO-8601,
+    and anything else (``str``, numbers, ``UUID``, ``Decimal``) goes to httpx,
+    which writes it with ``str()``."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+        raise ConfigurationError(
+            f"Query parameter {name} must be a string, number or boolean; "
+            "nested mappings and lists have no query-string form."
+        )
+    return value
 
 
 
@@ -487,6 +503,8 @@ class HttpClient:
                 'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
             )
         self._base_url = base_url.rstrip("/")
+        if isinstance(max_retries, bool) or max_retries < 0:
+            raise ConfigurationError("max_retries must be an integer, 0 or more.")
         self._max_retries = max_retries
         self._timeout = timeout
         self._idempotency_key_prefix = idempotency_key_prefix
@@ -797,6 +815,8 @@ class AsyncHttpClient:
                 'AgledgerClient(api_key=..., base_url="https://agledger.internal").'
             )
         self._base_url = base_url.rstrip("/")
+        if isinstance(max_retries, bool) or max_retries < 0:
+            raise ConfigurationError("max_retries must be an integer, 0 or more.")
         self._max_retries = max_retries
         self._timeout = timeout
         self._idempotency_key_prefix = idempotency_key_prefix
