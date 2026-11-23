@@ -322,9 +322,9 @@ def _ndjson(vector: str, name: str) -> list[dict[str, Any]]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def _grade(vector: str, anchors: list[str]) -> list[str]:
+def _grade(vector: str, anchors: list[str], distrusted: list[str] | None = None) -> list[str]:
     """Every code the walk and the logs it grades report for one dump."""
-    report = verify_dump(load_dump(str(_CONFORMANCE / vector)), trust_anchors=anchors)
+    report = verify_dump(load_dump(str(_CONFORMANCE / vector)), trust_anchors=anchors, distrusted_keys=distrusted)
     assert report.key_trust.order == "written"
     return list(report_codes(report))
 
@@ -350,7 +350,7 @@ def test_the_dump_corpus_carries_vectors_that_pin_trust_anchors() -> None:
     "vector", _PINNED, ids=[f"{v['file']}:{v.get('failureCode') or v['expect']}" for v in _PINNED]
 )
 def test_a_vector_that_pins_trust_anchors_holds_its_verdict(vector: dict[str, Any]) -> None:
-    codes = _grade(vector["file"], vector["options"]["trustAnchors"])
+    codes = _grade(vector["file"], vector["options"]["trustAnchors"], vector["options"].get("distrustedKeys"))
     if vector["expect"] == "pass":
         assert codes == []
     else:
