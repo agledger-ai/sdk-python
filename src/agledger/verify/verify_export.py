@@ -1603,7 +1603,7 @@ def verify_entry(
                 valid=False,
                 code="CHAIN_PAYLOAD_BINDING_MISMATCH",
                 detail=(
-                    "Denormalised row payload no longer matches the canonical "
+                    "Denormalised row payload does not match the canonical "
                     "projection of the signed predicate."
                 ),
             )

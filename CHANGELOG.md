@@ -37,6 +37,7 @@ Targets AGLedger Server 3.0.0.
 
 ### Changed
 
+- The `CHAIN_PAYLOAD_BINDING_MISMATCH` detail on an export entry reads "Denormalised row payload does not match the canonical projection of the signed predicate.", the text `@agledger/verify-core` reports, word for word.
 - **A sealed federation message is placed in its key's window with 300 seconds allowed at each edge (`FEDERATION_KEY_WINDOW_SKEW_MS`)**, as the Server's receiver guidance gives it: the message's timestamp is the signing process's clock and the window is the peer's database clock. A message signed within that of a key change was failed or counted as after retirement; it now verifies on the key it names.
 - `federation.relay_signal(reason_code=...)` is typed as `FederationSignalReasonCode | None`, the six causes the Server accepts; AGLedger Server 3.0.0 refuses any other with a 400. The docstring states the `failing_rule_ids` limits (at most 220 ids of at most 100 characters) and the `counter_signature` form (128 lowercase hex characters).
 - Scope profile descriptions in `agledger.scopes` are the text AGLedger Server 3.0.0 serves. Scope lists are unchanged.
