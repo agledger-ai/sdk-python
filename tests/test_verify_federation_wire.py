@@ -551,6 +551,85 @@ def test_the_cli_takes_a_history_file_beside_the_key_for_its_hub(capsys: pytest.
         assert "no --federation-key names that hub" in capsys.readouterr().err
 
 
+def _write_dump(directory: str, export: dict[str, Any]) -> str:
+    """The export's one entry as a dump directory signed by the same vault key."""
+    entry = export["entries"][0]
+    row = {
+        "id": "entry-1",
+        "record_id": entry["recordId"],
+        "chain_key": entry["recordId"],
+        "entry_type": entry["entryType"],
+        "payload": entry["payload"],
+        "payload_hash": entry["integrity"]["payloadHash"],
+        "previous_hash": None,
+        "chain_position": 1,
+        "cose_sign1": entry["integrity"]["coseSign1"],
+        "signing_key_id": KEY_ID,
+        "created_at": "2026-11-05T05:00:00.000Z",
+    }
+    key = {
+        "key_id": KEY_ID,
+        "public_key": _spki(VAULT),
+        "algorithm": "Ed25519",
+        "status": "active",
+        "activated_at": "2026-01-01T00:00:00.000Z",
+        "retired_at": None,
+        "retired_by": None,
+    }
+    rows = {
+        "audit_vault.ndjson": [row],
+        "vault_signing_keys.ndjson": [key],
+        "vault_checkpoints.ndjson": [],
+        "org_admin_reads.ndjson": [],
+        "org_admin_reads_checkpoints.ndjson": [],
+        "vault_key_statements.ndjson": [],
+    }
+    for name, items in rows.items():
+        with open(os.path.join(directory, name), "w", encoding="utf-8") as fh:
+            fh.write("".join(json.dumps(item) + "\n" for item in items))
+    return directory
+
+
+def test_the_cli_fails_a_message_signed_after_its_key_retired_unless_allow_after_retirement_is_given(
+    capsys: pytest.CaptureFixture[str],
+):
+    import tempfile
+
+    from agledger.verify.cli import parse_args, run_cli as run
+
+    assert parse_args(["x"]).allow_after_retirement is False
+    assert parse_args(["x", "--allow-after-retirement"]).allow_after_retirement is True
+
+    history = os.path.join(_FIXTURES, "succession.json")
+    pin = ["--federation-key", f"{_HUB}={_FED_KEYS['K3']['publicKey']}", "--federation-key-history", history, "-f", "json"]
+    late = _under("K1", "2026-11-05T04:27:03.324Z")
+    with tempfile.TemporaryDirectory() as d:
+        export_path = os.path.join(d, "export.json")
+        with open(export_path, "w", encoding="utf-8") as fh:
+            json.dump(late, fh)
+        dump_dir = os.path.join(d, "dump")
+        os.mkdir(dump_dir)
+        _write_dump(dump_dir, late)
+
+        # An /audit-export file.
+        assert run([export_path, *pin]) == 1
+        failed = json.loads(capsys.readouterr().out)
+        assert failed["brokenAt"]["code"] == "CHAIN_FEDERATION_WIRE_INVALID"
+        assert "--allow-after-retirement" in failed["brokenAt"]["detail"]
+        assert run([export_path, *pin, "--allow-after-retirement"]) == 0
+        counted = json.loads(capsys.readouterr().out)
+        assert counted["federationWire"] == {"present": 1, "verified": 1, "failed": 0, "afterRetirement": 1}
+
+        # A dump directory.
+        assert run([dump_dir, *pin]) == 1
+        failed = json.loads(capsys.readouterr().out)
+        found = [f for f in failed["vault"]["failures"] if f["code"] == "CHAIN_FEDERATION_WIRE_INVALID"]
+        assert found and "--allow-after-retirement" in found[0]["message"]
+        assert run([dump_dir, *pin, "--allow-after-retirement"]) == 0
+        counted = json.loads(capsys.readouterr().out)
+        assert counted["vault"]["federationWire"] == {"present": 1, "verified": 1, "failed": 0, "afterRetirement": 1}
+
+
 # --- a projection held under a fresh local id ---------------------------------
 # The sender named WIRE_ID; the receiver already held it, so the projection
 # lives under RECORD_ID and its entries sign ``origin``. The sealed body keeps

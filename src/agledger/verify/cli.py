@@ -85,6 +85,8 @@ class ParsedArgs:
     """``--federation-key`` values, ``<hubId>=<key>`` each, in the order given."""
     federation_key_histories: list[str] = field(default_factory=list[str])
     """``--federation-key-history`` paths, each a peer's key-history document."""
+    allow_after_retirement: bool = False
+    """``--allow-after-retirement``: accept and count a peer message signed after its key retired."""
 
 
 class UsageError(Exception):
@@ -184,6 +186,8 @@ def parse_args(argv: Sequence[str]) -> ParsedArgs:
             if not value:
                 raise UsageError("--federation-key requires a value")
             out.federation_keys.append(value)
+        elif arg == "--allow-after-retirement":
+            out.allow_after_retirement = True
         elif arg == "--require-supplied-keys":
             out.require_supplied_keys = True
         elif arg == "--require-out-of-band-keys":
@@ -209,6 +213,7 @@ Usage:
                   [--agent-keys <file>]
                   [--federation-key <hubId>=<key>]...
                   [--federation-key-history <file>]...
+                  [--allow-after-retirement]
                   [--report-format text|json]
                   [--keys <file>] [--require-key-id <id>]
                   [--require-supplied-keys]
@@ -278,8 +283,15 @@ Options:
                               at each edge of the window. One signed under a
                               key earlier than that before the key's
                               activation fails, and so does one signed later
-                              than that after its retirement: a retired key
-                              signing is what a leaked key does.
+                              than that after its retirement, unless
+                              --allow-after-retirement is given.
+  --allow-after-retirement    A sealed peer message signed under a key after
+                              that key's retirement fails by default. This
+                              flag accepts it and counts it as after
+                              retirement, for a peer that kept signing
+                              briefly after rotating because its process had
+                              not restarted. Applies to a dump directory and
+                              to an /audit-export file.
   --agent-keys                Path to a JSON file holding the Ed25519 public
                               keys of agent certs: a JWK, a list of JWKs, or a
                               {keys:[...]} JWK Set. An entry may wrap its key
@@ -585,8 +597,8 @@ def _federation_wire_summary(
         return f"{base} (none among them)" if run_failed else f"{base} (none on the chain)"
     no_key = present - verified - failed
     retired_note = (
-        f"{after_retirement} signed by the peer under a key it had already retired: in order when "
-        "the receiver's federation.peer_revoked row for the peer comes after them"
+        f"{after_retirement} signed by the peer under a key it had already retired: "
+        "accepted because --allow-after-retirement was given"
     )
     if no_key == 0 and failed == 0:
         every = "(each hashed, matched to its entry, and signed by the peer key given for its hub"
@@ -995,6 +1007,8 @@ _OPTION_FLAGS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"\brequireSuppliedKeys\b", "--require-supplied-keys"),
         (r"\brequireKeyId\b", "--require-key-id"),
         (r"\bagentKeys\b", "--agent-keys"),
+        (r"\ballowAfterRetirement\b", "--allow-after-retirement"),
+        (r"\ballow_after_retirement\b", "--allow-after-retirement"),
     )
 )
 
@@ -1184,6 +1198,7 @@ def run_cli(argv: Sequence[str]) -> int:
                 load_dump(target),
                 agent_keys=agent_keys,
                 federation_keys=federation_keys,
+                allow_after_retirement=args.allow_after_retirement,
                 trust_anchors=trust_anchors,
                 distrusted_keys=distrusted_keys,
             )
@@ -1230,6 +1245,7 @@ def run_cli(argv: Sequence[str]) -> int:
             require_supplied_keys=args.require_supplied_keys,
             agent_keys=agent_keys,
             federation_keys=federation_keys,
+            allow_after_retirement=args.allow_after_retirement,
             trust_anchors=trust_anchors,
             distrusted_keys=distrusted_keys,
         )
