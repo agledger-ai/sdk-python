@@ -10,8 +10,7 @@ readme = "README.md"
 license = "LicenseRef-Proprietary"
 # Floor tracks Python's EOL schedule, taken as the old version comes due rather
 # than on its exact expiry date: the edit is one line either way, so there is no
-# reason to run it to the wire. 3.10 was dropped 2026-08-03 ahead of its
-# 2026-10-31 end-of-life. Next: 3.11 goes EOL 2027-10-31.
+# reason to run it to the wire. 3.11 goes EOL 2027-10-31.
 #
 # Before raising this, know that pip enforces it at resolve time, unlike npm's
 # advisory engines field. It does not error on an older interpreter; it quietly
@@ -85,7 +84,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 # Run against the working tree in src/, never a stale installed wheel. Without
 # this, pytest imports site-packages `agledger` and silently validates the last
-# published version instead of local changes (this once hid drift between the source and the published version).
+# published version instead of local changes.
 pythonpath = ["src"]
 
 [tool.ruff]

@@ -22,14 +22,7 @@ concurrency:
 
 jobs:
   release:
-    # NOT an approval gate, despite the name. This environment exists but
-    # carries `protection_rules: []` on every one of the six repos, so the job
-    # resolves it and publishes straight through with no human in the loop
-    # (verified 2026-08-07; the comment here previously claimed the opposite).
-    # It stays declared because it is the hook point: adding a required
-    # reviewer to the `release` environment in GitHub is what would turn this
-    # into the pause it describes. Until someone does that, a `v*` tag push IS
-    # the publish.
+    # The `release` environment is the hook point for a required reviewer; a `v*` tag push publishes.
     environment: release
     runs-on: ubuntu-latest
     steps:
@@ -108,6 +101,6 @@ jobs:
       # Publishes dist/* to PyPI via OIDC trusted publishing. PEP 740 attestations
       # are ON by default under a trusted publisher (attestations: true is implicit).
       # No API token: the Trusted Publisher mapping on PyPI authorizes this exact
-      # repo + workflow. Pinned to v1.13.0 (commit SHA).
+      # repo + workflow. Pinned to v1.14.3 (commit SHA).
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

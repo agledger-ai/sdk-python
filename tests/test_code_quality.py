@@ -152,7 +152,7 @@ def test_no_em_dashes() -> None:
 # reads it, and the wheel ships every module verbatim. Say what the behaviour is
 # rather than where it was decided.
 _TRACKER_REF = re.compile(
-    r"(?:agledger-)?(?:agents|api|testbed|web)#\d+"
+    r"(?:agledger-)?[a-z][a-z-]*#\d+"
     r"|(?<![\w/])#\d{2,4}\b"
     r"|\bF-\d{3}\b"
     r"|\bCR-\d+\b"

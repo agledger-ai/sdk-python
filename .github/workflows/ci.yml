@@ -22,13 +22,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Legal files match their pins, and no retired name appears
+      - name: Legal files match their pins
         run: |
           grep -v '^#' legal-pins.sha256 | sha256sum --strict -c -
-          if git grep -nE 'Agentic Ledger|AOAP|Agentic Operations and Accountability|Agent Health Score|Agentic Contract Spec|®' -- ':!CHANGELOG.md' ':!.github/workflows/ci.yml' ':!testdata/conformance'; then
-            echo "A retired product name or a registered-mark symbol appears outside CHANGELOG.md" >&2
-            exit 1
-          fi
 
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0

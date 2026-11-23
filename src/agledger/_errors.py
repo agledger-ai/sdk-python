@@ -1,6 +1,5 @@
 """
-AGLedger SDK: Error classes.
-Follows Anthropic/OpenAI naming conventions. Never shadows Python builtins.
+AGLedger SDK: Error classes. Names never shadow Python builtins.
 """
 
 from __future__ import annotations
