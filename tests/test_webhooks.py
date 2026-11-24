@@ -404,6 +404,30 @@ def test_an_empty_secret_is_a_configuration_error(secret: object):
         verify_signature("{}", forged, secret)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    ("secret", "type_name"),
+    [(None, "NoneType"), (5, "int"), (b"s", "bytes"), (["s", 5], "int"), ([None], "NoneType")],
+)
+def test_a_secret_that_is_not_a_str_names_its_type(secret: object, type_name: str):
+    """A wrong type is not reported as a missing secret, and never escapes as a bare TypeError."""
+    from agledger._errors import ConfigurationError
+    from agledger.webhooks.verify import construct_event, sign_payload, verify_signature
+
+    header = sign_payload("{}", "s")["header"]
+    for call in (verify_signature, construct_event):
+        with pytest.raises(ConfigurationError, match=f"must be a str, not {type_name}") as info:
+            call("{}", header, secret)  # type: ignore[arg-type]
+        assert "empty" not in str(info.value)
+
+
+def test_an_empty_list_of_secrets_is_named_as_a_list():
+    from agledger._errors import ConfigurationError
+    from agledger.webhooks.verify import verify_signature
+
+    with pytest.raises(ConfigurationError, match="list of webhook signing secrets is empty"):
+        verify_signature("{}", "t=1,v1=ab", [])
+
+
 # Header, secret, body and key forms read as @agledger/sdk reads them.
 
 

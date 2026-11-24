@@ -92,15 +92,39 @@ def _checked_secrets(secrets: str | Sequence[str]) -> list[str]:
     """The signing secrets as a list, refusing any that would let a caller forge.
 
     An empty secret is a valid HMAC key, so accepting one would let anyone
-    compute a passing signature. An empty list or a blank entry is a
-    configuration mistake, raised rather than reported as a failed delivery.
+    compute a passing signature. An empty list, a secret that is not a ``str``,
+    or a blank one is a configuration mistake, raised rather than reported as
+    a failed delivery.
     """
-    secret_list: list[object] = [secrets] if isinstance(secrets, str) else list(secrets)
-    if not secret_list or any(not isinstance(x, str) or not x.strip() for x in secret_list):
+    given = cast(object, secrets)  # The annotation is not a runtime guarantee.
+    secret_list: list[object]
+    if isinstance(given, str):
+        secret_list = [given]
+    elif isinstance(given, Sequence) and not isinstance(given, (bytes, bytearray)):
+        secret_list = list(cast(Sequence[object], given))
+    else:
+        raise _not_a_str(given)
+    if not secret_list:
         raise ConfigurationError(
-            "Webhook signing secret is empty. Pass the endpoint's secret, or a non-empty list of secrets during rotation."
+            "The list of webhook signing secrets is empty. Pass the endpoint's secret, "
+            "or a non-empty list of secrets during rotation."
         )
+    for secret in secret_list:
+        if not isinstance(secret, str):
+            raise _not_a_str(secret)
+        if not secret.strip():
+            raise ConfigurationError(
+                "Webhook signing secret is empty. Pass the endpoint's secret, "
+                "or a non-empty list of secrets during rotation."
+            )
     return cast(list[str], secret_list)
+
+
+def _not_a_str(value: object) -> ConfigurationError:
+    return ConfigurationError(
+        f"A webhook signing secret must be a str, not {type(value).__name__}. "
+        "Pass the endpoint's secret as text, or a list of them during rotation."
+    )
 
 
 def _body_text(raw_body: str | bytes) -> str | None:
@@ -124,7 +148,7 @@ def verify_signature(
 ) -> bool:
     """Verify a webhook signature. Supports key rotation via list of secrets.
 
-    Raises :class:`ConfigurationError` when the secret is empty or blank, and
+    Raises :class:`ConfigurationError` when the secret is not a ``str`` or is empty or blank, and
     ``ValueError`` when ``tolerance_seconds`` is not a finite number, 0 or more.
     """
     secret_list = _checked_secrets(secrets)
