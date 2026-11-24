@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   release:
-    # The `release` environment is the hook point for a required reviewer; a `v*` tag push publishes.
+    # The release environment holds the publishing permissions.
     environment: release
     runs-on: ubuntu-latest
     steps:
