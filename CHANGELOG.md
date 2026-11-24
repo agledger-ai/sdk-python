@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-## [3.2.0] - 2026-11-18
+## [3.2.0] - 2026-11-23
 
 Targets AGLedger Server 3.0.0.
 
